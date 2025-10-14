@@ -1,0 +1,16 @@
+{
+  "css.lint.unknownAtRules": "ignore", // CSS/Lint が Tailwind v4 新構文のディレクティブ未対応のため
+  "scss.lint.unknownAtRules": "ignore", // CSS/Lint が Tailwind v4 新構文のディレクティブ未対応のため
+  "editor.insertSpaces": true,
+  "editor.formatOnSave": true,
+  "editor.rulers": [120],
+  "editor.tabSize": 2,
+  "[typescript]": {
+    "editor.codeActionsOnSave": ["source.fixAll.eslint"],
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.codeActionsOnSave": ["source.fixAll.eslint"],
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
+}
