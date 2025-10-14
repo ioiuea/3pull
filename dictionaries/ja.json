@@ -1,23 +1,23 @@
 {
   "home": {
-    "title": "3pull-devin",
-    "subtitle": "AIとの対話で開発を加速",
-    "description": "3pull-devinは、AIアシスタントとの対話を通じて、コーディング、レビュー、デバッグを支援する次世代の開発ツールです。",
-    "ctaPrimary": "無料で始める",
+    "title": "3pull",
+    "subtitle": "3つの力が、あなたと未来を結ぶ。",
+    "description": "AIがあなたの創造力と未来をつなぐ共創型プラットフォームです。",
+    "ctaPrimary": "チャットを始める",
     "ctaSecondary": "詳しく見る",
     "features": {
-      "title": "主な機能",
-      "ai": {
-        "title": "AI駆動の開発支援",
-        "description": "コード補完から複雑なリファクタリングまで、AIがあなたの開発をサポートします"
+      "title": "主要コンセプト",
+      "safety": {
+        "title": "安心・安全",
+        "description": "プライバシーとセキュリティを最優先に設計。AIとのすべてのやり取りを安全に管理し、安心して開発に集中できる環境を提供します。"
       },
-      "chat": {
-        "title": "インタラクティブなチャット",
-        "description": "自然言語でコードについて質問し、即座にフィードバックを得られます"
+      "culture": {
+        "title": "共創文化",
+        "description": "人とAIが協力し、互いの強みを活かして創造性を広げる。3pullは、開発者・チーム・AIが一体となって価値を生み出す共創の場です。"
       },
-      "integration": {
-        "title": "シームレスな統合",
-        "description": "既存のワークフローに簡単に統合でき、すぐに使い始められます"
+      "learning": {
+        "title": "学びの促進",
+        "description": "AIとの対話を通して、気づきと学びを自然に得られる体験を提供。コードレビューや解説を通じて、日々の開発が成長の機会に変わります。"
       }
     },
     "stats": {
@@ -25,52 +25,5 @@
       "projects": "プロジェクト",
       "satisfaction": "満足度"
     }
-  },
-  "sample": {
-    "title": "国際化サンプル",
-    "description": "このページは多言語対応機能を実演しています",
-    "currentLanguage": "現在の言語",
-    "switchLanguage": "右上のボタンで言語を切り替えてください",
-    "welcomeMessage": "多言語対応アプリケーションへようこそ！"
-  },
-  "languages": {
-    "ja": "日本語",
-    "en": "English",
-    "zh": "中文",
-    "fr": "Français",
-    "de": "Deutsch"
-  },
-  "chat": {
-    "title": "AIチャットデモ",
-    "newChat": "新しいチャット",
-    "threads": "スレッド",
-    "prompts": "プロンプト",
-    "sendMessage": "メッセージを送信",
-    "typeMessage": "メッセージを入力...",
-    "samplePrompt1": "コードレビューをお願いします",
-    "samplePrompt2": "この機能を説明してください",
-    "samplePrompt3": "バグを修正する方法は？"
-  },
-  "zustand": {
-    "title": "Zustand状態管理デモ",
-    "description": "このページでは、Zustandを使用したクライアントサイドの状態管理を実演しています",
-    "integerSection": "整数値の状態管理",
-    "integerDescription": "カウンターを使用して整数値の状態を管理します",
-    "count": "カウント",
-    "increment": "増加",
-    "decrement": "減少",
-    "reset": "リセット",
-    "stringSection": "文字列の状態管理",
-    "stringDescription": "テキスト入力を使用して文字列の状態を管理します",
-    "textInput": "テキストを入力してください...",
-    "currentText": "現在のテキスト",
-    "clearText": "クリア",
-    "objectSection": "オブジェクトの状態管理",
-    "objectDescription": "フォームを使用してオブジェクトの状態を管理します",
-    "userName": "名前",
-    "userEmail": "メールアドレス",
-    "currentUser": "現在のユーザー情報",
-    "resetForm": "フォームをリセット",
-    "noData": "データなし"
   }
 }
