@@ -1,11 +1,17 @@
 'use client'
 
+// ** State
 import { useDemoStore } from '@/store/useDemoStore'
+
+// ** Components(shadcn)
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
+
+// ** Icons
 import { Minus, Plus } from 'lucide-react'
 
+// ** Types
 interface SampleClientProps {
   dict: {
     integerSection: string
@@ -29,7 +35,8 @@ interface SampleClientProps {
   }
 }
 
-export function SampleClient({ dict }: SampleClientProps) {
+// ** Function Component
+const SampleClient = ({ dict }: SampleClientProps) => {
   const {
     count,
     increment,
@@ -46,6 +53,7 @@ export function SampleClient({ dict }: SampleClientProps) {
 
   return (
     <div className="space-y-8">
+      {/* Integer Section */}
       <div className="bg-card rounded-lg border border-border p-6 space-y-4">
         <div>
           <h2 className="text-2xl font-semibold">{dict.integerSection}</h2>
@@ -71,6 +79,7 @@ export function SampleClient({ dict }: SampleClientProps) {
         </div>
       </div>
 
+      {/* String Section */}
       <div className="bg-card rounded-lg border border-border p-6 space-y-4">
         <div>
           <h2 className="text-2xl font-semibold">{dict.stringSection}</h2>
@@ -93,6 +102,7 @@ export function SampleClient({ dict }: SampleClientProps) {
         </div>
       </div>
 
+      {/* Object Section */}
       <div className="bg-card rounded-lg border border-border p-6 space-y-4">
         <div>
           <h2 className="text-2xl font-semibold">{dict.objectSection}</h2>
@@ -120,10 +130,12 @@ export function SampleClient({ dict }: SampleClientProps) {
           <div className="bg-muted rounded-lg p-4 space-y-2">
             <p className="text-sm font-semibold">{dict.currentUser}:</p>
             <p className="text-sm">
-              {dict.userName}: <span className="text-muted-foreground">{user.name || dict.noData}</span>
+              {dict.userName}:{' '}
+              <span className="text-muted-foreground">{user.name || dict.noData}</span>
             </p>
             <p className="text-sm">
-              {dict.userEmail}: <span className="text-muted-foreground">{user.email || dict.noData}</span>
+              {dict.userEmail}:{' '}
+              <span className="text-muted-foreground">{user.email || dict.noData}</span>
             </p>
           </div>
           <Button onClick={resetUser} variant="outline">
@@ -134,3 +146,5 @@ export function SampleClient({ dict }: SampleClientProps) {
     </div>
   )
 }
+
+export default SampleClient

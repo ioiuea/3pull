@@ -1,10 +1,15 @@
 "use client";
 
-import { motion } from "motion/react";
-import { Button } from "@/components/ui/button";
-import { MessageSquare, Sparkles, Zap } from "lucide-react";
 import Link from "next/link";
+import { motion } from "motion/react";
 
+// ** Components(shadcn)
+import { Button } from "@/components/ui/button";
+
+// ** Icons
+import { MessageSquare, Sparkles, Zap } from "lucide-react";
+
+// ** Types
 interface HomeClientProps {
   dict: {
     title: string;
@@ -27,6 +32,7 @@ interface HomeClientProps {
   lang: string;
 }
 
+// ** Function Component
 const HomeClient = ({ dict, lang }: HomeClientProps) => {
   const features = [
     {
