@@ -1,0 +1,76 @@
+{
+  "home": {
+    "title": "3pull-devin",
+    "subtitle": "Accelerate Development with AI Dialogue",
+    "description": "3pull-devin is a next-generation development tool that assists with coding, reviews, and debugging through conversations with an AI assistant.",
+    "ctaPrimary": "Get Started Free",
+    "ctaSecondary": "Learn More",
+    "features": {
+      "title": "Key Features",
+      "ai": {
+        "title": "AI-Driven Development",
+        "description": "From code completion to complex refactoring, AI supports your development"
+      },
+      "chat": {
+        "title": "Interactive Chat",
+        "description": "Ask questions about your code in natural language and get instant feedback"
+      },
+      "integration": {
+        "title": "Seamless Integration",
+        "description": "Easily integrates into your existing workflow and you can start using it right away"
+      }
+    },
+    "stats": {
+      "developers": "Developers",
+      "projects": "Projects",
+      "satisfaction": "Satisfaction"
+    }
+  },
+  "sample": {
+    "title": "Internationalization Sample",
+    "description": "This page demonstrates i18n functionality",
+    "currentLanguage": "Current Language",
+    "switchLanguage": "Use the buttons in the top right to switch languages",
+    "welcomeMessage": "Welcome to our multilingual application!"
+  },
+  "languages": {
+    "ja": "日本語",
+    "en": "English",
+    "zh": "中文",
+    "fr": "Français",
+    "de": "Deutsch"
+  },
+  "chat": {
+    "title": "AI Chat Demo",
+    "newChat": "New Chat",
+    "threads": "Threads",
+    "prompts": "Prompts",
+    "sendMessage": "Send Message",
+    "typeMessage": "Type a message...",
+    "samplePrompt1": "Please review my code",
+    "samplePrompt2": "Explain this feature",
+    "samplePrompt3": "How to fix this bug?"
+  },
+  "zustand": {
+    "title": "Zustand State Management Demo",
+    "description": "This page demonstrates client-side state management using Zustand",
+    "integerSection": "Integer State Management",
+    "integerDescription": "Manage integer state using a counter",
+    "count": "Count",
+    "increment": "Increment",
+    "decrement": "Decrement",
+    "reset": "Reset",
+    "stringSection": "String State Management",
+    "stringDescription": "Manage string state using text input",
+    "textInput": "Enter text...",
+    "currentText": "Current Text",
+    "clearText": "Clear",
+    "objectSection": "Object State Management",
+    "objectDescription": "Manage object state using a form",
+    "userName": "Name",
+    "userEmail": "Email",
+    "currentUser": "Current User Info",
+    "resetForm": "Reset Form",
+    "noData": "No data"
+  }
+}
