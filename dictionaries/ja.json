@@ -25,5 +25,27 @@
       "projects": "プロジェクト",
       "satisfaction": "満足度"
     }
+  },
+  "sample": {
+    "title": "Zustand状態管理デモ",
+    "description": "このページでは、Zustandを使用したクライアントサイドの状態管理を実演しています",
+    "integerSection": "整数値の状態管理",
+    "integerDescription": "カウンターを使用して整数値の状態を管理します",
+    "count": "カウント",
+    "increment": "増加",
+    "decrement": "減少",
+    "reset": "リセット",
+    "stringSection": "文字列の状態管理",
+    "stringDescription": "テキスト入力を使用して文字列の状態を管理します",
+    "textInput": "テキストを入力してください...",
+    "currentText": "現在のテキスト",
+    "clearText": "クリア",
+    "objectSection": "オブジェクトの状態管理",
+    "objectDescription": "フォームを使用してオブジェクトの状態を管理します",
+    "userName": "名前",
+    "userEmail": "メールアドレス",
+    "currentUser": "現在のユーザー情報",
+    "resetForm": "フォームをリセット",
+    "noData": "データなし"
   }
 }

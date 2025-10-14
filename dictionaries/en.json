@@ -25,5 +25,27 @@
       "projects": "Projects",
       "satisfaction": "Satisfaction"
     }
+  },
+  "sample": {
+    "title": "Zustand State Management Demo",
+    "description": "This page demonstrates client-side state management using Zustand",
+    "integerSection": "Integer State Management",
+    "integerDescription": "Manage integer state using a counter",
+    "count": "Count",
+    "increment": "Increment",
+    "decrement": "Decrement",
+    "reset": "Reset",
+    "stringSection": "String State Management",
+    "stringDescription": "Manage string state using text input",
+    "textInput": "Enter text...",
+    "currentText": "Current Text",
+    "clearText": "Clear",
+    "objectSection": "Object State Management",
+    "objectDescription": "Manage object state using a form",
+    "userName": "Name",
+    "userEmail": "Email",
+    "currentUser": "Current User Info",
+    "resetForm": "Reset Form",
+    "noData": "No data"
   }
 }

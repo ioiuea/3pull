@@ -14,18 +14,9 @@ interface HomeClientProps {
     ctaSecondary: string;
     features: {
       title: string;
-      safety: {
-        title: string;
-        description: string;
-      };
-      culture: {
-        title: string;
-        description: string;
-      };
-      learning: {
-        title: string;
-        description: string;
-      };
+      safety: { title: string; description: string };
+      culture: { title: string; description: string };
+      learning: { title: string; description: string };
     };
     stats: {
       developers: string;
@@ -36,7 +27,7 @@ interface HomeClientProps {
   lang: string;
 }
 
-export function HomeClient({ dict, lang }: HomeClientProps) {
+const HomeClient = ({ dict, lang }: HomeClientProps) => {
   const features = [
     {
       icon: Sparkles,
@@ -132,9 +123,7 @@ export function HomeClient({ dict, lang }: HomeClientProps) {
             hidden: { opacity: 0 },
             visible: {
               opacity: 1,
-              transition: {
-                staggerChildren: 0.2,
-              },
+              transition: { staggerChildren: 0.2 },
             },
           }}
           className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto"
@@ -167,9 +156,7 @@ export function HomeClient({ dict, lang }: HomeClientProps) {
             hidden: { opacity: 0 },
             visible: {
               opacity: 1,
-              transition: {
-                staggerChildren: 0.15,
-              },
+              transition: { staggerChildren: 0.15 },
             },
           }}
           className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto text-center"
@@ -193,4 +180,6 @@ export function HomeClient({ dict, lang }: HomeClientProps) {
       </section>
     </div>
   );
-}
+};
+
+export default HomeClient;
