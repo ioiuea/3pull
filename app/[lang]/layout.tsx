@@ -32,6 +32,10 @@ export const metadata: Metadata = {
   },
 };
 
+export async function generateStaticParams() {
+  return [{ lang: "ja" }, { lang: "en" }];
+}
+
 // ** Function Component
 const RootLayout = async ({
   children,
