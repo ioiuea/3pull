@@ -1,5 +1,6 @@
 // ** Components
 import SampleClient from "@/components/sample";
+import { SignOut } from "@/components/signout-button";
 
 // ** Utils
 import { getDictionary, type Locale } from "@/utils/dictionaries";
@@ -24,6 +25,7 @@ const SamplePage = async ({
         </div>
 
         <SampleClient dict={dict.sample} />
+        <SignOut />
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 import "@/styles/globals.css";
 
 // ** Components
-import LanguageSwitcher from "@/components/LanguageSwitcher";
+import LangSwitchClient from "@/components/lang-switch";
 
 // ** Constants
 import { TITLE, DESCRIPTION, ICON_PATH } from "@/constants";
@@ -52,7 +52,7 @@ const RootLayout = async ({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <header className="fixed bottom-0 right-0 p-4 z-50">
-          <LanguageSwitcher currentLang={lang as Locale} />
+          <LangSwitchClient currentLang={lang as Locale} />
         </header>
         {children}
       </body>

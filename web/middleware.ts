@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import type { NextRequest } from "next/server";
 
 const locales = ["ja", "en"];
@@ -57,19 +58,32 @@ function getLocale(request: NextRequest): string {
  * }
  * ```
  */
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+export const middleware = auth((request) => {
+  const { nextUrl } = request;
+  const { pathname } = nextUrl;
 
-  const pathnameHasLocale = locales.some(
+  const hasLocale = locales.some(
     (locale) => pathname.startsWith(`/${locale}/`) || pathname === `/${locale}`
   );
 
-  if (pathnameHasLocale) return;
+  if (!hasLocale) {
+    const locale = getLocale(request);
+    const url = nextUrl.clone();
+    url.pathname = `/${locale}${pathname}`;
+    return NextResponse.redirect(url);
+  }
 
-  const locale = getLocale(request);
-  request.nextUrl.pathname = `/${locale}${pathname}`;
-  return NextResponse.redirect(request.nextUrl);
-}
+  // ログインしていなければロケール付きサインインへ
+  if (!request.auth) {
+    const url = nextUrl.clone();
+    const locale = pathname.split("/")[1] || defaultLocale;
+    url.pathname = `/${locale}/signin`;
+    url.searchParams.set("callbackUrl", nextUrl.pathname + nextUrl.search);
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next();
+});
 
 /**
  * ミドルウェアの適用対象を定義する設定です。
@@ -77,5 +91,5 @@ export function middleware(request: NextRequest) {
  * `_next`（Next.jsの内部パス）、`api`（APIルート）、および静的ファイルへのリクエストを除外します。
  */
 export const config = {
-  matcher: ["/((?!_next|api|.*\\.).*)"],
+  matcher: ["/((?!_next|api|.*\\.|.*/signin).*)"],
 };

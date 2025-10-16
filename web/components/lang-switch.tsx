@@ -12,7 +12,7 @@ const languages: Record<Locale, string> = {
 };
 
 // ** Function Component
-const LanguageSwitcher = ({ currentLang }: { currentLang: Locale }) => {
+const LangSwitchClient = ({ currentLang }: { currentLang: Locale }) => {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -41,4 +41,4 @@ const LanguageSwitcher = ({ currentLang }: { currentLang: Locale }) => {
   );
 };
 
-export default LanguageSwitcher;
+export default LangSwitchClient;
