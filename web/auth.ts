@@ -52,6 +52,7 @@ if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers,
   callbacks: {
+    // eslint-disable-next-line
     async jwt({ token, user, account, profile, trigger }) {
       // ユーザー情報をJWTトークンに追加
       if (user) {
