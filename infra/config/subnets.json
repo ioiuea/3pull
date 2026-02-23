@@ -1,0 +1,40 @@
+{
+  "modulesName": "nw",
+  "subnetDefinitions": [
+    {
+      "name": "AzureBastionSubnet",
+      "alias": "bastion",
+      "prefixLength": 26
+    },
+    {
+      "name": "AzureFirewallSubnet",
+      "alias": "firewall",
+      "prefixLength": 26
+    },
+    {
+      "name": "MaintenanceSubnet",
+      "alias": "maint",
+      "prefixLength": 29
+    },
+    {
+      "name": "PrivateEndpointSubnet",
+      "alias": "pep",
+      "prefixLength": 26
+    },
+    {
+      "name": "ApplicationGatewaySubnet",
+      "alias": "agic",
+      "prefixLength": 25
+    },
+    {
+      "name": "AgentNodeSubnet",
+      "alias": "agentnode",
+      "prefixLength": 26
+    },
+    {
+      "name": "UserNodeSubnet",
+      "alias": "usernode",
+      "prefixLength": 24
+    }
+  ]
+}

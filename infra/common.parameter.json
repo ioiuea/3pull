@@ -1,0 +1,101 @@
+{
+  "common": {
+    "location": "japaneast",
+    "environmentName": "dev",
+    "systemName": "3pull",
+    "enableResourceLock": true
+  },
+  "resourceToggles": {
+    "logAnalytics": true,
+    "applicationInsights": true,
+    "virtualNetwork": true,
+    "subnets": true,
+    "firewall": true,
+    "applicationGateway": true,
+    "acr": true,
+    "storage": true,
+    "redis": true,
+    "cosmosDatabase": true,
+    "postgresDatabase": true,
+    "keyVault": true,
+    "aks": true,
+    "maintenanceVm": true
+  },
+  "network": {
+    "enableFirewallIdps": false,
+    "enableGatewayRoutePropagation": false,
+    "enableCentralizedPrivateDns": false,
+    "enableDdosProtection": false,
+    "ddosProtectionPlanId": "",
+    "vnetAddressPrefixes": [
+      "10.189.128.0/24",
+      "10.189.129.0/24",
+      "10.189.130.0/24"
+    ],
+    "vnetDnsServers": [],
+    "sharedBastionIp": "",
+    "egressNextHopIp": ""
+  },
+  "aks": {
+    "userPoolVmSize": "standard_d4s_v4",
+    "userPoolCount": 3,
+    "userPoolMinCount": 3,
+    "userPoolMaxCount": 6,
+    "userPoolLabel": "user",
+    "podCidr": "10.189.0.0/17",
+    "serviceCidr": "10.47.0.0/24"
+  },
+  "postgres": {
+    "skuTier": "Burstable",
+    "skuName": "Standard_B2s",
+    "storageSizeGB": 32,
+    "enableStorageAutoGrow": false,
+    "enableZoneRedundantHa": false,
+    "enableGeoRedundantBackup": false,
+    "backupRetentionDays": 7,
+    "enableCustomMaintenanceWindow": false,
+    "maintenanceWindow": {
+      "dayOfWeek": 0,
+      "startHour": 3,
+      "startMinute": 0
+    }
+  },
+  "redis": {
+    "skuName": "Basic",
+    "capacity": 0,
+    "shardCount": 1,
+    "scaleStrategy": "vertical",
+    "zonalAllocationPolicy": "Automatic",
+    "zones": [],
+    "replicasPerMaster": 1,
+    "enableGeoReplication": false,
+    "enableMicrosoftEntraAuthentication": true,
+    "disableAccessKeyAuthentication": false,
+    "enableCustomMaintenanceWindow": false,
+    "maintenanceWindow": {
+      "dayOfWeek": 0,
+      "startHour": 3,
+      "duration": "PT5H"
+    },
+    "enableRdbBackup": false,
+    "rdbBackupFrequencyInMinutes": 60,
+    "rdbBackupMaxSnapshotCount": 1,
+    "rdbStorageConnectionString": ""
+  },
+  "cosno": {
+    "throughputMode": "Serverless",
+    "manualThroughputRu": 400,
+    "autoscaleMaxThroughputRu": 1000,
+    "backupPolicyType": "Periodic",
+    "periodicBackupIntervalInMinutes": 240,
+    "periodicBackupRetentionIntervalInHours": 8,
+    "periodicBackupStorageRedundancy": "Geo",
+    "continuousBackupTier": "Continuous30Days",
+    "failoverRegions": [],
+    "enableAutomaticFailover": false,
+    "enableMultipleWriteLocations": false,
+    "consistencyLevel": "Session",
+    "disableLocalAuth": false,
+    "disableKeyBasedMetadataWriteAccess": false
+  }
+}

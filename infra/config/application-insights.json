@@ -1,0 +1,9 @@
+{
+  "modulesName": "monitor",
+  "retentionInDays": 365,
+  "publicNetworkAccessForIngestion": "Disabled",
+  "publicNetworkAccessForQuery": "Enabled",
+  "lockKind": "CanNotDelete",
+  "applicationInsightsIngestion": "LogAnalytics",
+  "applicationInsightsType": "web"
+}

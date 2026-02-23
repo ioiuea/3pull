@@ -1,0 +1,10 @@
+{
+  "modulesName": "svc",
+  "networkModulesName": "nw",
+  "lockKind": "CanNotDelete",
+  "postgresVersion": "16",
+  "administratorLogin": "pgadmin",
+  "publicNetworkAccess": "Disabled",
+  "privateDnsZoneName": "privatelink.postgres.database.azure.com",
+  "standbyAvailabilityZone": ""
+}

@@ -1,0 +1,12 @@
+{
+  "modulesName": "svc",
+  "lockKind": "CanNotDelete",
+  "keyVaultSkuFamily": "A",
+  "keyVaultSkuName": "standard",
+  "publicNetworkAccess": "Disabled",
+  "enableRbacAuthorization": true,
+  "enableSoftDelete": true,
+  "enablePurgeProtection": true,
+  "softDeleteRetentionInDays": 90,
+  "privateDnsZoneName": "privatelink.vaultcore.azure.net"
+}

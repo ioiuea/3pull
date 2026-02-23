@@ -1,0 +1,17 @@
+{
+  "modulesName": "svc",
+  "lockKind": "CanNotDelete",
+  "blobSkuName": "Standard_LRS",
+  "blobKind": "StorageV2",
+  "blobAccessTier": "Hot",
+  "publicNetworkAccess": "Disabled",
+  "enableBlobSoftDelete": true,
+  "blobDeleteRetentionDays": 7,
+  "enableContainerSoftDelete": true,
+  "containerDeleteRetentionDays": 7,
+  "enableBlobVersioning": true,
+  "privateDnsZoneBlobName": "privatelink.blob.core.windows.net",
+  "privateDnsZoneFileName": "privatelink.file.core.windows.net",
+  "privateDnsZoneQueueName": "privatelink.queue.core.windows.net",
+  "privateDnsZoneTableName": "privatelink.table.core.windows.net"
+}

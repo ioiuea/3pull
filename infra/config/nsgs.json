@@ -1,0 +1,176 @@
+{
+  "modulesName": "nw",
+  "lockKind": "CanNotDelete",
+  "templates": [
+    {
+      "targetSubnet": "usernode",
+      "rules": [
+        {
+          "name": "Allow-HTTPS-From-K8SAPIServer",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": ["usernode", "agentnode"],
+          "protocol": "TCP",
+          "priority": 200,
+          "sourcePortRange": "*",
+          "destinationPortRanges": ["443", "4443"]
+        },
+        {
+          "name": "Allow-HTTP-From-AgwSubnet",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": "agic",
+          "protocol": "TCP",
+          "priority": 201,
+          "sourcePortRange": "*",
+          "destinationPortRanges": ["8080", "3000", "3080"]
+        },
+        {
+          "name": "Allow-Any-From-MaintVmSubnet",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": "maint",
+          "protocol": "*",
+          "priority": 202,
+          "sourcePortRange": "*",
+          "destinationPortRange": "*"
+        },
+        {
+          "name": "Allow-HTTP-From-ActionGroup",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": "ActionGroup",
+          "protocol": "TCP",
+          "priority": 203,
+          "sourcePortRange": "*",
+          "destinationPortRange": "8080"
+        },
+        {
+          "name": "DenyAll",
+          "access": "Deny",
+          "direction": "Inbound",
+          "source": "*",
+          "protocol": "*",
+          "priority": 4096,
+          "sourcePortRange": "*",
+          "destinationPortRange": "*"
+        }
+      ]
+    },
+    {
+      "targetSubnet": "agentnode",
+      "rules": [
+        {
+          "name": "Allow-HTTPS-From-K8SAPIServer",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": ["usernode", "agentnode"],
+          "protocol": "TCP",
+          "priority": 200,
+          "sourcePortRange": "*",
+          "destinationPortRanges": ["443", "4443"]
+        },
+        {
+          "name": "Allow-HTTP-From-AgwSubnet",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": "agic",
+          "protocol": "TCP",
+          "priority": 201,
+          "sourcePortRange": "*",
+          "destinationPortRanges": ["8080", "3000", "3080"]
+        },
+        {
+          "name": "Allow-Any-From-MaintVmSubnet",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": "maint",
+          "protocol": "*",
+          "priority": 202,
+          "sourcePortRange": "*",
+          "destinationPortRange": "*"
+        },
+        {
+          "name": "Allow-HTTP-From-ActionGroup",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": "ActionGroup",
+          "protocol": "TCP",
+          "priority": 203,
+          "sourcePortRange": "*",
+          "destinationPortRange": "8080"
+        },
+        {
+          "name": "DenyAll",
+          "access": "Deny",
+          "direction": "Inbound",
+          "source": "*",
+          "protocol": "*",
+          "priority": 4096,
+          "sourcePortRange": "*",
+          "destinationPortRange": "*"
+        }
+      ]
+    },
+    {
+      "targetSubnet": "pep",
+      "rules": [
+        {
+          "name": "Allow-Any-From-AksSubnet",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": ["usernode", "agentnode"],
+          "protocol": "*",
+          "priority": 200,
+          "sourcePortRange": "*",
+          "destinationPortRange": "*"
+        },
+        {
+          "name": "Allow-Any-From-MaintVmSubnet",
+          "access": "Allow",
+          "direction": "Inbound",
+          "source": "maint",
+          "protocol": "*",
+          "priority": 201,
+          "sourcePortRange": "*",
+          "destinationPortRange": "*"
+        },
+        {
+          "name": "DenyAll",
+          "access": "Deny",
+          "direction": "Inbound",
+          "source": "*",
+          "protocol": "*",
+          "priority": 4096,
+          "sourcePortRange": "*",
+          "destinationPortRange": "*"
+        }
+      ]
+    },
+    {
+      "targetSubnet": "maint",
+      "rules": [
+        {
+          "name": "Allow-SSH-RDP-From-BastionServer",
+          "access": "Allow",
+          "direction": "Inbound",
+          "sourceSelector": "maintBastion",
+          "protocol": "TCP",
+          "priority": 200,
+          "sourcePortRange": "*",
+          "destinationPortRanges": ["22", "3389"]
+        },
+        {
+          "name": "DenyAll",
+          "access": "Deny",
+          "direction": "Inbound",
+          "source": "*",
+          "protocol": "*",
+          "priority": 4096,
+          "sourcePortRange": "*",
+          "destinationPortRange": "*"
+        }
+      ]
+    }
+  ]
+}

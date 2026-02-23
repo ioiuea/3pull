@@ -1,0 +1,7 @@
+{
+  "modulesName": "svc",
+  "networkModulesName": "nw",
+  "lockKind": "CanNotDelete",
+  "publicNetworkAccess": "Disabled",
+  "privateDnsZoneName": "privatelink.documents.azure.com"
+}

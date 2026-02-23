@@ -1,0 +1,10 @@
+{
+  "modulesName": "svc",
+  "lockKind": "CanNotDelete",
+  "acrSkuName": "Premium",
+  "publicNetworkAccess": "Disabled",
+  "networkRuleBypassOptions": "AzureServices",
+  "networkRuleDefaultAction": "Allow",
+  "networkRuleIpRules": [],
+  "privateDnsZoneName": "privatelink.azurecr.io"
+}

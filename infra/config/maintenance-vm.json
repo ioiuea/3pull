@@ -1,0 +1,26 @@
+{
+  "modulesName": "maint",
+  "networkModulesName": "nw",
+  "lockKind": "CanNotDelete",
+  "maintVmSize": "Standard_D4as_v5",
+  "maintVmAdminUsername": "adminUser",
+  "maintVmImageReference": {
+    "publisher": "canonical",
+    "offer": "ubuntu-24_04-lts",
+    "sku": "server",
+    "version": "latest"
+  },
+  "maintVmOsDisk": {
+    "createOption": "FromImage",
+    "diskSizeGB": 512,
+    "managedDisk": {
+      "storageAccountType": "Premium_LRS"
+    },
+    "osType": "Linux",
+    "deleteOption": "Delete"
+  },
+  "maintBootDiagnosticsEnabled": true,
+  "maintSecurityType": "TrustedLaunch",
+  "maintSecureBootEnabled": true,
+  "maintVTpmEnabled": true
+}

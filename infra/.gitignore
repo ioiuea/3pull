@@ -1,0 +1,10 @@
+# Compiled ARM templates from bicep build
+bicep/*.json
+
+# Keep params directory only; ignore all generated files under it
+params/*
+!params/.gitkeep
+
+# Python bytecode caches
+scripts/__pycache__
+scripts/**/*.pyc

@@ -1,0 +1,9 @@
+{
+  "modulesName": "svc",
+  "networkModulesName": "nw",
+  "lockKind": "CanNotDelete",
+  "publicNetworkAccess": "Disabled",
+  "minimumTlsVersion": "1.2",
+  "enableNonSslPort": false,
+  "privateDnsZoneName": "privatelink.redis.cache.windows.net"
+}

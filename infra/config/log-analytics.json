@@ -1,0 +1,8 @@
+{
+  "modulesName": "monitor",
+  "retentionInDays": 365,
+  "publicNetworkAccessForIngestion": "Disabled",
+  "publicNetworkAccessForQuery": "Enabled",
+  "lockKind": "CanNotDelete",
+  "logAnalyticsSku": "PerGB2018"
+}
