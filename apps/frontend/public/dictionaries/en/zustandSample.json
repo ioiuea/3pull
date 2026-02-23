@@ -1,0 +1,34 @@
+{
+  "title": "Zustand Global State Sample",
+  "description": "This page demonstrates global state management for string, number, boolean, and object values.",
+  "cards": {
+    "string": {
+      "title": "String State",
+      "label": "Message",
+      "placeholder": "Enter a message",
+      "current": "Current value"
+    },
+    "number": {
+      "title": "Number State",
+      "label": "Count",
+      "increment": "Increase",
+      "decrement": "Decrease"
+    },
+    "boolean": {
+      "title": "Boolean State",
+      "label": "Published",
+      "true": "Enabled",
+      "false": "Disabled"
+    },
+    "object": {
+      "title": "Object State",
+      "nameLabel": "Profile Name",
+      "roleLabel": "Profile Role",
+      "current": "Current object"
+    }
+  },
+  "actions": {
+    "reset": "Reset all states",
+    "backToLp": "Back to LP"
+  }
+}

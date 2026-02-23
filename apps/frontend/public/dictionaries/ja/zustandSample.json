@@ -1,0 +1,34 @@
+{
+  "title": "Zustand グローバルステート サンプル",
+  "description": "文字列・数値・真偽値・オブジェクトをグローバルステートとして管理する例です。",
+  "cards": {
+    "string": {
+      "title": "文字列ステート",
+      "label": "メッセージ",
+      "placeholder": "メッセージを入力",
+      "current": "現在の値"
+    },
+    "number": {
+      "title": "数値ステート",
+      "label": "カウント",
+      "increment": "増やす",
+      "decrement": "減らす"
+    },
+    "boolean": {
+      "title": "真偽値ステート",
+      "label": "公開状態",
+      "true": "有効",
+      "false": "無効"
+    },
+    "object": {
+      "title": "オブジェクトステート",
+      "nameLabel": "プロフィール名",
+      "roleLabel": "プロフィールロール",
+      "current": "現在のオブジェクト"
+    }
+  },
+  "actions": {
+    "reset": "すべて初期化",
+    "backToLp": "LPに戻る"
+  }
+}

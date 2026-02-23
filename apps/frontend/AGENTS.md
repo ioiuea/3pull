@@ -22,7 +22,7 @@
 - `flatRoutes` は利用しません。
 - ルート定義は `apps/frontend/app/routes.ts` で `route` / `layout` / `index` を使い、明示的に管理します。
 - ルートファイルはフォルダ階層で整理し、feature 単位で配置します。
-- `apps/frontend/app/feature/` は使用せず、画面実装は `apps/frontend/app/routes/<feature名>/` 配下に配置します。
+- 画面実装は `apps/frontend/app/routes/<feature名>/` 配下に配置します。
 - 全ページ共通のレイアウト・リダイレクトなどのルーティング入口コンポーネントは `apps/frontend/app/routes/` 直下に配置します。
 - ルーティングの最終制御は `apps/frontend/app/routes.ts` で行います。
 - `apps/frontend/app/components/` は部品単位の再利用コンポーネントを格納するフォルダとして扱います。
@@ -67,6 +67,7 @@
 - 選択言語は Cookie キー `locale` に保存します。
 - 翻訳辞書は `apps/frontend/public/dictionaries/<lng>/<namespace>.json` に配置します。
 - namespace は共通文言用 `common` と、ページ単位の専用 namespace（例: LP 用 `landing`）を使い分けます。
+- i18next 初期化時の namespace は `common` のみを指定し、ページ専用 namespace は `useTranslation("<namespace>")` の呼び出し時に動的ロードします。
 - 新規ページを追加する際は、ページ専用 namespace の追加可否を検討し、共通化できる文言のみ `common` に置きます。
 
 ### Language Add Procedure
@@ -79,5 +80,13 @@
 
 - feature 単位で辞書を分離する場合は、namespace 名を feature 名に合わせて作成します（例: `billing` / `account-settings` / `admin-dashboard`）。
 - 辞書ファイルは `apps/frontend/public/dictionaries/<lng>/<feature-namespace>.json` に配置します。
-- `apps/frontend/app/lib/i18n.ts` の `I18N_NAMESPACES` に対象 namespace を追加します。
 - 対象 feature のページコンポーネントでは `useTranslation("<feature-namespace>")` を利用し、feature 固有文言を `common` に混在させないようにします。
+- namespace は動的に読み込まれるため、`i18n.ts` 側への namespace 追記は不要です。
+
+## Global State Strategy
+
+- グローバルステート管理は `zustand` を標準ライブラリとして利用します。
+- ストア定義は `apps/frontend/app/store/` 配下に配置し、UI コンポーネント内で状態定義を直接持たない方針とします。
+- ストアは `state` と `actions`（更新関数）を同じ hook で公開し、更新ロジックはストア側に集約します。
+- グローバルで共有する必要がない一時状態（入力中のローカル UI 状態など）は `useState` を優先し、安易に zustand に昇格しません。
+- 新規ストアを追加する際は、型定義（State 型・Action 型）を先に明示し、初期値を定数化して `reset` 可能な設計を推奨します。

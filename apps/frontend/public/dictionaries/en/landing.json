@@ -34,6 +34,11 @@
   "security": {
     "title": "Security-First Frontend",
     "description": "Built to integrate SPA OIDC PKCE flows cleanly with MSAL as the authentication baseline.",
-    "cta": "See Architecture Sample"
+    "cta": "View Sample"
+  },
+  "zustand": {
+    "title": "Zustand Global State",
+    "description": "Try a hands-on page that demonstrates global state management for string, number, boolean, and object data.",
+    "cta": "View Sample"
   }
 }

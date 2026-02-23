@@ -24,12 +24,6 @@ export const LANGUAGE_COOKIE_KEY = "locale";
 export const I18N_NAMESPACE = "common";
 
 /**
- * このアプリで利用する namespace 一覧です。
- * ルートごとの翻訳辞書を分離するために、LP 専用の `landing` を含めています。
- */
-export const I18N_NAMESPACES = [I18N_NAMESPACE, "landing"] as const;
-
-/**
  * アプリが受け付ける言語コード型です。
  */
 export type AppLanguage = (typeof SUPPORTED_LANGUAGES)[number];
@@ -89,12 +83,14 @@ export function persistLanguageCookie(language: AppLanguage): void {
 /**
  * i18next のクライアント設定を初期化します。
  * 翻訳辞書は `public/dictionaries/{{lng}}/{{ns}}.json` から読み込みます。
+ * `common` 以外の namespace は `useTranslation("<namespace>")` の呼び出し時に
+ * 必要なものだけ動的にロードします。
  */
 void i18n.use(Backend).use(initReactI18next).init({
   fallbackLng: DEFAULT_LANGUAGE,
   supportedLngs: [...SUPPORTED_LANGUAGES],
   defaultNS: I18N_NAMESPACE,
-  ns: [...I18N_NAMESPACES],
+  ns: [I18N_NAMESPACE],
   backend: {
     loadPath: "/dictionaries/{{lng}}/{{ns}}.json",
   },
