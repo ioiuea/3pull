@@ -1,0 +1,22 @@
+{
+  "title": "ユーザープロファイル サンプル",
+  "description": "Microsoft Graph API を呼び出し、サインイン中ユーザーのプロフィール情報を表示します。",
+  "profileCardTitle": "Microsoft Graph プロファイル",
+  "actions": {
+    "backToLp": "LPに戻る"
+  },
+  "states": {
+    "loading": "プロフィールを取得中...",
+    "error": "プロフィールの取得に失敗しました",
+    "notConfiguredTitle": "MSAL が未設定です",
+    "notConfiguredDescription": ".env.example を元に .env の Entra ID 設定を追加し、開発サーバーを再起動してください。"
+  },
+  "fields": {
+    "companyName": "会社名",
+    "department": "部署",
+    "employeeId": "社員番号",
+    "displayName": "表示名",
+    "userPrincipalName": "ユーザープリンシパル名",
+    "email": "メールアドレス"
+  }
+}

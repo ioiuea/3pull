@@ -11,6 +11,10 @@
         "en": "英語",
         "ja": "日本語"
       }
+    },
+    "auth": {
+      "logoutLabel": "ログアウト",
+      "logoutAriaLabel": "サインアウトする"
     }
   }
 }

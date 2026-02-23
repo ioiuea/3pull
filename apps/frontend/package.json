@@ -8,10 +8,12 @@
     "build": "react-router build",
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
-    "preview": "vite preview --outDir build/client",
+    "preview": "vite preview --outDir build/client --port 5173",
     "typecheck": "react-router typegen && tsc"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.2.0",
+    "@azure/msal-react": "^5.0.4",
     "@base-ui/react": "^1.2.0",
     "@hookform/resolvers": "^5.2.2",
     "@react-router/node": "7.12.0",

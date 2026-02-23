@@ -1,16 +1,20 @@
 import { useEffect } from "react";
-import { Navigate, Outlet, useParams } from "react-router";
+import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import SampleSwitcher from "~/components/sample-switcher/sample-switcher";
 import i18n, {
+  detectLanguage,
   isSupportedLanguage,
   persistLanguageCookie,
 } from "~/lib/i18n";
 
 const AppLayout = () => {
   const { lng } = useParams();
+  const location = useLocation();
 
   if (!lng || !isSupportedLanguage(lng)) {
-    return <Navigate to="/" replace />;
+    const detectedLanguage = detectLanguage();
+    const redirectTarget = `/${detectedLanguage}${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={redirectTarget} replace />;
   }
 
   useEffect(() => {

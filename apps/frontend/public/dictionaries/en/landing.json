@@ -33,7 +33,7 @@
   },
   "security": {
     "title": "Security-First Frontend",
-    "description": "Built to integrate SPA OIDC PKCE flows cleanly with MSAL as the authentication baseline.",
+    "description": "You can review a sample that integrates the SPA OIDC PKCE flow with MSAL as the authentication foundation.",
     "cta": "View Sample"
   },
   "zustand": {

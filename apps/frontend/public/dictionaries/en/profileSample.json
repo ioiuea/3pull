@@ -1,0 +1,22 @@
+{
+  "title": "User Profile Sample",
+  "description": "This page calls Microsoft Graph API and shows profile fields from the signed-in user.",
+  "profileCardTitle": "Microsoft Graph Profile",
+  "actions": {
+    "backToLp": "Back to LP"
+  },
+  "states": {
+    "loading": "Loading profile...",
+    "error": "Failed to fetch profile",
+    "notConfiguredTitle": "MSAL is not configured",
+    "notConfiguredDescription": "Set Entra ID values in .env based on .env.example and restart the dev server."
+  },
+  "fields": {
+    "companyName": "Company Name",
+    "department": "Department",
+    "employeeId": "Employee ID",
+    "displayName": "Display Name",
+    "userPrincipalName": "User Principal Name",
+    "email": "Email"
+  }
+}

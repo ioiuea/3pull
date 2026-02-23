@@ -6,11 +6,13 @@ import {
   Scripts,
   ScrollRestoration,
 } from "react-router";
+import { MsalProvider } from "@azure/msal-react";
 
 import type { Route } from "./+types/root";
 import { ThemeProvider } from "~/components/theme-provider";
 import { Spinner } from "~/components/ui/spinner";
 import { Toaster } from "~/components/ui/sonner";
+import { msalInstance } from "~/lib/auth";
 import "~/lib/i18n";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import "./app.css";
@@ -38,17 +40,19 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <TooltipProvider>
-            {children}
-            <Toaster />
-          </TooltipProvider>
-        </ThemeProvider>
+        <MsalProvider instance={msalInstance}>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <TooltipProvider>
+              {children}
+              <Toaster />
+            </TooltipProvider>
+          </ThemeProvider>
+        </MsalProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -88,7 +92,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   return (
-    <main className="pt-16 p-4 container mx-auto">
+    <main className="pt-16 p-4 h-screen container mx-auto">
       <h1>{message}</h1>
       <p>{details}</p>
       {stack && (
