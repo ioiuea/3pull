@@ -22,7 +22,9 @@
 - `flatRoutes` は利用しません。
 - ルート定義は `apps/frontend/app/routes.ts` で `route` / `layout` / `index` を使い、明示的に管理します。
 - ルートファイルはフォルダ階層で整理し、feature 単位で配置します。
-- 画面実装は `apps/frontend/app/feature/<feature名>/` に同名の feature 用フォルダを作成し、ページコンポーネントを配置して `app/routes.ts` から呼び出す構成にします。
+- `apps/frontend/app/feature/` は使用せず、画面実装は `apps/frontend/app/routes/<feature名>/` 配下に配置します。
+- 全ページ共通のレイアウト・リダイレクトなどのルーティング入口コンポーネントは `apps/frontend/app/routes/` 直下に配置します。
+- ルーティングの最終制御は `apps/frontend/app/routes.ts` で行います。
 - `apps/frontend/app/components/` は部品単位の再利用コンポーネントを格納するフォルダとして扱います。
 
 ### Why Not `flatRoutes`
@@ -35,9 +37,22 @@
 - `apps/frontend/app/components/ui/*` の既存コンポーネントを優先して再利用します。
 - ボタン、カード、フォーム、テーブル、ツールチップなどの基礎 UI は独自実装より `shadcn` コンポーネントを優先して利用します。
 - アイコンは `lucide` を優先して利用します。
+- `apps/frontend/app/app.css` はグローバルテーマ定義のため原則編集しません。
+- スタイリング時に `shadcn` の該当コンポーネントが存在しない場合は `Tailwind CSS` で実装します。
 
 ## Form Validation Strategy
 
 - フォームバリデーションは `zod` をスキーマ定義の標準として利用します。
 - `react-hook-form` との接続は `@hookform/resolvers`（`zodResolver`）を標準として利用します。
 - フォーム入力値の型・バリデーションルール・エラーメッセージは `zod` スキーマを基準に一元管理します。
+
+## TypeScript Documentation Standard
+
+- TypeScript の記述では [TSDoc](https://tsdoc.org/) を標準ルールとして採用します。
+- 処理の意図が第三者に伝わるように、関数・主要ブロックには TSDoc 形式の説明を付けます。
+- ロジックを変えないリファクタでも、命名・コメント・構造化による可読性改善は積極的に行います。
+
+## React Component Style
+
+- `apps/frontend/app/routes/` 配下のページコンポーネントは、原則としてアロー関数コンポーネントで統一します。
+- `export default function ...` より `const Component = () => ...; export default Component;` の形式を優先します。

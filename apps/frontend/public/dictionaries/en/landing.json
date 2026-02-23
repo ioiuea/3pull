@@ -1,0 +1,40 @@
+{
+  "badge": "Monorepo Starter",
+  "hero": {
+    "titleTop": "Web + API + Infra",
+    "titleBottom": "Starter Pack",
+    "description": "3pull is a practical monorepo foundation that integrates infrastructure definition, frontend, and backend in one workflow.",
+    "switchLanguageCta": "Switch to Japanese",
+    "aboutCta": "See Architecture Sample",
+    "logoAlt": "3pull logo"
+  },
+  "sections": {
+    "infrastructure": "Infrastructure",
+    "frontend": "Frontend",
+    "backend": "Backend"
+  },
+  "infra": {
+    "bicep": "Infrastructure as Code (Bicep)"
+  },
+  "frontend": {
+    "reactRouter": "React Router v7",
+    "msal": "MSAL (SPA OIDC PKCE)",
+    "i18n": "i18n",
+    "zustand": "Zustand",
+    "zod": "Zod",
+    "shadcn": "shadcn/ui"
+  },
+  "backend": {
+    "fastapi": "FastAPI",
+    "structlog": "structlog",
+    "sqlalchemy": "SQLAlchemy",
+    "pydantic": "Pydantic (pydantic-settings)",
+    "alembic": "Alembic",
+    "gunicorn": "Gunicorn"
+  },
+  "security": {
+    "title": "Security-First Frontend",
+    "description": "Built to integrate SPA OIDC PKCE flows cleanly with MSAL as the authentication baseline.",
+    "cta": "See Architecture Sample"
+  }
+}

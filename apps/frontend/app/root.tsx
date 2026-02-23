@@ -9,7 +9,9 @@ import {
 
 import type { Route } from "./+types/root";
 import { ThemeProvider } from "~/components/theme-provider";
+import { Spinner } from "~/components/ui/spinner";
 import { Toaster } from "~/components/ui/sonner";
+import "~/lib/i18n";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import "./app.css";
 
@@ -56,6 +58,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return <Outlet />;
+}
+
+export function HydrateFallback() {
+  return (
+    <main className="container mx-auto flex min-h-dvh items-center justify-center px-4">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Spinner className="size-4" />
+        <span>Loading application...</span>
+      </div>
+    </main>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

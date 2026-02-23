@@ -1,0 +1,14 @@
+{
+  "home": {
+    "title": "Hello",
+    "description": "Language in URL has top priority. Visit /ja or /en directly.",
+    "aboutLink": "About Us",
+    "switchLanguage": "Switch Language"
+  },
+  "about": {
+    "title": "About Us",
+    "description": "This page is rendered under the language-aware route segment.",
+    "homeLink": "Home",
+    "switchLanguage": "Switch Language"
+  }
+}
