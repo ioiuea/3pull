@@ -1,27 +1,27 @@
-import i18n from "i18next";
-import Backend from "i18next-http-backend";
-import { initReactI18next } from "react-i18next";
+import i18n from 'i18next';
+import Backend from 'i18next-http-backend';
+import { initReactI18next } from 'react-i18next';
 
 /**
  * アプリで選択可能な言語コードの一覧です。
  * URL パラメータ、Cookie、ブラウザ設定の判定時にこの配列を正として扱います。
  */
-export const SUPPORTED_LANGUAGES = ["en", "ja"] as const;
+export const SUPPORTED_LANGUAGES = ['en', 'ja'] as const;
 
 /**
  * 利用可能な言語を解決できなかった場合に使う既定言語です。
  */
-export const DEFAULT_LANGUAGE = "en";
+export const DEFAULT_LANGUAGE = 'en';
 
 /**
  * 言語設定を保存する Cookie のキー名です。
  */
-export const LANGUAGE_COOKIE_KEY = "locale";
+export const LANGUAGE_COOKIE_KEY = 'locale';
 
 /**
  * i18next で利用するデフォルト namespace 名です。
  */
-export const I18N_NAMESPACE = "common";
+export const I18N_NAMESPACE = 'common';
 
 /**
  * アプリが受け付ける言語コード型です。
@@ -43,7 +43,7 @@ export function isSupportedLanguage(value: string): value is AppLanguage {
  */
 function getCookie(name: string): string | null {
   const match = document.cookie.match(
-    new RegExp(`(?:^|; )${name.replace(/[-[\]/{}()*+?.\\^$|]/g, "\\$&")}=([^;]*)`)
+    new RegExp(`(?:^|; )${name.replace(/[-[\]/{}()*+?.\\^$|]/g, '\\$&')}=([^;]*)`),
   );
   return match ? decodeURIComponent(match[1]) : null;
 }
@@ -62,7 +62,7 @@ export function detectLanguage(): AppLanguage {
     return cookieLanguage;
   }
 
-  const browserLanguage = navigator.language.split("-")[0];
+  const browserLanguage = navigator.language.split('-')[0];
   if (isSupportedLanguage(browserLanguage)) {
     return browserLanguage;
   }
@@ -86,18 +86,21 @@ export function persistLanguageCookie(language: AppLanguage): void {
  * `common` 以外の namespace は `useTranslation("<namespace>")` の呼び出し時に
  * 必要なものだけ動的にロードします。
  */
-void i18n.use(Backend).use(initReactI18next).init({
-  fallbackLng: DEFAULT_LANGUAGE,
-  supportedLngs: [...SUPPORTED_LANGUAGES],
-  defaultNS: I18N_NAMESPACE,
-  ns: [I18N_NAMESPACE],
-  backend: {
-    loadPath: "/dictionaries/{{lng}}/{{ns}}.json",
-  },
-  interpolation: {
-    escapeValue: false,
-  },
-});
+void i18n
+  .use(Backend)
+  .use(initReactI18next)
+  .init({
+    fallbackLng: DEFAULT_LANGUAGE,
+    supportedLngs: [...SUPPORTED_LANGUAGES],
+    defaultNS: I18N_NAMESPACE,
+    ns: [I18N_NAMESPACE],
+    backend: {
+      loadPath: '/dictionaries/{{lng}}/{{ns}}.json',
+    },
+    interpolation: {
+      escapeValue: false,
+    },
+  });
 
 /**
  * React コンポーネント側で利用する i18next インスタンスです。

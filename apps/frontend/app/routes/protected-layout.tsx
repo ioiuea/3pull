@@ -1,14 +1,14 @@
-import { useEffect } from "react";
-import { Navigate, Outlet, useParams } from "react-router";
-import { useIsAuthenticated, useMsal } from "@azure/msal-react";
-import { InteractionStatus } from "@azure/msal-browser";
-import { Spinner } from "~/components/ui/spinner";
-import { isSupportedLanguage } from "~/lib/i18n";
-import { isMsalConfigured, loginRequest } from "~/lib/auth";
+import { useEffect } from 'react';
+import { Navigate, Outlet, useParams } from 'react-router';
+import { useIsAuthenticated, useMsal } from '@azure/msal-react';
+import { InteractionStatus } from '@azure/msal-browser';
+import { Spinner } from '~/components/ui/spinner';
+import { isSupportedLanguage } from '~/lib/i18n';
+import { isMsalConfigured, loginRequest } from '~/lib/auth';
 
 const ProtectedLayout = () => {
   const { lng } = useParams();
-  const currentLanguage = lng && isSupportedLanguage(lng) ? lng : "en";
+  const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
   const isAuthenticated = useIsAuthenticated();
   const { instance, inProgress } = useMsal();
 

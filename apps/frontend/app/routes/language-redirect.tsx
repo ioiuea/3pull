@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router";
-import { detectLanguage } from "~/lib/i18n";
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router';
+import { detectLanguage } from '~/lib/i18n';
 
 const LanguageRedirect = () => {
   const navigate = useNavigate();

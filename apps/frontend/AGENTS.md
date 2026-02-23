@@ -137,3 +137,24 @@
 - 認可処理中の一時データ（state / nonce / PKCE 関連のトランザクション情報）
 - i18n の言語設定は認証情報ではなく、Cookie キー `locale` に保存します（`apps/frontend/app/lib/i18n.ts`）。
 - 機微情報（クライアントシークレットや独自の認証トークン）を独自に localStorage や Cookie へ保存しないことを原則とします。
+
+## CI Strategy
+
+- Frontend の CI は `Makefile` 経由で実行することを基本方針とします。
+- CI 実行の標準入口は `make frontend-ci` とし、個別コマンド直叩きではなくターゲット経由で統一します。
+- CI の実行順序は `format` -> `lint` -> `typecheck` -> `test` とします。
+- 依存インストールは `make frontend-install`（`pnpm install --frozen-lockfile`）を利用し、lockfile を固定します。
+
+### Quality Gate Rules
+
+- `format` は `prettier --check` を利用し、未整形ファイルが1つでもあれば失敗とします。
+- `lint` は `--max-warnings=0` を適用し、warning も失敗条件として扱います。
+- `test` は `vitest run --passWithNoTests` を利用します。
+- テストコードは `apps/frontend/test` 配下に配置し、`unit` / `integration` / `mocks` で管理します。
+
+### CI Exclusion Policy
+
+- `app/components/ui/**`（shadcn 生成物）は `format` / `lint` / `typecheck:ci` の対象外とします。
+- `app/app.css` は `format` / `lint` の対象外とします。
+- `app/lib/utils.ts` と `app/hooks/use-mobile.ts` は `format` / `lint` / `typecheck:ci` の対象外とします。
+- CI で型チェック除外を有効化する場合は `typecheck` ではなく `typecheck:ci` を使用します。

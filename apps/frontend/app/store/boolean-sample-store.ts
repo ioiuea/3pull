@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 
 type BooleanSampleStoreState = {
   isPublished: boolean;
@@ -8,7 +8,7 @@ type BooleanSampleStoreState = {
 
 const initialState = {
   isPublished: true,
-} satisfies Pick<BooleanSampleStoreState, "isPublished">;
+} satisfies Pick<BooleanSampleStoreState, 'isPublished'>;
 
 /**
  * 真偽値ステートのサンプルストアです。

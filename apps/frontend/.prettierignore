@@ -1,0 +1,9 @@
+node_modules
+build
+.react-router
+coverage
+pnpm-lock.yaml
+app/components/ui
+app/app.css
+app/lib/utils.ts
+app/hooks/use-mobile.ts

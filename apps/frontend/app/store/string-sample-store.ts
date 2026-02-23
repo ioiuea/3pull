@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 
 type StringSampleStoreState = {
   message: string;
@@ -7,8 +7,8 @@ type StringSampleStoreState = {
 };
 
 const initialState = {
-  message: "Hello from Zustand",
-} satisfies Pick<StringSampleStoreState, "message">;
+  message: 'Hello from Zustand',
+} satisfies Pick<StringSampleStoreState, 'message'>;
 
 /**
  * 文字列ステートのサンプルストアです。

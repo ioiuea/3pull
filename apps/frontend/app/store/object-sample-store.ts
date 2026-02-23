@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 
 type SampleProfile = {
   name: string;
@@ -14,19 +14,17 @@ type ObjectSampleStoreState = {
 
 const initialState = {
   profile: {
-    name: "3pull User",
-    role: "Developer",
+    name: '3pull User',
+    role: 'Developer',
   },
-} satisfies Pick<ObjectSampleStoreState, "profile">;
+} satisfies Pick<ObjectSampleStoreState, 'profile'>;
 
 /**
  * オブジェクトステートのサンプルストアです。
  */
 export const useObjectSampleStore = create<ObjectSampleStoreState>((set) => ({
   ...initialState,
-  setProfileName: (value) =>
-    set((state) => ({ profile: { ...state.profile, name: value } })),
-  setProfileRole: (value) =>
-    set((state) => ({ profile: { ...state.profile, role: value } })),
+  setProfileName: (value) => set((state) => ({ profile: { ...state.profile, name: value } })),
+  setProfileRole: (value) => set((state) => ({ profile: { ...state.profile, role: value } })),
   reset: () => set({ ...initialState }),
 }));

@@ -1,4 +1,4 @@
-import { create } from "zustand";
+import { create } from 'zustand';
 
 type NumberSampleStoreState = {
   count: number;
@@ -10,7 +10,7 @@ type NumberSampleStoreState = {
 
 const initialState = {
   count: 1,
-} satisfies Pick<NumberSampleStoreState, "count">;
+} satisfies Pick<NumberSampleStoreState, 'count'>;
 
 /**
  * 数値ステートのサンプルストアです。

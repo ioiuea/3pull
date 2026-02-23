@@ -1,28 +1,29 @@
-import { useEffect } from "react";
-import { Navigate, Outlet, useLocation, useParams } from "react-router";
-import SampleSwitcher from "~/components/sample-switcher/sample-switcher";
-import i18n, {
-  detectLanguage,
-  isSupportedLanguage,
-  persistLanguageCookie,
-} from "~/lib/i18n";
+import { useEffect } from 'react';
+import { Navigate, Outlet, useLocation, useParams } from 'react-router';
+import SampleSwitcher from '~/components/sample-switcher/sample-switcher';
+import i18n, { detectLanguage, isSupportedLanguage, persistLanguageCookie } from '~/lib/i18n';
 
 const AppLayout = () => {
   const { lng } = useParams();
   const location = useLocation();
+  const currentLanguage = lng && isSupportedLanguage(lng) ? lng : null;
 
-  if (!lng || !isSupportedLanguage(lng)) {
+  useEffect(() => {
+    if (!currentLanguage) {
+      return;
+    }
+
+    if (i18n.language !== currentLanguage) {
+      void i18n.changeLanguage(currentLanguage);
+    }
+    persistLanguageCookie(currentLanguage);
+  }, [currentLanguage]);
+
+  if (!currentLanguage) {
     const detectedLanguage = detectLanguage();
     const redirectTarget = `/${detectedLanguage}${location.pathname}${location.search}${location.hash}`;
     return <Navigate to={redirectTarget} replace />;
   }
-
-  useEffect(() => {
-    if (i18n.language !== lng) {
-      void i18n.changeLanguage(lng);
-    }
-    persistLanguageCookie(lng);
-  }, [lng]);
 
   return (
     <>
