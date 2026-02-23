@@ -1,14 +1,16 @@
 {
-  "home": {
-    "title": "こんにちは",
-    "description": "URL の言語セグメントが最優先です。/ja または /en に直接アクセスできます。",
-    "aboutLink": "私たちについて",
-    "switchLanguage": "言語を切り替える"
-  },
-  "about": {
-    "title": "私たちについて",
-    "description": "このページは言語付きルート配下で表示されています。",
-    "homeLink": "ホーム",
-    "switchLanguage": "言語を切り替える"
+  "switcher": {
+    "theme": {
+      "label": "テーマ",
+      "ariaLabel": "ライトモードとダークモードを切り替える"
+    },
+    "language": {
+      "label": "言語",
+      "ariaLabel": "表示言語を切り替える",
+      "options": {
+        "en": "英語",
+        "ja": "日本語"
+      }
+    }
   }
 }

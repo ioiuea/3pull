@@ -56,3 +56,28 @@
 
 - `apps/frontend/app/routes/` 配下のページコンポーネントは、原則としてアロー関数コンポーネントで統一します。
 - `export default function ...` より `const Component = () => ...; export default Component;` の形式を優先します。
+
+## I18n Strategy
+
+- 国際化対応は `i18next` + `react-i18next` + `i18next-http-backend` を利用します。
+- i18n の独自ライブラリ実装は `apps/frontend/app/lib/i18n.ts` に集約します。
+- 対応言語は `en` / `ja` を標準とし、URL 言語セグメント `/:lng` を正とします。
+- `"/"` へのアクセス時は言語判定ロジックで `"/en"` または `"/ja"` にリダイレクトします。
+- 言語判定の優先順位は `locale` Cookie -> ブラウザ言語 -> fallback (`en`) とします。
+- 選択言語は Cookie キー `locale` に保存します。
+- 翻訳辞書は `apps/frontend/public/dictionaries/<lng>/<namespace>.json` に配置します。
+- namespace は共通文言用 `common` と、ページ単位の専用 namespace（例: LP 用 `landing`）を使い分けます。
+- 新規ページを追加する際は、ページ専用 namespace の追加可否を検討し、共通化できる文言のみ `common` に置きます。
+
+### Language Add Procedure
+
+- 新しい言語を追加する場合は、`apps/frontend/app/lib/i18n.ts` の `SUPPORTED_LANGUAGES` に言語コードを追加します。
+- 追加言語の辞書ディレクトリ `apps/frontend/public/dictionaries/<new-lng>/` を作成し、既存 namespace（`common`・各 feature 用 namespace）を同名ファイルで揃えます。
+- `"/"` リダイレクト判定（Cookie / ブラウザ言語）は `SUPPORTED_LANGUAGES` を基準に動作するため、言語追加後は `/:lng` ルーティングで実際に表示確認します。
+
+### Feature Namespace Procedure
+
+- feature 単位で辞書を分離する場合は、namespace 名を feature 名に合わせて作成します（例: `billing` / `account-settings` / `admin-dashboard`）。
+- 辞書ファイルは `apps/frontend/public/dictionaries/<lng>/<feature-namespace>.json` に配置します。
+- `apps/frontend/app/lib/i18n.ts` の `I18N_NAMESPACES` に対象 namespace を追加します。
+- 対象 feature のページコンポーネントでは `useTranslation("<feature-namespace>")` を利用し、feature 固有文言を `common` に混在させないようにします。

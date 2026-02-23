@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
-import { ArrowRight, Globe, Lock, Server, Wrench } from "lucide-react";
+import { Globe, Lock, Server, Wrench } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -35,7 +35,6 @@ const LandingPage = () => {
   const { t } = useTranslation("landing");
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : "en";
-  const alternateLanguage = currentLanguage === "ja" ? "en" : "ja";
 
   return (
     <main className="relative overflow-hidden">
@@ -54,14 +53,8 @@ const LandingPage = () => {
               {t("hero.description")}
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button asChild size="lg">
-                <Link to={`/${alternateLanguage}`}>
-                  {t("hero.switchLanguageCta")}
-                  <ArrowRight className="size-4" />
-                </Link>
-              </Button>
               <Button asChild variant="outline" size="lg">
-                <Link to={`/${currentLanguage}/about`}>{t("hero.aboutCta")}</Link>
+                <Link to={`/${currentLanguage}#starter-stack`}>{t("hero.aboutCta")}</Link>
               </Button>
             </div>
           </div>
@@ -75,7 +68,10 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <section className="container mx-auto grid max-w-6xl gap-4 px-4 pb-16 sm:grid-cols-2 lg:grid-cols-3">
+      <section
+        id="starter-stack"
+        className="container mx-auto grid max-w-6xl gap-4 px-4 pb-16 sm:grid-cols-2 lg:grid-cols-3"
+      >
         <Card className="border-border/70">
           <CardHeader className="flex flex-row items-center gap-3 pb-2">
             <Wrench className="size-5 text-primary" />
@@ -113,7 +109,7 @@ const LandingPage = () => {
         </Card>
       </section>
 
-      <section className="container mx-auto max-w-6xl px-4 pb-20">
+      <section id="security" className="container mx-auto max-w-6xl px-4 pb-20">
         <Card className="border-primary/20 bg-primary/4">
           <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-1">
@@ -126,7 +122,7 @@ const LandingPage = () => {
               </p>
             </div>
             <Button asChild variant="secondary">
-              <Link to={`/${currentLanguage}/about`}>{t("security.cta")}</Link>
+              <Link to={`/${currentLanguage}#security`}>{t("security.cta")}</Link>
             </Button>
           </CardContent>
         </Card>
