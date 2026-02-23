@@ -40,5 +40,10 @@
     "title": "Zustand Global State",
     "description": "Try a hands-on page that demonstrates global state management for string, number, boolean, and object data.",
     "cta": "View Sample"
+  },
+  "formValidation": {
+    "title": "Form Validation Sample",
+    "description": "Review a sample implementation that combines react-hook-form and Zod for schema-based validation.",
+    "cta": "View Sample"
   }
 }

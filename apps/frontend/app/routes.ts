@@ -1,4 +1,9 @@
-import { type RouteConfig, index, layout, route } from "@react-router/dev/routes";
+import {
+  type RouteConfig,
+  index,
+  layout,
+  route,
+} from "@react-router/dev/routes";
 
 export default [
   index("routes/language-redirect.tsx"),
@@ -7,6 +12,7 @@ export default [
     layout("routes/protected-layout.tsx", [
       route("profile-sample", "routes/profile-sample/page.tsx"),
       route("zustand-sample", "routes/zustand-sample/page.tsx"),
+      route("validation-sample", "routes/validation-sample/page.tsx"),
     ]),
   ]),
 ] satisfies RouteConfig;

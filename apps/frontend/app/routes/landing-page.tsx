@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
 import { useIsAuthenticated, useMsal } from "@azure/msal-react";
-import { FlaskConical, Globe, Lock, Server, Wrench } from "lucide-react";
+import { ClipboardCheck, FlaskConical, Globe, Lock, Server, Wrench } from "lucide-react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -166,6 +166,22 @@ const LandingPage = () => {
             </div>
             <Button asChild variant="secondary">
               <Link to={`/${currentLanguage}/zustand-sample`}>{t("zustand.cta")}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="mt-4 border-primary/20 bg-primary/4">
+          <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <ClipboardCheck className="size-4 text-primary" />
+                {t("formValidation.title")}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {t("formValidation.description")}
+              </p>
+            </div>
+            <Button asChild variant="secondary">
+              <Link to={`/${currentLanguage}/validation-sample`}>{t("formValidation.cta")}</Link>
             </Button>
           </CardContent>
         </Card>

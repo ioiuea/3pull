@@ -1,0 +1,50 @@
+{
+  "title": "React Hook Form + Zod Sample",
+  "description": "Try a practical sample that combines react-hook-form and Zod for schema-based validation.",
+  "form": {
+    "title": "Validation Form",
+    "fields": {
+      "fullName": {
+        "label": "Full name",
+        "placeholder": "Jane Doe"
+      },
+      "email": {
+        "label": "Email",
+        "placeholder": "jane@example.com"
+      },
+      "age": {
+        "label": "Age",
+        "description": "Only integer values of 18 or above are accepted."
+      },
+      "department": {
+        "label": "Department",
+        "placeholder": "Engineering"
+      },
+      "receiveNewsletter": {
+        "label": "Receive newsletter",
+        "description": "Toggle if the user wants update emails."
+      },
+      "agreeToTerms": {
+        "label": "Agree to terms",
+        "description": "Required to submit the form."
+      }
+    }
+  },
+  "validation": {
+    "fullNameRequired": "Full name is required.",
+    "emailInvalid": "Enter a valid email address.",
+    "ageInteger": "Age must be an integer.",
+    "ageMin": "Age must be 18 or older.",
+    "departmentRequired": "Department is required.",
+    "agreeRequired": "You must agree to the terms."
+  },
+  "actions": {
+    "backToLp": "Back to LP",
+    "submit": "Validate and Submit",
+    "reset": "Reset"
+  },
+  "result": {
+    "title": "Submitted JSON",
+    "empty": "Submit the form to display validated JSON output."
+  }
+}

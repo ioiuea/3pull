@@ -42,9 +42,25 @@
 
 ## Form Validation Strategy
 
-- フォームバリデーションは `zod` をスキーマ定義の標準として利用します。
-- `react-hook-form` との接続は `@hookform/resolvers`（`zodResolver`）を標準として利用します。
-- フォーム入力値の型・バリデーションルール・エラーメッセージは `zod` スキーマを基準に一元管理します。
+- フォームバリデーションは `zod` を標準として採用し、入力値の型定義・バリデーションルール・エラーメッセージキーをスキーマに集約します。
+- `react-hook-form` をフォーム状態管理の標準とし、UI は `apps/frontend/app/components/ui/form.tsx` の部品を優先して構築します。
+- バリデーション結果の表示は `react-hook-form` の `errors` を経由し、画面側で i18n 翻訳キーを解決して表示します。
+
+### Implementation Policy
+
+- スキーマはページ単位で `const schema = z.object({...})` として定義し、`type FormValues = z.infer<typeof schema>` で型を導出します。
+- サブミット時は `schema.safeParse(values)` を実行し、失敗時は `form.setError` で各フィールドにエラーを反映します。
+- 可能な環境では `@hookform/resolvers` の `zodResolver` を利用してもよいですが、依存バージョン差分で型不整合が出る場合は `safeParse` 実装を優先します。
+- エラーメッセージは文言直書きではなく翻訳キー（例: `validation.emailInvalid`）を `zod` スキーマに持たせます。
+
+### Usage
+
+- 新規フォームページ追加時は、以下の順で実装します。
+- 1. `zod` スキーマ定義と `z.infer` 型定義を作成する。
+- 2. `useForm<FormValues>` に `defaultValues` を与えてフォームを初期化する。
+- 3. `FormField` / `FormItem` / `FormMessage` を使って UI を構築する。
+- 4. サブミットで `safeParse` を実行し、成功時のみ後続処理（API 呼び出し等）を実行する。
+- 5. namespace 辞書（`<feature>.json`）に `validation.*` キーを追加し、日英で文言を揃える。
 
 ## TypeScript Documentation Standard
 
@@ -90,3 +106,34 @@
 - ストアは `state` と `actions`（更新関数）を同じ hook で公開し、更新ロジックはストア側に集約します。
 - グローバルで共有する必要がない一時状態（入力中のローカル UI 状態など）は `useState` を優先し、安易に zustand に昇格しません。
 - 新規ストアを追加する際は、型定義（State 型・Action 型）を先に明示し、初期値を定数化して `reset` 可能な設計を推奨します。
+
+## IdP Authentication Strategy (Entra ID + MSAL)
+
+- IdP 認証は Microsoft Entra ID を利用し、SPA クライアントは `@azure/msal-browser` / `@azure/msal-react` を標準採用します。
+- 設定値は `apps/frontend/.env` の `VITE_ENTRA_CLIENT_ID` と `VITE_ENTRA_TENANT_ID` を必須とし、`apps/frontend/.env.example` をテンプレートとして管理します。
+- MSAL 設定は `apps/frontend/app/lib/auth.ts` に集約し、`redirectUri` / `postLogoutRedirectUri` / `authority` / `loginRequest` / Graph API endpoint をここで一元管理します。
+- 認証対象ルートは `apps/frontend/app/routes/protected-layout.tsx` 配下に集約し、未認証時は `loginRedirect` で Entra ID ログインへ遷移させます。
+- ログイン機能を実装する場合は、未認証ユーザーの遷移導線で `loginRedirect` を実行し、`redirectStartPage` を付与して認証完了後に本来アクセスしたページへ復帰できるようにします。
+
+### OIDC PKCE Policy
+
+- SPA の認可フローは OIDC Authorization Code Flow with PKCE を前提にします。
+- PKCE（Proof Key for Code Exchange）は、認可リクエスト時に生成した一時値（code verifier / code challenge）を使い、認可コードの盗聴・再利用リスクを低減する仕組みです。
+- クライアントシークレットを保持できない SPA でも安全性を高められるため、Entra ID + SPA 構成では PKCE 前提を標準とします。
+
+### Usage
+
+- `apps/frontend/app/root.tsx` で `MsalProvider` をアプリ全体に適用します。
+- 認証必須ページは `apps/frontend/app/routes.ts` で `layout("routes/protected-layout.tsx", [...])` の配下にのみ配置します。
+- Graph API 呼び出し時は `acquireTokenSilent` を優先し、`InteractionRequiredAuthError` の場合のみ `acquireTokenRedirect` にフォールバックします。
+- スコープは最小権限を原則とし、現在の標準は `User.Read` です。追加時は用途を明示して最小化します。
+
+### Storage Policy (Current Implementation)
+
+- 現在の MSAL キャッシュは `cacheLocation: "localStorage"` を利用しています（`apps/frontend/app/lib/auth.ts`）。
+- `localStorage` には主に以下が保存されます。
+- `id token` / `access token` / `refresh token` のキャッシュキー
+- アカウント情報（homeAccountId / tenantId など）
+- 認可処理中の一時データ（state / nonce / PKCE 関連のトランザクション情報）
+- i18n の言語設定は認証情報ではなく、Cookie キー `locale` に保存します（`apps/frontend/app/lib/i18n.ts`）。
+- 機微情報（クライアントシークレットや独自の認証トークン）を独自に localStorage や Cookie へ保存しないことを原則とします。
