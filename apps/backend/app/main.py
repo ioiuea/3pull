@@ -1,14 +1,14 @@
 from fastapi import FastAPI
 import uvicorn
 
+from app.api.routers.health import router as health_router
+
+API_PREFIX = "/backend"
+
 app = FastAPI()
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+app.include_router(health_router, prefix=API_PREFIX)
 
 
 def main() -> None:
-    """Run development server entrypoint for `uv run backend`."""
+    """Run FastAPI bootstrap entrypoint for `uv run backend`."""
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
