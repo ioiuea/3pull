@@ -17,7 +17,7 @@
   },
   "frontend": {
     "reactRouter": "React Router v7",
-    "msal": "MSAL（SPA OIDC PKCE）",
+    "auth": "FastAPI セッション認証（Entra ID / Email）",
     "i18n": "i18n",
     "zustand": "Zustand",
     "zod": "Zod",
@@ -33,7 +33,7 @@
   },
   "security": {
     "title": "Security-First Frontend",
-    "description": "MSAL を認証の基盤として、SPA の OIDC PKCE フローを組み込むサンプルを確認できます。",
+    "description": "FastAPI のセッション認証を基盤に、Entra ID と Email サインインを組み込んだサンプルを確認できます。",
     "cta": "サンプルを見る"
   },
   "zustand": {

@@ -42,6 +42,83 @@
 - ライフサイクル（`apps/backend/app/core/lifecycle/startup.py`）で `get_settings()` を呼び出し、ログレベルやサービス名など運用情報の出力に利用します。
 - 各モジュールで直接 `os.environ` を読む実装は避け、設定参照は必ず `get_settings()` 経由で統一します。
 
+## 認証実装方針
+
+- 認証はフロント主導ではなく API（FastAPI）主導で実装し、フロントは `/backend/auth/*` を利用します。
+- 認証方式は 2 系統です。
+- Entra ID（OIDC）: 社内ユーザー向け
+- Email/Password: 社外ユーザー向け
+- アカウント統合は Entra 優先ポリシーです。
+- 同一メールで先に Email 登録済みの場合は Entra ログイン時に Entra 側へ統合します。
+- Entra が先に紐づいているメールの Email サインアップは拒否します。
+- Email 認証はメール検証完了までログイン不可です。
+- セッションは DB（`sessions` テーブル）で管理し、Cookie は `HttpOnly` + `SameSite=Lax` を標準とします。
+- パスワードは Argon2id でハッシュ化し、平文保存しません。
+- 検証トークン/リセットトークンは生値を DB 保存せず、SHA-256 ハッシュのみ保存します。
+
+### 認証データモデル
+
+- `users`: ユーザー本体（`email`, `display_name`, `user_type`, `is_active`）
+- `auth_identities`: 認証方式ごとの識別子（`provider`, `provider_subject`, `email_normalized`, `password_hash` など）
+- `sessions`: セッション管理（`session_token_hash`, `expires_at`, `revoked_at`）
+- `email_verification_tokens`: メール検証トークン（ハッシュ保存）
+- `password_reset_tokens`: パスワードリセットトークン（ハッシュ保存）
+
+### DB/トランザクション方針
+
+- DB 接続は `apps/backend/app/adapters/postgres/session.py` で一元管理します。
+- `DATABASE_URL` は必須運用で、未設定時は起動時に失敗させます。
+- `get_session()` は `async with session.begin()` の UoW として動作し、Router/Service で `commit()/rollback()` を直接呼ばない方針です。
+- マイグレーションは Alembic を利用し、`apps/backend/alembic/` で管理します。
+
+### 認証 API 利用方法
+
+- `POST /backend/auth/email/signup`
+- Email ユーザーを登録し、検証トークン発行状態を返します。
+- `POST /backend/auth/email/verify`
+- 検証トークンを消費して Email 検証を完了します。
+- `POST /backend/auth/email/login`
+- Email ログインを行い、セッション Cookie を発行します。
+- `GET /backend/auth/entra/login`
+- Entra OIDC ログインへリダイレクトします。
+- `GET /backend/auth/entra/callback`
+- OIDC コールバックを処理し、アプリセッションを発行します。
+- `POST /backend/auth/password/reset/request`
+- パスワードリセット要求を受け付けます（存在有無に関わらず同一レスポンス）。
+- `POST /backend/auth/password/reset/confirm`
+- リセットトークンでパスワード再設定を確定します。
+- `POST /backend/auth/password/change`
+- 現在パスワード確認後に変更し、全セッション失効ポリシーを適用します。
+- `GET /backend/auth/me`
+- 現在ログイン中ユーザーを返します。
+- `POST /backend/auth/logout`
+- 現在セッションを失効してログアウトします。
+- `POST /backend/auth/session/refresh`
+- セッションをローテーションし、新 Cookie を再発行します。
+
+### セキュリティ・運用設定
+
+- CORS は `CSRF_TRUSTED_ORIGINS` を基準に許可オリジンを制御します。
+- CSRF は `Origin/Referer` ベースの検証ミドルウェア（`app/core/security/csrf.py`）で保護します。
+- Cookie セキュリティは `SESSION_COOKIE_SECURE` で環境ごとに切り替えます。
+- ローカル開発時は `false`、HTTPS 必須環境は `true` を推奨します。
+- Email ログインのロック制御は設定値で管理します。
+- `EMAIL_LOGIN_MAX_FAILURES`（既定: 5）
+- `EMAIL_LOGIN_LOCK_MINUTES`（既定: 15）
+- 有効期限設定は以下で管理します。
+- `EMAIL_VERIFICATION_TTL_MINUTES`（既定: 60）
+- `PASSWORD_RESET_TTL_MINUTES`（既定: 60）
+- `SESSION_TTL_MINUTES`（既定: 10080 = 7日）
+
+### 監査ログ（構造化ログ）
+
+- 認証系の主要イベントは `structlog` で JSON 出力します。
+- `auth.audit.login.success`
+- `auth.audit.login.failure`
+- `auth.audit.logout`
+- `auth.audit.session.refresh`
+- `auth.audit.session.revoke_all`
+
 ## Python コーディング規約
 
 - Python コードは `PEP 8` に準拠して実装します。

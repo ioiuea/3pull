@@ -5,15 +5,16 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
 } from 'react-router';
-import { MsalProvider } from '@azure/msal-react';
+import { useEffect } from 'react';
 
 import type { Route } from './+types/root';
 import { ThemeProvider } from '~/components/theme-provider';
 import { Spinner } from '~/components/ui/spinner';
 import { Toaster } from '~/components/ui/sonner';
-import { msalInstance } from '~/lib/auth';
 import '~/lib/i18n';
+import { DEFAULT_LANGUAGE, LANGUAGE_COOKIE_KEY, isSupportedLanguage } from '~/lib/i18n';
 import { TooltipProvider } from '~/components/ui/tooltip';
 import './app.css';
 
@@ -32,7 +33,7 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={DEFAULT_LANGUAGE} suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -40,19 +41,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body>
-        <MsalProvider instance={msalInstance}>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <TooltipProvider>
-              {children}
-              <Toaster />
-            </TooltipProvider>
-          </ThemeProvider>
-        </MsalProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TooltipProvider>
+            {children}
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -61,6 +60,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    const cookieLanguage = document.cookie
+      .split('; ')
+      .find((item) => item.startsWith(`${LANGUAGE_COOKIE_KEY}=`))
+      ?.split('=')[1];
+    const decodedCookieLanguage = cookieLanguage ? decodeURIComponent(cookieLanguage) : '';
+    const firstSegment = pathname.split('/').filter(Boolean)[0];
+    const resolvedLanguage = isSupportedLanguage(decodedCookieLanguage)
+      ? decodedCookieLanguage
+      : isSupportedLanguage(firstSegment ?? '')
+        ? firstSegment
+        : DEFAULT_LANGUAGE;
+    document.documentElement.lang = resolvedLanguage;
+  }, [pathname]);
+
   return <Outlet />;
 }
 

@@ -1,22 +1,25 @@
 {
   "title": "ユーザープロファイル サンプル",
-  "description": "Microsoft Graph API を呼び出し、サインイン中ユーザーのプロフィール情報を表示します。",
-  "profileCardTitle": "Microsoft Graph プロファイル",
+  "description": "/backend/auth/me を呼び出し、サインイン中ユーザーのプロフィール情報を表示します。",
+  "profileCardTitle": "認証済みユーザープロファイル",
   "actions": {
     "backToLp": "LPに戻る"
   },
   "states": {
     "loading": "プロフィールを取得中...",
     "error": "プロフィールの取得に失敗しました",
-    "notConfiguredTitle": "MSAL が未設定です",
-    "notConfiguredDescription": ".env.example を元に .env の Entra ID 設定を追加し、開発サーバーを再起動してください。"
+    "notConfiguredTitle": "認証設定が未構成です",
+    "notConfiguredDescription": ".env.example を元に .env のバックエンド認証設定を追加し、開発サーバーを再起動してください。"
   },
   "fields": {
-    "companyName": "会社名",
-    "department": "部署",
-    "employeeId": "社員番号",
+    "id": "ユーザーID",
     "displayName": "表示名",
-    "userPrincipalName": "ユーザープリンシパル名",
-    "email": "メールアドレス"
+    "email": "メールアドレス",
+    "userType": "ユーザー種別",
+    "isActive": "ステータス"
+  },
+  "values": {
+    "active": "有効",
+    "inactive": "無効"
   }
 }

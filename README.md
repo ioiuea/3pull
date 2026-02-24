@@ -16,7 +16,7 @@
 ### フロントエンド（`apps/frontend`）
 
 - Web フレームワーク: React Router v7（Framework Mode / `ssr: false`）
-- 認証: Microsoft Entra ID + MSAL（SPA OIDC PKCE）
+- 認証: FastAPI セッション認証（Entra ID / Email）
 - 国際化対応: i18next + react-i18next
 - グローバルステート管理: Zustand
 - バリデーション: Zod + react-hook-form
@@ -28,6 +28,30 @@
 - 構造化ログ: structlog（JSON 出力）
 - 設定管理 / バリデーション: Pydantic（pydantic-settings）
 - ASGI プロセスマネージャ: Gunicorn
+
+## セットアップ手順
+
+1. インフラを構築する
+   `infra/README.md` を参照し、`infra/common.parameter.json` を環境に合わせて編集してから `infra/main.sh` を実行します。  
+   これで Azure 環境のインフラを構築します。
+
+2. アプリ依存関係をインストールする（Makefile 運用）
+   プロジェクトルートで `make install` を実行します。  
+   フロントエンド/バックエンドの依存関係をまとめてセットアップします。
+
+3. PostgreSQL 初期セットアップを行う
+   `apps/backend/postgres/README.md` を参照して、データベース/スキーマ/ロール/`search_path` を作成します。
+
+4. Entra ID の OIDC アプリを作成する
+   Entra ID 側で OIDC 用アプリを作成し、クライアントID/シークレット/リダイレクトURIを準備します。
+
+5. 環境変数ファイルを展開して更新する
+   まず `make env` で `.env` を生成し、生成後に各 `.env` を環境値に更新します。
+
+6. アプリを起動する
+   用途に応じて以下を実行します。
+   - 本番相当起動: `make up-api` / `make up-web`
+   - 開発起動: `make dev-api` / `make dev-web`
 
 ## 参照先
 

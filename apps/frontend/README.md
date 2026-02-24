@@ -107,36 +107,26 @@
 - グローバルで共有する必要がない一時状態（入力中のローカル UI 状態など）は `useState` を優先し、安易に zustand に昇格しません。
 - 新規ストアを追加する際は、型定義（State 型・Action 型）を先に明示し、初期値を定数化して `reset` 可能な設計を推奨します。
 
-## IdP 認証方針（Entra ID + MSAL）
+## 認証方針（FastAPI Session + Entra ID / Email）
 
-- IdP 認証は Microsoft Entra ID を利用し、SPA クライアントは `@azure/msal-browser` / `@azure/msal-react` を標準採用します。
-- 設定値は `apps/frontend/.env` の `VITE_ENTRA_CLIENT_ID` と `VITE_ENTRA_TENANT_ID` を必須とし、`apps/frontend/.env.example` をテンプレートとして管理します。
-- MSAL 設定は `apps/frontend/app/lib/auth.ts` に集約し、`redirectUri` / `postLogoutRedirectUri` / `authority` / `loginRequest` / Graph API endpoint をここで一元管理します。
-- 認証対象ルートは `apps/frontend/app/routes/protected-layout.tsx` 配下に集約し、未認証時は `loginRedirect` で Entra ID ログインへ遷移させます。
-- ログイン機能を実装する場合は、未認証ユーザーの遷移導線で `loginRedirect` を実行し、`redirectStartPage` を付与して認証完了後に本来アクセスしたページへ復帰できるようにします。
-
-### OIDC PKCE 方針
-
-- SPA の認可フローは OIDC Authorization Code Flow with PKCE を前提にします。
-- PKCE（Proof Key for Code Exchange）は、認可リクエスト時に生成した一時値（code verifier / code challenge）を使い、認可コードの盗聴・再利用リスクを低減する仕組みです。
-- クライアントシークレットを保持できない SPA でも安全性を高められるため、Entra ID + SPA 構成では PKCE 前提を標準とします。
+- 認証の主体はバックエンド（FastAPI）とし、フロントエンドは `backend/auth/*` API を呼び出します。
+- サインイン方法は Entra ID（OIDC）と Email/Password の 2 系統を提供します。
+- セッションは DB（`sessions` テーブル）で管理し、フロントエンドは HttpOnly Cookie を利用します。
+- 認証必須ページは `apps/frontend/app/routes.ts` で `layout("routes/protected-layout.tsx", [...])` 配下に集約します。
+- 未認証時は `protected-layout` で `/backend/auth/me` を確認し、`/:lng/login` へリダイレクトします。
 
 ### 利用方法
 
-- `apps/frontend/app/root.tsx` で `MsalProvider` をアプリ全体に適用します。
-- 認証必須ページは `apps/frontend/app/routes.ts` で `layout("routes/protected-layout.tsx", [...])` の配下にのみ配置します。
-- Graph API 呼び出し時は `acquireTokenSilent` を優先し、`InteractionRequiredAuthError` の場合のみ `acquireTokenRedirect` にフォールバックします。
-- スコープは最小権限を原則とし、現在の標準は `User.Read` です。追加時は用途を明示して最小化します。
+- Entra ログインは `GET /backend/auth/entra/login` へ遷移し、コールバック後に指定した `return_to` へ復帰します。
+- Email ログインは `POST /backend/auth/email/login` を利用します。
+- サインアウトは `POST /backend/auth/logout` を利用します。
+- 認証済みユーザー情報は `GET /backend/auth/me` で取得します。
 
 ### ストレージ方針（現行実装）
 
-- 現在の MSAL キャッシュは `cacheLocation: "localStorage"` を利用しています（`apps/frontend/app/lib/auth.ts`）。
-- `localStorage` には主に以下が保存されます。
-- `id token` / `access token` / `refresh token` のキャッシュキー
-- アカウント情報（homeAccountId / tenantId など）
-- 認可処理中の一時データ（state / nonce / PKCE 関連のトランザクション情報）
-- i18n の言語設定は認証情報ではなく、Cookie キー `locale` に保存します（`apps/frontend/app/lib/i18n.ts`）。
-- 機微情報（クライアントシークレットや独自の認証トークン）を独自に localStorage や Cookie へ保存しないことを原則とします。
+- フロントエンドで認証トークンを `localStorage` に保持しません。
+- 認証セッションは HttpOnly Cookie により送信され、JavaScript から直接参照しない前提です。
+- i18n の言語設定のみ Cookie キー `locale` に保存します（`apps/frontend/app/lib/i18n.ts`）。
 
 ## CI 方針
 

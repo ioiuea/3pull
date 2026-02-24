@@ -1,43 +1,52 @@
-import { useEffect } from 'react';
-import { Navigate, Outlet, useParams } from 'react-router';
-import { useIsAuthenticated, useMsal } from '@azure/msal-react';
-import { InteractionStatus } from '@azure/msal-browser';
+import { useEffect, useState } from 'react';
+import { Navigate, Outlet, useLocation, useParams } from 'react-router';
 import { Spinner } from '~/components/ui/spinner';
 import { isSupportedLanguage } from '~/lib/i18n';
-import { isMsalConfigured, loginRequest } from '~/lib/auth';
+import { getMe } from '~/lib/api-helper';
 
 const ProtectedLayout = () => {
   const { lng } = useParams();
+  const { pathname, search, hash } = useLocation();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
-  const isAuthenticated = useIsAuthenticated();
-  const { instance, inProgress } = useMsal();
+  const [isChecking, setIsChecking] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    if (!isMsalConfigured || inProgress !== InteractionStatus.None) {
-      return;
-    }
+    let ignore = false;
 
-    if (!isAuthenticated) {
-      void instance.loginRedirect({
-        ...loginRequest,
-        redirectStartPage: window.location.href,
-      });
-    }
-  }, [inProgress, instance, isAuthenticated]);
+    const checkSession = async () => {
+      try {
+        const me = await getMe();
+        if (!ignore) {
+          setIsAuthenticated(Boolean(me));
+        }
+      } finally {
+        if (!ignore) {
+          setIsChecking(false);
+        }
+      }
+    };
 
-  if (!isMsalConfigured) {
-    return <Navigate to={`/${currentLanguage}`} replace />;
-  }
+    void checkSession();
+    return () => {
+      ignore = true;
+    };
+  }, [pathname]);
 
-  if (!isAuthenticated || inProgress !== InteractionStatus.None) {
+  if (isChecking) {
     return (
       <main className="container mx-auto flex min-h-dvh items-center justify-center px-4">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Spinner className="size-4" />
-          <span>Authenticating...</span>
+          <span>Checking session...</span>
         </div>
       </main>
     );
+  }
+
+  if (!isAuthenticated) {
+    const returnTo = encodeURIComponent(`${pathname}${search}${hash}`);
+    return <Navigate to={`/${currentLanguage}/login?return_to=${returnTo}`} replace />;
   }
 
   return <Outlet />;

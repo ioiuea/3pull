@@ -1,10 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
-import { useIsAuthenticated, useMsal } from '@azure/msal-react';
 import { ClipboardCheck, FlaskConical, Globe, Lock, Server, Wrench } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { isMsalConfigured, loginRequest } from '~/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { isSupportedLanguage } from '~/lib/i18n';
 
@@ -12,7 +10,6 @@ const infraItemKeys = ['infra.bicep'] as const;
 
 const frontendItemKeys = [
   'frontend.reactRouter',
-  'frontend.msal',
   'frontend.i18n',
   'frontend.zustand',
   'frontend.zod',
@@ -32,17 +29,6 @@ const LandingPage = () => {
   const { t } = useTranslation('landing');
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
-  const isAuthenticated = useIsAuthenticated();
-  const { instance } = useMsal();
-
-  const handleSecuritySampleClick = () => {
-    if (!isAuthenticated && isMsalConfigured) {
-      void instance.loginRedirect({
-        ...loginRequest,
-        redirectStartPage: `${window.location.origin}/${currentLanguage}/profile-sample`,
-      });
-    }
-  };
 
   return (
     <main className="relative overflow-hidden">
@@ -125,20 +111,9 @@ const LandingPage = () => {
               </p>
               <p className="text-sm text-muted-foreground">{t('security.description')}</p>
             </div>
-            {isAuthenticated ? (
-              <Button asChild variant="secondary">
-                <Link to={`/${currentLanguage}/profile-sample`}>{t('security.cta')}</Link>
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleSecuritySampleClick}
-                disabled={!isMsalConfigured}
-              >
-                {t('security.cta')}
-              </Button>
-            )}
+            <Button asChild variant="secondary">
+              <Link to={`/${currentLanguage}/profile-sample`}>{t('security.cta')}</Link>
+            </Button>
           </CardContent>
         </Card>
         <Card className="mt-4 border-primary/20 bg-primary/4">

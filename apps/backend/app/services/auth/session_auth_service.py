@@ -1,0 +1,226 @@
+"""
+DB セッション認証サービス.
+
+- セッション発行（生トークン生成 + ハッシュ保存）
+- セッション検証（トークンからユーザー解決）
+- セッション失効（ログアウト）
+"""
+
+from __future__ import annotations
+
+import hashlib
+import secrets
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from enum import StrEnum
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.logging.config import get_logger
+from app.core.settings import get_settings
+from app.models.auth.user import User
+from app.repositories.auth.session_repository import (
+    create_session,
+    get_active_session_by_token_hash,
+    revoke_session,
+)
+from app.repositories.auth.user_repository import get_user_by_id
+
+
+class SessionAuthErrorCode(StrEnum):
+    """セッション認証エラーコード."""
+
+    SESSION_INVALID = "session_invalid"
+    SESSION_EXPIRED = "session_expired"
+    USER_NOT_FOUND = "user_not_found"
+
+
+@dataclass(slots=True)
+class SessionAuthError(Exception):
+    """
+    セッション認証失敗を表す例外.
+
+    Attributes:
+        code: エラーコード
+        message: 人間可読メッセージ
+    """
+
+    code: SessionAuthErrorCode
+    message: str
+
+
+logger = get_logger(__name__)
+
+
+def _hash_token(raw_token: str) -> str:
+    """
+    生トークンを SHA-256 ハッシュ化する.
+
+    Args:
+        raw_token: 生トークン
+
+    Returns:
+        str: 16進文字列ハッシュ
+    """
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+async def issue_user_session(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    ip_address: str | None,
+    user_agent: str | None,
+    ttl_minutes: int | None = None,
+) -> str:
+    """
+    ユーザーセッションを発行し、生トークンを返す.
+
+    Args:
+        session: DB セッション
+        user_id: ユーザー ID
+        ip_address: クライアント IP
+        user_agent: User-Agent
+        ttl_minutes: TTL（分）。未指定時は設定値を利用
+
+    Returns:
+        str: Cookie に設定する生トークン
+    """
+    settings = get_settings()
+    effective_ttl = ttl_minutes or settings.session_ttl_minutes
+    now = datetime.now(timezone.utc)
+    raw_token = secrets.token_urlsafe(48)
+    token_hash = _hash_token(raw_token)
+    expires_at = now + timedelta(minutes=effective_ttl)
+    await create_session(
+        session,
+        user_id=user_id,
+        session_token_hash=token_hash,
+        expires_at=expires_at,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    return raw_token
+
+
+async def resolve_user_by_session_token(
+    session: AsyncSession,
+    *,
+    raw_token: str,
+) -> User:
+    """
+    生セッショントークンからユーザーを解決する.
+
+    Args:
+        session: DB セッション
+        raw_token: Cookie から受け取った生トークン
+
+    Returns:
+        User: 認証済みユーザー
+    """
+    now = datetime.now(timezone.utc)
+    token_hash = _hash_token(raw_token)
+    user_session = await get_active_session_by_token_hash(
+        session,
+        session_token_hash=token_hash,
+        now=now,
+    )
+    if user_session is None:
+        raise SessionAuthError(
+            code=SessionAuthErrorCode.SESSION_INVALID,
+            message="Session is invalid",
+        )
+
+    user = await get_user_by_id(session, user_session.user_id)
+    if user is None:
+        raise SessionAuthError(
+            code=SessionAuthErrorCode.USER_NOT_FOUND,
+            message="User is not found",
+        )
+    return user
+
+
+async def revoke_session_by_token(
+    session: AsyncSession,
+    *,
+    raw_token: str,
+) -> None:
+    """
+    生セッショントークンに対応するセッションを失効する.
+
+    Args:
+        session: DB セッション
+        raw_token: Cookie から受け取った生トークン
+    """
+    now = datetime.now(timezone.utc)
+    token_hash = _hash_token(raw_token)
+    user_session = await get_active_session_by_token_hash(
+        session,
+        session_token_hash=token_hash,
+        now=now,
+    )
+    if user_session is None:
+        return
+    await revoke_session(session, session_id=user_session.id, revoked_at=now)
+    logger.info(
+        "auth.audit.session.revoke",
+        session_id=str(user_session.id),
+        user_id=str(user_session.user_id),
+        reason="logout",
+    )
+
+
+async def refresh_user_session(
+    session: AsyncSession,
+    *,
+    raw_token: str,
+    ip_address: str | None,
+    user_agent: str | None,
+) -> tuple[User, str]:
+    """
+    既存セッションをローテーションして新しいセッションを発行する.
+
+    Args:
+        session: DB セッション
+        raw_token: 現在の生セッショントークン
+        ip_address: クライアント IP
+        user_agent: User-Agent
+
+    Returns:
+        tuple[User, str]: 認証ユーザーと新しい生セッショントークン
+    """
+    now = datetime.now(timezone.utc)
+    token_hash = _hash_token(raw_token)
+    current_session = await get_active_session_by_token_hash(
+        session,
+        session_token_hash=token_hash,
+        now=now,
+    )
+    if current_session is None:
+        raise SessionAuthError(
+            code=SessionAuthErrorCode.SESSION_INVALID,
+            message="Session is invalid",
+        )
+
+    user = await get_user_by_id(session, current_session.user_id)
+    if user is None:
+        raise SessionAuthError(
+            code=SessionAuthErrorCode.USER_NOT_FOUND,
+            message="User is not found",
+        )
+
+    await revoke_session(session, session_id=current_session.id, revoked_at=now)
+    logger.info(
+        "auth.audit.session.revoke",
+        session_id=str(current_session.id),
+        user_id=str(current_session.user_id),
+        reason="refresh",
+    )
+    new_token = await issue_user_session(
+        session,
+        user_id=user.id,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    return user, new_token
