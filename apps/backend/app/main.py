@@ -8,7 +8,6 @@ FastAPI アプリのブートストラップ.
 """
 
 from fastapi import FastAPI
-import uvicorn
 
 from app.api.routers.health import router as health_router
 from app.core.lifecycle.startup import lifespan
@@ -30,19 +29,3 @@ app.state.api_prefix = API_PREFIX
 app.add_middleware(AccessLogMiddleware)
 # 公開 API ルーターをプレフィックス配下に集約する。
 app.include_router(health_router, prefix=API_PREFIX)
-
-
-def main() -> None:
-    """
-    開発用の起動エントリーポイント.
-
-    `uv run backend` から呼び出されることを想定し、
-    Uvicorn をリロード有効で起動する。
-    """
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=SETTINGS.api_port,
-        reload=True,
-        access_log=False,
-    )
