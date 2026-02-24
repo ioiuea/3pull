@@ -13,6 +13,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.core.logging.config import configure_logging, get_logger
+from app.core.settings.config import get_settings
 
 logger = get_logger(__name__)
 
@@ -25,12 +26,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Args:
         app: FastAPI アプリケーションインスタンス
     """
+    settings = get_settings()
+
     # 起動直後にログ基盤を初期化する。
-    configure_logging()
+    configure_logging(level=settings.api_log_level)
     # どの API プレフィックスで起動したかを記録する。
-    logger.info("application.startup", api_prefix=getattr(app.state, "api_prefix", None))
+    logger.info(
+        "application.startup",
+        api_prefix=getattr(app.state, "api_prefix", None),
+        service=settings.service_name,
+    )
     try:
         yield
     finally:
         # shutdown 直前に停止ログを出力する。
-        logger.info("application.shutdown", api_prefix=getattr(app.state, "api_prefix", None))
+        logger.info(
+            "application.shutdown",
+            api_prefix=getattr(app.state, "api_prefix", None),
+            service=settings.service_name,
+        )

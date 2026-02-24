@@ -20,7 +20,7 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     return structlog.get_logger(name)
 
 
-def configure_logging() -> None:
+def configure_logging(level: str = "INFO") -> None:
     """
     アプリケーションの構造化ログを初期化する.
 
@@ -48,4 +48,7 @@ def configure_logging() -> None:
     )
 
     # stdlib logging からの出力形式も structlog に合わせる。
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.basicConfig(
+        level=getattr(logging, level.upper(), logging.INFO),
+        format="%(message)s",
+    )
