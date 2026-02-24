@@ -1,15 +1,15 @@
 # Frontend
 
+## Package Manager Policy
+
+- `apps/frontend/package.json` の `scripts.preinstall` で `npx only-allow pnpm` を実行し、利用可能なパッケージマネージャを `pnpm` に制限しています。
+- `apps/frontend/package.json` の `packageManager` は `pnpm@10.30.1` に設定されています。
+
 ## Frontend Framework
 
 - この `apps/frontend` は **React Router フレームワーク** を採用している。  
   参照: <https://reactrouter.com/home>
 - このアプリは `npx create-react-router@latest` によって `apps` 配下にインストールされています。
-
-## Package Manager Policy
-
-- `apps/frontend/package.json` の `scripts.preinstall` で `npx only-allow pnpm` を実行し、利用可能なパッケージマネージャを `pnpm` に制限しています。
-- `apps/frontend/package.json` の `packageManager` は `pnpm@10.30.1` に設定されています。
 
 ## Build Strategy
 
