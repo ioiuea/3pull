@@ -41,7 +41,7 @@ frontend-ci: frontend-format frontend-lint frontend-typecheck frontend-test
 # ------------------------------
 # Backend targets
 # ------------------------------
-.PHONY: backend-install env-init up up-dev
+.PHONY: backend-install
 
 backend-install:
 	cd $(BACKEND_DIR) && uv sync --frozen
@@ -49,7 +49,11 @@ backend-install:
 # ------------------------------
 # Combined runtime targets
 # ------------------------------
-env-init:
+.PHONY: install env up up-dev
+
+install: frontend-install backend-install
+
+env:
 	@if [ -f "$(FRONTEND_DIR)/.env.example" ] && [ ! -f "$(FRONTEND_DIR)/.env" ]; then \
 		cp "$(FRONTEND_DIR)/.env.example" "$(FRONTEND_DIR)/.env"; \
 		echo "Created $(FRONTEND_DIR)/.env from .env.example"; \
