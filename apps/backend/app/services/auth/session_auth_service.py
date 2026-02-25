@@ -18,7 +18,9 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging.config import get_logger
+from app.core.security.token_cipher import decrypt_token, encrypt_token
 from app.core.settings import get_settings
+from app.models.auth.session import UserSession
 from app.models.auth.user import User
 from app.repositories.auth.session_repository import (
     create_session,
@@ -73,6 +75,9 @@ async def issue_user_session(
     ip_address: str | None,
     user_agent: str | None,
     ttl_minutes: int | None = None,
+    entra_access_token: str | None = None,
+    entra_refresh_token: str | None = None,
+    entra_access_token_expires_at: datetime | None = None,
 ) -> str:
     """
     ユーザーセッションを発行し、生トークンを返す.
@@ -83,6 +88,9 @@ async def issue_user_session(
         ip_address: クライアント IP
         user_agent: User-Agent
         ttl_minutes: TTL（分）。未指定時は設定値を利用
+        entra_access_token: Entra Graph 用アクセストークン
+        entra_refresh_token: Entra Graph 用リフレッシュトークン
+        entra_access_token_expires_at: Entra アクセストークン有効期限
 
     Returns:
         str: Cookie に設定する生トークン
@@ -100,8 +108,41 @@ async def issue_user_session(
         expires_at=expires_at,
         ip_address=ip_address,
         user_agent=user_agent,
+        entra_access_token=encrypt_token(entra_access_token),
+        entra_refresh_token=encrypt_token(entra_refresh_token),
+        entra_access_token_expires_at=entra_access_token_expires_at,
     )
     return raw_token
+
+
+async def resolve_active_session_by_token(
+    session: AsyncSession,
+    *,
+    raw_token: str,
+) -> UserSession:
+    """
+    生セッショントークンから有効セッションを解決する.
+
+    Args:
+        session: DB セッション
+        raw_token: Cookie から受け取った生トークン
+
+    Returns:
+        UserSession: 有効セッション
+    """
+    now = datetime.now(timezone.utc)
+    token_hash = _hash_token(raw_token)
+    user_session = await get_active_session_by_token_hash(
+        session,
+        session_token_hash=token_hash,
+        now=now,
+    )
+    if user_session is None:
+        raise SessionAuthError(
+            code=SessionAuthErrorCode.SESSION_INVALID,
+            message="Session is invalid",
+        )
+    return user_session
 
 
 async def resolve_user_by_session_token(
@@ -119,18 +160,7 @@ async def resolve_user_by_session_token(
     Returns:
         User: 認証済みユーザー
     """
-    now = datetime.now(timezone.utc)
-    token_hash = _hash_token(raw_token)
-    user_session = await get_active_session_by_token_hash(
-        session,
-        session_token_hash=token_hash,
-        now=now,
-    )
-    if user_session is None:
-        raise SessionAuthError(
-            code=SessionAuthErrorCode.SESSION_INVALID,
-            message="Session is invalid",
-        )
+    user_session = await resolve_active_session_by_token(session, raw_token=raw_token)
 
     user = await get_user_by_id(session, user_session.user_id)
     if user is None:
@@ -154,14 +184,7 @@ async def revoke_session_by_token(
         raw_token: Cookie から受け取った生トークン
     """
     now = datetime.now(timezone.utc)
-    token_hash = _hash_token(raw_token)
-    user_session = await get_active_session_by_token_hash(
-        session,
-        session_token_hash=token_hash,
-        now=now,
-    )
-    if user_session is None:
-        return
+    user_session = await resolve_active_session_by_token(session, raw_token=raw_token)
     await revoke_session(session, session_id=user_session.id, revoked_at=now)
     logger.info(
         "auth.audit.session.revoke",
@@ -191,17 +214,10 @@ async def refresh_user_session(
         tuple[User, str]: 認証ユーザーと新しい生セッショントークン
     """
     now = datetime.now(timezone.utc)
-    token_hash = _hash_token(raw_token)
-    current_session = await get_active_session_by_token_hash(
+    current_session = await resolve_active_session_by_token(
         session,
-        session_token_hash=token_hash,
-        now=now,
+        raw_token=raw_token,
     )
-    if current_session is None:
-        raise SessionAuthError(
-            code=SessionAuthErrorCode.SESSION_INVALID,
-            message="Session is invalid",
-        )
 
     user = await get_user_by_id(session, current_session.user_id)
     if user is None:
@@ -222,5 +238,8 @@ async def refresh_user_session(
         user_id=user.id,
         ip_address=ip_address,
         user_agent=user_agent,
+        entra_access_token=decrypt_token(current_session.entra_access_token),
+        entra_refresh_token=decrypt_token(current_session.entra_refresh_token),
+        entra_access_token_expires_at=current_session.entra_access_token_expires_at,
     )
     return user, new_token

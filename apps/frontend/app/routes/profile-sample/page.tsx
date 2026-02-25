@@ -8,6 +8,15 @@ import { Input } from '~/components/ui/input';
 import { backendFetch, getMe, type AuthMe } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
 
+type EntraGraphProfile = {
+  displayName: string | null;
+  companyName: string | null;
+  department: string | null;
+  jobTitle: string | null;
+  email: string | null;
+  access_token_expires_at: string | null;
+};
+
 const ProfileSamplePage = () => {
   const { t } = useTranslation('profileSample');
   const { lng } = useParams();
@@ -21,6 +30,9 @@ const ProfileSamplePage = () => {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
+  const [entraProfile, setEntraProfile] = useState<EntraGraphProfile | null>(null);
+  const [entraProfileError, setEntraProfileError] = useState<string | null>(null);
+  const [isLoadingEntraProfile, setIsLoadingEntraProfile] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -29,6 +41,7 @@ const ProfileSamplePage = () => {
       try {
         setIsLoading(true);
         setErrorMessage(null);
+        setEntraProfileError(null);
 
         const me = await getMe();
         if (!me) {
@@ -39,7 +52,8 @@ const ProfileSamplePage = () => {
         }
       } catch (error) {
         if (!ignore) {
-          setErrorMessage(error instanceof Error ? error.message : t('states.error'));
+          const message = error instanceof Error ? error.message : t('states.error');
+          setErrorMessage(message);
         }
       } finally {
         if (!ignore) {
@@ -55,6 +69,26 @@ const ProfileSamplePage = () => {
   }, [t]);
 
   const canChangePassword = profile?.user_type === 'external';
+  const canFetchEntraProfile = profile?.user_type === 'internal';
+
+  const onFetchEntraProfile = async () => {
+    try {
+      setIsLoadingEntraProfile(true);
+      setEntraProfileError(null);
+      const response = await backendFetch('/auth/entra/profile');
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          detail?: { message?: string };
+        } | null;
+        throw new Error(payload?.detail?.message ?? t('entraProfile.states.error'));
+      }
+      setEntraProfile((await response.json()) as EntraGraphProfile);
+    } catch (error) {
+      setEntraProfileError(error instanceof Error ? error.message : t('entraProfile.states.error'));
+    } finally {
+      setIsLoadingEntraProfile(false);
+    }
+  };
 
   const onSubmitPasswordChange = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -160,71 +194,138 @@ const ProfileSamplePage = () => {
         </CardContent>
       </Card>
 
-      <Card className="mt-4">
-        <CardHeader>
-          <CardTitle>{t('passwordChange.title')}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-3" onSubmit={onSubmitPasswordChange}>
-            <p className="text-sm text-muted-foreground">{t('passwordChange.description')}</p>
-            {!canChangePassword && (
-              <p className="text-sm text-muted-foreground">
-                {t('passwordChange.disabledForInternal')}
+      {profile?.user_type === 'internal' && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>{t('entraProfile.title')}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">{t('entraProfile.description')}</p>
+            <Button
+              onClick={() => void onFetchEntraProfile()}
+              disabled={!canFetchEntraProfile || isLoadingEntraProfile}
+            >
+              {isLoadingEntraProfile
+                ? t('entraProfile.actions.loading')
+                : t('entraProfile.actions.fetch')}
+            </Button>
+
+            {entraProfileError && (
+              <p className="text-sm text-destructive">
+                {t('entraProfile.states.error')}: {entraProfileError}
               </p>
             )}
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium" htmlFor="current-password">
-                {t('passwordChange.fields.currentPassword')}
-              </label>
-              <Input
-                id="current-password"
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                disabled={!canChangePassword || isPasswordSubmitting}
-                required
-              />
-            </div>
+            {!entraProfileError && !entraProfile && (
+              <p className="text-sm text-muted-foreground">{t('entraProfile.states.idle')}</p>
+            )}
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium" htmlFor="new-password">
-                {t('passwordChange.fields.newPassword')}
-              </label>
-              <Input
-                id="new-password"
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                disabled={!canChangePassword || isPasswordSubmitting}
-                required
-              />
-              <p className="text-xs text-muted-foreground">{t('passwordChange.policy')}</p>
-            </div>
+            {!entraProfileError && entraProfile && (
+              <dl className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <dt className="text-sm font-medium">
+                    {t('entraProfile.fields.accessTokenExpiresAt')}
+                  </dt>
+                  <dd className="text-sm text-muted-foreground">
+                    {entraProfile.access_token_expires_at
+                      ? new Date(entraProfile.access_token_expires_at).toLocaleString()
+                      : t('entraProfile.values.unknown')}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium">{t('entraProfile.fields.displayName')}</dt>
+                  <dd className="text-sm text-muted-foreground">
+                    {entraProfile.displayName || '-'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium">{t('entraProfile.fields.companyName')}</dt>
+                  <dd className="text-sm text-muted-foreground">
+                    {entraProfile.companyName || '-'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium">{t('entraProfile.fields.department')}</dt>
+                  <dd className="text-sm text-muted-foreground">
+                    {entraProfile.department || '-'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium">{t('entraProfile.fields.jobTitle')}</dt>
+                  <dd className="text-sm text-muted-foreground">{entraProfile.jobTitle || '-'}</dd>
+                </div>
+                <div>
+                  <dt className="text-sm font-medium">{t('entraProfile.fields.email')}</dt>
+                  <dd className="text-sm text-muted-foreground">{entraProfile.email || '-'}</dd>
+                </div>
+              </dl>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-            <div className="space-y-1">
-              <label className="text-sm font-medium" htmlFor="confirm-password">
-                {t('passwordChange.fields.confirmPassword')}
-              </label>
-              <Input
-                id="confirm-password"
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                disabled={!canChangePassword || isPasswordSubmitting}
-                required
-              />
-            </div>
+      {canChangePassword && (
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>{t('passwordChange.title')}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-3" onSubmit={onSubmitPasswordChange}>
+              <p className="text-sm text-muted-foreground">{t('passwordChange.description')}</p>
 
-            {passwordMessage && <p className="text-sm text-emerald-600">{passwordMessage}</p>}
-            {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+              <div className="space-y-1">
+                <label className="text-sm font-medium" htmlFor="current-password">
+                  {t('passwordChange.fields.currentPassword')}
+                </label>
+                <Input
+                  id="current-password"
+                  type="password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  disabled={isPasswordSubmitting}
+                  required
+                />
+              </div>
 
-            <Button type="submit" disabled={!canChangePassword || isPasswordSubmitting}>
-              {isPasswordSubmitting ? t('passwordChange.submitting') : t('passwordChange.submit')}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <div className="space-y-1">
+                <label className="text-sm font-medium" htmlFor="new-password">
+                  {t('passwordChange.fields.newPassword')}
+                </label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  disabled={isPasswordSubmitting}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">{t('passwordChange.policy')}</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-sm font-medium" htmlFor="confirm-password">
+                  {t('passwordChange.fields.confirmPassword')}
+                </label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  disabled={isPasswordSubmitting}
+                  required
+                />
+              </div>
+
+              {passwordMessage && <p className="text-sm text-emerald-600">{passwordMessage}</p>}
+              {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+
+              <Button type="submit" disabled={isPasswordSubmitting}>
+                {isPasswordSubmitting ? t('passwordChange.submitting') : t('passwordChange.submit')}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
     </main>
   );
 };

@@ -125,6 +125,10 @@ class AppSettings(BaseSettings):
     entra_client_secret: str | None = Field(
         default=None, validation_alias="ENTRA_CLIENT_SECRET"
     )
+    entra_token_encryption_key: str | None = Field(
+        default=None,
+        validation_alias="ENTRA_TOKEN_ENCRYPTION_KEY",
+    )
     entra_redirect_uri: str | None = Field(
         default=None, validation_alias="ENTRA_REDIRECT_URI"
     )

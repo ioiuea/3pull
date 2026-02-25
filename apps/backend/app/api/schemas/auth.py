@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -30,6 +31,17 @@ class UserMeResponse(BaseModel):
     display_name: str | None
     user_type: UserType
     is_active: bool
+
+
+class EntraGraphProfileResponse(BaseModel):
+    """`/auth/entra/profile` のレスポンス."""
+
+    displayName: str | None
+    companyName: str | None
+    department: str | None
+    jobTitle: str | None
+    email: str | None
+    access_token_expires_at: datetime | None
 
 
 class EmailSignupRequest(BaseModel):

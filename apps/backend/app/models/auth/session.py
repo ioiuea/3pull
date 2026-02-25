@@ -39,6 +39,11 @@ class UserSession(Base):
     )
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    entra_access_token: Mapped[str | None] = mapped_column(String, nullable=True)
+    entra_refresh_token: Mapped[str | None] = mapped_column(String, nullable=True)
+    entra_access_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

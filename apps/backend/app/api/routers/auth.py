@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import NoReturn
 from urllib.parse import urljoin, urlparse
 
@@ -15,7 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.idp.entra import get_entra_oauth, validate_entra_settings
+from app.adapters.idp.entra import (
+    fetch_entra_me_profile,
+    get_entra_oauth,
+    refresh_entra_access_token,
+    validate_entra_settings,
+)
 from app.adapters.postgres.session import get_session
 from app.api.schemas.auth import (
     EmailLoginRequest,
@@ -24,6 +30,7 @@ from app.api.schemas.auth import (
     EmailSignupResponse,
     EmailVerifyRequest,
     EmailVerifyResponse,
+    EntraGraphProfileResponse,
     LogoutResponse,
     PasswordChangeRequest,
     PasswordChangeResponse,
@@ -35,8 +42,10 @@ from app.api.schemas.auth import (
     UserMeResponse,
 )
 from app.core.logging.config import get_logger
+from app.core.security.token_cipher import decrypt_token, encrypt_token
 from app.core.settings import get_settings
 from app.models.auth.user import User
+from app.repositories.auth.session_repository import update_entra_tokens_by_session_id
 from app.services.auth.auth_account_service import (
     AuthConflictCode,
     AuthConflictError,
@@ -54,6 +63,7 @@ from app.services.auth.session_auth_service import (
     SessionAuthErrorCode,
     issue_user_session,
     refresh_user_session,
+    resolve_active_session_by_token,
     resolve_user_by_session_token,
     revoke_session_by_token,
 )
@@ -86,6 +96,21 @@ def _sanitize_redirect_path(path: str | None) -> str:
     if not path.startswith("/"):
         return default_path
     return path
+
+
+def _resolve_entra_token_expires_at(token: dict[str, object]) -> datetime | None:
+    """
+    Authlib が返すトークン情報から有効期限を UTC datetime で解決する.
+    """
+    expires_at_raw = token.get("expires_at")
+    if isinstance(expires_at_raw, (int, float)):
+        return datetime.fromtimestamp(expires_at_raw, tz=timezone.utc)
+
+    expires_in_raw = token.get("expires_in")
+    if isinstance(expires_in_raw, (int, float)):
+        return datetime.now(timezone.utc) + timedelta(seconds=int(expires_in_raw))
+
+    return None
 
 
 def _resolve_login_identifier(claims: dict[str, object]) -> tuple[str, str]:
@@ -256,6 +281,19 @@ def _raise_session_error(error: SessionAuthError) -> NoReturn:
         status_code=status_code_map.get(error.code, status.HTTP_401_UNAUTHORIZED),
         detail={"code": error.code.value, "message": error.message},
     )
+
+
+def _raise_token_crypto_error(error: RuntimeError) -> NoReturn:
+    """
+    トークン暗号化/復号エラーを HTTP エラーへ変換して送出する.
+
+    Args:
+        error: トークン暗号化エラー
+    """
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={"code": "entra_token_crypto_error", "message": str(error)},
+    ) from error
 
 
 async def _require_session_user(
@@ -519,7 +557,12 @@ async def get_auth_entra_callback(
             user_id=user.id,
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
+            entra_access_token=str(token.get("access_token") or "") or None,
+            entra_refresh_token=str(token.get("refresh_token") or "") or None,
+            entra_access_token_expires_at=_resolve_entra_token_expires_at(token),
         )
+    except RuntimeError as error:
+        _raise_token_crypto_error(error)
     except AuthConflictError as error:
         # 競合・業務ルール違反は監査ログを残してHTTP化する。
         logger.warning(
@@ -564,6 +607,83 @@ async def get_auth_me(
     # セッションからユーザーを引いて返すだけの読み取りAPI。
     user, _ = await _require_session_user(request, session)
     return _to_user_me_response(user)
+
+
+@router.get("/entra/profile", response_model=EntraGraphProfileResponse)
+async def get_auth_entra_profile(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> EntraGraphProfileResponse:
+    """
+    Entra 認証ユーザー向けに Graph API からプロフィールを返す.
+    """
+    user, raw_token = await _require_session_user(request, session)
+    if user.user_type.value != "internal":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "entra_profile_forbidden",
+                "message": "This endpoint is available for Entra users only",
+            },
+        )
+
+    try:
+        current_session = await resolve_active_session_by_token(
+            session,
+            raw_token=raw_token,
+        )
+    except SessionAuthError as error:
+        _raise_session_error(error)
+
+    try:
+        access_token = decrypt_token(current_session.entra_access_token)
+        refresh_token = decrypt_token(current_session.entra_refresh_token)
+    except RuntimeError as error:
+        _raise_token_crypto_error(error)
+    access_token_expires_at = current_session.entra_access_token_expires_at
+    token_expired = (
+        access_token_expires_at is not None
+        and access_token_expires_at <= datetime.now(timezone.utc)
+    )
+    if not access_token or token_expired:
+        if not refresh_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={
+                    "code": "entra_refresh_token_missing",
+                    "message": "No Entra refresh token is available in the session",
+                },
+            )
+        refreshed = await refresh_entra_access_token(refresh_token=refresh_token)
+        new_access_token = str(refreshed.get("access_token") or "")
+        new_refresh_token = str(refreshed.get("refresh_token") or "") or None
+        access_token_expires_at = _resolve_entra_token_expires_at(refreshed)
+        try:
+            await update_entra_tokens_by_session_id(
+                session,
+                session_id=current_session.id,
+                access_token=encrypt_token(new_access_token) or "",
+                refresh_token=encrypt_token(new_refresh_token),
+                access_token_expires_at=access_token_expires_at,
+            )
+        except RuntimeError as error:
+            _raise_token_crypto_error(error)
+        access_token = new_access_token
+
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "code": "entra_access_token_missing",
+                "message": "No Entra access token is available in the session",
+            },
+        )
+
+    profile = await fetch_entra_me_profile(access_token=access_token)
+    return EntraGraphProfileResponse(
+        **profile,
+        access_token_expires_at=access_token_expires_at,
+    )
 
 
 @router.post("/logout", response_model=LogoutResponse)

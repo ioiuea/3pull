@@ -22,6 +22,29 @@
     "active": "active",
     "inactive": "inactive"
   },
+  "entraProfile": {
+    "title": "Entra Graph Profile",
+    "description": "For Entra-authenticated users, this section shows Graph API data fetched by the backend using the stored access token.",
+    "actions": {
+      "fetch": "Fetch Graph profile",
+      "loading": "Fetching..."
+    },
+    "states": {
+      "error": "Failed to fetch Graph profile",
+      "idle": "Graph profile is not fetched yet. Click the button above."
+    },
+    "fields": {
+      "accessTokenExpiresAt": "Access Token Expires At",
+      "displayName": "Display Name",
+      "companyName": "Company",
+      "department": "Department",
+      "jobTitle": "Job Title",
+      "email": "Email"
+    },
+    "values": {
+      "unknown": "Unknown"
+    }
+  },
   "passwordChange": {
     "title": "Change Password",
     "description": "Only email-signup users can change password here.",

@@ -8,6 +8,7 @@ dependencies = [
     "alembic>=1.18.4",
     "argon2-cffi>=25.1.0",
     "authlib>=1.6.8",
+    "cryptography>=46.0.5",
     "fastapi>=0.131.0",
     "greenlet>=3.3.2",
     "gunicorn>=25.1.0",
@@ -48,7 +49,7 @@ asyncio_mode = "auto"
 
 [tool.pyright]
 include = ["app", "test"]
-exclude = [".venv", "**/__pycache__", "alembic"]
+exclude = [".venv", "**/__pycache__", "alembic", "**/node_modules", "**/.*"]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"
