@@ -32,13 +32,13 @@
     "gunicorn": "Gunicorn"
   },
   "security": {
-    "title": "Security-First Frontend",
-    "description": "You can review a sample that integrates backend session authentication with Entra ID and Email sign-in.",
+    "title": "User Profile",
+    "description": "Review a sample flow where authentication is handled by FastAPI (Entra ID / Email), then the authenticated user profile is fetched and shown.",
     "cta": "View Sample"
   },
   "zustand": {
-    "title": "Zustand Global State",
-    "description": "Try a hands-on page that demonstrates global state management for string, number, boolean, and object data.",
+    "title": "Global State",
+    "description": "Try a hands-on page that demonstrates global state management using Zustand for string, number, boolean, and object data.",
     "cta": "View Sample"
   },
   "formValidation": {

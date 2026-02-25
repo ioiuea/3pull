@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useParams } from 'react-router';
 import { cn } from '~/lib/utils';
 import { Button } from '~/components/ui/button';
@@ -7,6 +8,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '~/components/ui
 import { Input } from '~/components/ui/input';
 import { backendFetch } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
+import { PRODUCT_NAME } from '~/constants/product';
 
 type SignupResponse = {
   status: 'verification_required';
@@ -14,6 +16,7 @@ type SignupResponse = {
 };
 
 export function SignupForm({ className, ...props }: React.ComponentProps<'div'>) {
+  const { t } = useTranslation('auth');
   const navigate = useNavigate();
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
@@ -34,7 +37,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
     setSuccessMessage(null);
 
     if (password !== confirmPassword) {
-      setErrorMessage('Password confirmation does not match.');
+      setErrorMessage(t('signup.errors.confirmMismatch'));
       return;
     }
 
@@ -52,13 +55,13 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
         const payload = (await response.json().catch(() => null)) as
           | { detail?: { message?: string } }
           | null;
-        throw new Error(payload?.detail?.message ?? `Signup failed (${response.status})`);
+        throw new Error(payload?.detail?.message ?? t('signup.errors.default', { status: response.status }));
       }
       const payload = (await response.json()) as SignupResponse;
       setIssuedToken(payload.debug_verification_token ?? null);
-      setSuccessMessage('Signup completed. Verify your email token to continue.');
+      setSuccessMessage(t('signup.successRequested'));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Signup failed');
+      setErrorMessage(error instanceof Error ? error.message : t('signup.errors.unknown'));
     } finally {
       setIsSubmitting(false);
     }
@@ -71,7 +74,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
     try {
       const token = verificationToken || issuedToken;
       if (!token) {
-        throw new Error('Verification token is required.');
+        throw new Error(t('signup.errors.verificationTokenRequired'));
       }
       const response = await backendFetch('/auth/email/verify', {
         method: 'POST',
@@ -81,12 +84,12 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
         const payload = (await response.json().catch(() => null)) as
           | { detail?: { message?: string } }
           | null;
-        throw new Error(payload?.detail?.message ?? `Verify failed (${response.status})`);
+        throw new Error(payload?.detail?.message ?? t('signup.errors.verifyDefault', { status: response.status }));
       }
-      setSuccessMessage('Email verified. Please sign in.');
+      setSuccessMessage(t('signup.successVerified'));
       navigate(`/${currentLanguage}/login`, { replace: true });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Verification failed');
+      setErrorMessage(error instanceof Error ? error.message : t('signup.errors.verifyUnknown'));
     } finally {
       setIsVerifying(false);
     }
@@ -95,36 +98,37 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
   return (
     <div className={cn('flex flex-col gap-6', className)} {...props}>
       <Card>
-        <CardHeader className="text-center">
-          <CardTitle className="text-xl">Create your account</CardTitle>
-          <CardDescription>Enter your email below to create your account</CardDescription>
+        <CardHeader className="space-y-2 text-left">
+          <p className="w-fit rounded-full border px-3 py-1 text-xs text-muted-foreground">{PRODUCT_NAME}</p>
+          <CardTitle className="text-xl">{t('signup.title')}</CardTitle>
+          <CardDescription>{t('signup.description')}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit}>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="name">Full Name</FieldLabel>
+                <FieldLabel htmlFor="name">{t('common.fullName')}</FieldLabel>
                 <Input
                   id="name"
                   type="text"
-                  placeholder="John Doe"
+                  placeholder={t('common.fullNamePlaceholder')}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
+                <FieldLabel htmlFor="email">{t('common.email')}</FieldLabel>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="m@example.com"
+                  placeholder={t('common.emailPlaceholder')}
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <FieldLabel htmlFor="password">{t('common.password')}</FieldLabel>
                 <Input
                   id="password"
                   type="password"
@@ -134,7 +138,7 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="confirm-password">Confirm Password</FieldLabel>
+                <FieldLabel htmlFor="confirm-password">{t('common.confirmPassword')}</FieldLabel>
                 <Input
                   id="confirm-password"
                   type="password"
@@ -143,15 +147,15 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
                   onChange={(event) => setConfirmPassword(event.target.value)}
                 />
               </Field>
-              <FieldDescription>Must be at least 10 characters and satisfy complexity rules.</FieldDescription>
+              <FieldDescription>{t('common.passwordPolicy')}</FieldDescription>
               {errorMessage && <FieldDescription className="text-destructive">{errorMessage}</FieldDescription>}
               {successMessage && <FieldDescription>{successMessage}</FieldDescription>}
               <Field>
                 <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create Account'}
+                  {isSubmitting ? t('signup.creating') : t('signup.submit')}
                 </Button>
                 <FieldDescription className="text-center">
-                  Already have an account? <Link to={`/${currentLanguage}/login`}>Sign in</Link>
+                  {t('signup.hasAccount')} <Link to={`/${currentLanguage}/login`}>{t('signup.goLogin')}</Link>
                 </FieldDescription>
               </Field>
             </FieldGroup>
@@ -161,24 +165,22 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Email verification</CardTitle>
-          <CardDescription>
-            Use the token from your email. In local debug mode, token can appear after signup.
-          </CardDescription>
+          <CardTitle className="text-base">{t('signup.verifyTitle')}</CardTitle>
+          <CardDescription>{t('signup.verifyDescription')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <Input
-            placeholder="Verification token"
+            placeholder={t('signup.verificationTokenPlaceholder')}
             value={verificationToken}
             onChange={(event) => setVerificationToken(event.target.value)}
           />
           {issuedToken && (
             <FieldDescription>
-              Debug token: <code>{issuedToken}</code>
+              {t('signup.debugTokenLabel')}: <code>{issuedToken}</code>
             </FieldDescription>
           )}
           <Button type="button" variant="outline" onClick={onVerify} disabled={isVerifying}>
-            {isVerifying ? 'Verifying...' : 'Verify Email'}
+            {isVerifying ? t('signup.verifying') : t('signup.verifySubmit')}
           </Button>
         </CardContent>
       </Card>

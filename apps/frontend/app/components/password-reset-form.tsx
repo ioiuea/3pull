@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { cn } from '~/lib/utils';
 import { Button } from '~/components/ui/button';
@@ -7,8 +8,10 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '~/components/ui
 import { Input } from '~/components/ui/input';
 import { backendFetch } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
+import { PRODUCT_NAME } from '~/constants/product';
 
 export function PasswordResetForm({ className, ...props }: React.ComponentProps<'div'>) {
+  const { t } = useTranslation('auth');
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
 
@@ -38,7 +41,7 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
         const payload = (await response.json().catch(() => null)) as
           | { detail?: { message?: string } }
           | null;
-        throw new Error(payload?.detail?.message ?? `Request failed (${response.status})`);
+        throw new Error(payload?.detail?.message ?? t('reset.errors.requestDefault', { status: response.status }));
       }
       const payload = (await response.json().catch(() => null)) as
         | { debug_reset_token?: string | null }
@@ -46,9 +49,9 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
       if (payload?.debug_reset_token) {
         setToken(payload.debug_reset_token);
       }
-      setRequestMessage('If the account exists, a reset token has been issued.');
+      setRequestMessage(t('reset.requestAccepted'));
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to request reset');
+      setErrorMessage(error instanceof Error ? error.message : t('reset.errors.requestUnknown'));
     } finally {
       setIsRequesting(false);
     }
@@ -60,7 +63,7 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
     setConfirmMessage(null);
 
     if (newPassword !== confirmPassword) {
-      setErrorMessage('New password and confirmation do not match.');
+      setErrorMessage(t('reset.errors.confirmMismatch'));
       return;
     }
 
@@ -77,14 +80,14 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
         const payload = (await response.json().catch(() => null)) as
           | { detail?: { message?: string } }
           | null;
-        throw new Error(payload?.detail?.message ?? `Reset failed (${response.status})`);
+        throw new Error(payload?.detail?.message ?? t('reset.errors.confirmDefault', { status: response.status }));
       }
-      setConfirmMessage('Password has been reset. Please log in with your new password.');
+      setConfirmMessage(t('reset.confirmSuccess'));
       setNewPassword('');
       setConfirmPassword('');
       setToken('');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to reset password');
+      setErrorMessage(error instanceof Error ? error.message : t('reset.errors.confirmUnknown'));
     } finally {
       setIsConfirming(false);
     }
@@ -93,19 +96,20 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
   return (
     <div className={cn('flex flex-col gap-6', className)} {...props}>
       <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">Reset Password</CardTitle>
-          <CardDescription>Request a reset token, then set a new password.</CardDescription>
+        <CardHeader className="space-y-2 text-left">
+          <p className="w-fit rounded-full border px-3 py-1 text-xs text-muted-foreground">{PRODUCT_NAME}</p>
+          <CardTitle className="text-xl">{t('reset.title')}</CardTitle>
+          <CardDescription>{t('reset.description')}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           <form onSubmit={onRequestReset}>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="reset-email">Email</FieldLabel>
+                <FieldLabel htmlFor="reset-email">{t('common.email')}</FieldLabel>
                 <Input
                   id="reset-email"
                   type="email"
-                  placeholder="m@example.com"
+                  placeholder={t('common.emailPlaceholder')}
                   required
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
@@ -113,7 +117,7 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
               </Field>
               <Field>
                 <Button type="submit" disabled={isRequesting}>
-                  {isRequesting ? 'Requesting...' : 'Request reset'}
+                  {isRequesting ? t('reset.requesting') : t('reset.requestSubmit')}
                 </Button>
               </Field>
             </FieldGroup>
@@ -122,7 +126,7 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
           <form onSubmit={onConfirmReset}>
             <FieldGroup>
               <Field>
-                <FieldLabel htmlFor="reset-token">Reset Token</FieldLabel>
+                <FieldLabel htmlFor="reset-token">{t('reset.resetToken')}</FieldLabel>
                 <Input
                   id="reset-token"
                   type="text"
@@ -132,7 +136,7 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="new-password">New Password</FieldLabel>
+                <FieldLabel htmlFor="new-password">{t('common.newPassword')}</FieldLabel>
                 <Input
                   id="new-password"
                   type="password"
@@ -140,12 +144,10 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                 />
-                <FieldDescription>
-                  At least 10 chars, and include at least 3 of: upper/lower/digit/symbol.
-                </FieldDescription>
+                <FieldDescription>{t('common.passwordPolicy')}</FieldDescription>
               </Field>
               <Field>
-                <FieldLabel htmlFor="confirm-new-password">Confirm New Password</FieldLabel>
+                <FieldLabel htmlFor="confirm-new-password">{t('common.confirmNewPassword')}</FieldLabel>
                 <Input
                   id="confirm-new-password"
                   type="password"
@@ -156,10 +158,10 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
               </Field>
               <Field>
                 <Button type="submit" disabled={isConfirming}>
-                  {isConfirming ? 'Updating...' : 'Reset password'}
+                  {isConfirming ? t('reset.updating') : t('reset.confirmSubmit')}
                 </Button>
                 <FieldDescription className="text-center">
-                  <Link to={`/${currentLanguage}/login`}>Back to login</Link>
+                  <Link to={`/${currentLanguage}/login`}>{t('reset.backToLogin')}</Link>
                 </FieldDescription>
               </Field>
             </FieldGroup>
@@ -173,4 +175,3 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
     </div>
   );
 }
-

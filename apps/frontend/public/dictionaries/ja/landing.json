@@ -32,13 +32,13 @@
     "gunicorn": "Gunicorn"
   },
   "security": {
-    "title": "Security-First Frontend",
-    "description": "FastAPI のセッション認証を基盤に、Entra ID と Email サインインを組み込んだサンプルを確認できます。",
+    "title": "ユーザープロファイル",
+    "description": "FastAPI 側の認証（Entra ID / Email）でログインし、その結果としてユーザープロファイルを参照するサンプルを確認できます。",
     "cta": "サンプルを見る"
   },
   "zustand": {
-    "title": "Zustand グローバルステート",
-    "description": "文字列・数値・真偽値・オブジェクトをグローバルに扱う実装サンプルを確認できます。",
+    "title": "グローバルステート",
+    "description": "Zustand を使って、文字列・数値・真偽値・オブジェクトをグローバルに扱う実装サンプルを確認できます。",
     "cta": "サンプルを見る"
   },
   "formValidation": {
