@@ -17,7 +17,7 @@ from authlib.integrations.starlette_client import OAuthError
 from app.core.logging.config import get_logger
 from app.core.settings import get_settings
 
-from app.adapters.idp.entraid import get_entra_oauth, validate_entra_settings
+from app.adapters.idp.entra import get_entra_oauth, validate_entra_settings
 from app.adapters.postgres.session import get_session
 from app.models.auth.user import User
 from app.api.schemas.auth import (
