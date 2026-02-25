@@ -12,6 +12,52 @@
 - エントリーポイントは `apps/backend/app/main.py` とし、`app = FastAPI()` をこのファイルで管理します。
 - ルーティング、依存性注入、ミドルウェアなどの API 構成は FastAPI の標準機能を優先して実装します。
 
+### フォルダ構成戦略
+
+- `apps/backend/app/` は「レイヤ責務 + feature 分割」を併用します。
+- 実装構成は以下の `tree` を基準とします。
+
+```text
+apps/backend
+├── pyproject.toml                        # Backend依存関係・ツール設定（ruff/pyright/pytest）
+├── alembic.ini                           # Alembic実行設定
+├── .env(.example)                        # Backend環境変数定義
+├── app/                                  # アプリケーション本体
+│   ├── main.py                           # FastAPIブートストラップ（middleware/router登録）
+│   ├── api/                              # APIインタフェース層（HTTP入出力）
+│   │   ├── routers/                      # エンドポイント定義層
+│   │   ├── schemas/                      # Request/Responseスキーマ層
+│   │   └── internal/                     # 内部運用API層（probe等）
+│   ├── adapters/                         # 外部接続層（DB/IdP/Network）
+│   │   ├── postgres/                     # PostgreSQL接続管理層
+│   │   │   ├── base.py                   # SQLAlchemy Declarative Base/metadata定義
+│   │   │   └── session.py                # AsyncEngine/Session/UoW依存定義
+│   │   ├── idp/                          # IdP連携層
+│   │   │   └── entra.py                  # Entra OIDCクライアント設定/連携
+│   │   └── network/                      # ネットワーク疎通アダプタ層
+│   │       └── tcp.py                    # TCP pingヘルパー
+│   ├── core/                             # 横断基盤層（設定/ログ/セキュリティ/ライフサイクル）
+│   │   ├── settings/config.py            # 環境変数設定の一元定義
+│   │   ├── logging/config.py             # structlog設定
+│   │   ├── security/password.py          # Argon2idパスワード処理
+│   │   └── security/csrf.py              # CSRFチェックミドルウェア
+│   ├── models/                           # ORMモデル層（テーブル定義）
+│   │   └── auth/                         # 認証機能のモデル群
+│   ├── repositories/                     # 永続化アクセス層（CRUD/クエリ）
+│   │   └── auth/                         # 認証機能のRepository群
+│   └── services/                         # ユースケース層（業務ロジック）
+│       ├── auth/                         # 認証ユースケース
+│       └── health.py                     # ヘルスチェックユースケース
+├── alembic/                              # マイグレーション管理層
+│   └── versions/                         # 生成されたリビジョンファイル
+└── postgres/                             # 初期DB構築スクリプト群
+    ├── run_all.sh                        # DB/Schema/Roleセットアップ実行
+    └── scripts/                          # 個別セットアップスクリプト
+```
+
+- `api/` は HTTP 入出力、`services/` はユースケース、`repositories/` は DB 操作、`models/` は ORM 定義を担当します。
+- `adapters/` は外部接続（DB・IdP・ネットワーク）を集約し、`core/` は横断関心事（設定/ログ/セキュリティ）を管理します。
+
 ## API インタフェース規約
 
 - API のインタフェース定義は `apps/backend/app/api/` 配下に集約します。

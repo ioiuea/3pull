@@ -11,6 +11,47 @@
   参照: <https://reactrouter.com/home>
 - このアプリは `npx create-react-router` により、React Router v7 構成として `apps` 配下にインストールされています。
 
+### フォルダ構成戦略
+
+- `apps/frontend/app/` は「ルーティング中心 + 再利用部品分離」で構成します。
+- 実装構成は以下の `tree` を基準とします。
+
+```text
+apps/frontend
+├── package.json                          # Frontend依存関係・スクリプト定義
+├── react-router.config.ts                # React Router設定（ssr: false など）
+├── app/                                  # アプリケーション本体
+│   ├── root.tsx                          # ルートドキュメント（html/body/Meta/Links）
+│   ├── routes.ts                         # ルート定義の集約（layout/route/index）
+│   ├── app.css                           # グローバルスタイル/テーマ変数
+│   ├── routes/                           # 画面ルート層（featureページ + レイアウト）
+│   │   ├── layout.tsx                    # 共通レイアウト
+│   │   ├── protected-layout.tsx          # 認証必須ページのガードレイアウト
+│   │   ├── landing-page.tsx              # LPページ
+│   │   ├── login.tsx                     # ログインページ
+│   │   ├── signup.tsx                    # サインアップページ
+│   │   └── password-reset.tsx            # パスワードリセットページ
+│   ├── components/                       # 再利用コンポーネント層
+│   │   ├── ui/                           # shadcnベース共通UI層
+│   │   ├── login-form.tsx                # ログインフォーム部品
+│   │   ├── signup-form.tsx               # サインアップフォーム部品
+│   │   └── password-reset-form.tsx       # パスワードリセットフォーム部品
+│   ├── constants/                        # 定数層
+│   │   └── product.ts                    # プロダクト名など環境非依存定数
+│   ├── lib/                              # 実装ヘルパー層
+│   │   ├── api-helper.ts                 # backend API呼び出しヘルパー
+│   │   └── i18n.ts                       # i18n初期化/言語判定
+│   └── store/                            # Zustandグローバルステート層
+├── public/                               # 静的配信アセット層
+│   └── dictionaries/                     # i18n辞書データ層
+│       ├── en/                           # 英語辞書namespace群
+│       └── ja/                           # 日本語辞書namespace群
+└── .env(.example)                        # Frontend環境変数定義
+```
+
+- `routes/` は画面とレイアウト境界、`components/` は UI 部品、`lib/` は実装ヘルパー、`constants/` は定数を管理します。
+- i18n 辞書は `public/dictionaries/<lng>/` で namespace 単位に分離し、画面実装と文言データを分離します。
+
 ## ビルド方針
 
 - このアプリは **Static Export 前提** で実装しています。
