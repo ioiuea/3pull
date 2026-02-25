@@ -55,12 +55,15 @@
 - セッションは DB（`sessions` テーブル）で管理し、Cookie は `HttpOnly` + `SameSite=Lax` を標準とします。
 - パスワードは Argon2id でハッシュ化し、平文保存しません。
 - 検証トークン/リセットトークンは生値を DB 保存せず、SHA-256 ハッシュのみ保存します。
+- Entra の Graph API 用 `access_token` / `refresh_token` は DB 保存時に暗号化し、参照時に復号します（`ENTRA_TOKEN_ENCRYPTION_KEY` が必須）。
+- Entra トークンは `offline_access` を使って refresh し、アプリセッションと有効期限が乖離しても `/auth/entra/profile` で自動再取得します。
 
 ### 認証データモデル
 
 - `users`: ユーザー本体（`email`, `display_name`, `user_type`, `is_active`）
 - `auth_identities`: 認証方式ごとの識別子（`provider`, `provider_subject`, `email_normalized`, `password_hash` など）
 - `sessions`: セッション管理（`session_token_hash`, `expires_at`, `revoked_at`）
+- Entra 用トークン管理（`entra_access_token`, `entra_refresh_token`, `entra_access_token_expires_at`）
 - `email_verification_tokens`: メール検証トークン（ハッシュ保存）
 - `password_reset_tokens`: パスワードリセットトークン（ハッシュ保存）
 
@@ -91,10 +94,65 @@
 - 現在パスワード確認後に変更し、全セッション失効ポリシーを適用します。
 - `GET /backend/auth/me`
 - 現在ログイン中ユーザーを返します。
+- `GET /backend/auth/entra/profile`
+- Entra 認証ユーザー向けに Graph `/me` を返します。アクセストークン期限切れ時は refresh token で再取得します。
 - `POST /backend/auth/logout`
 - 現在セッションを失効してログアウトします。
 - `POST /backend/auth/session/refresh`
 - セッションをローテーションし、新 Cookie を再発行します。
+
+## APIプロテクト方針
+
+- API の保護は「セッション Cookie + DB セッション検証」を標準とします。
+- 公開API（フロントが利用）は `/backend/*` 配下に集約し、必要なエンドポイントへ認証依存を適用します。
+- ヘルス系は役割で分離します。
+- フロント向け健全性確認: `GET /backend/health`（認証必須）
+- 運用プローブ: `GET /livez`, `GET /readyz`（認証不要、`/backend` 配下外、`include_in_schema=False`）
+- `/livez` / `/readyz` はコード上は公開ルートですが、実運用では Ingress/ALB 側で外部公開しない前提です。
+- CSRF は `Origin/Referer` 検証ミドルウェアで保護し、許可オリジンは `CSRF_TRUSTED_ORIGINS` で管理します。
+
+### APIプロテクトの利用方法
+
+- フロントから保護APIを呼ぶときは Cookie を必ず送る（`credentials: include`）。
+- 未認証時は `401` を受け取り、ログイン導線へ遷移します。
+- `GET /backend/health` は次を返します。
+- `status`: `ok` または `degraded`
+- `dependencies.postgres`: TCP 到達性（`ok`, `latency_ms`, `error`）
+- `GET /backend/auth/entra/profile` は internal ユーザー専用です。
+- external ユーザーは `403`
+- セッショントークン不備/失効時は `401`
+
+## TCP Ping アダプター利用方法
+
+- TCP 到達性チェックは `apps/backend/app/adapters/network/tcp.py` の `tcp_ping` を利用します。
+- 用途は「アプリヘルス判定」「外部依存の疎通確認」です。
+- 現在は `GET /backend/health` で PostgreSQL の到達性確認に利用しています。
+
+### 関数仕様
+
+- シグネチャ: `tcp_ping(host: str, port: int, timeout: float = 1.0) -> tuple[bool, int, str | None]`
+- 返り値:
+- `ok`: 接続成功なら `True`
+- `latency_ms`: 接続に要したミリ秒
+- `error`: 失敗時の理由（成功時は `None`）
+
+### 使用例
+
+```python
+from app.adapters.network.tcp import tcp_ping
+
+ok, latency_ms, error = tcp_ping("localhost", 5432, timeout=1.0)
+if ok:
+    print(f"reachable: {latency_ms}ms")
+else:
+    print(f"unreachable: {error}")
+```
+
+### 実装上の注意
+
+- `tcp_ping` は同期関数です。FastAPI ハンドラから呼ぶ場合は `run_in_threadpool` 経由で実行します。
+- TCP 到達性は「ポートが開いている」ことの確認であり、DB 認証成功やSQL実行成功までは保証しません。
+- タイムアウトは短め（例: `0.5〜1.0s`）に設定し、ヘルスAPIの応答遅延を抑えます。
 
 ### セキュリティ・運用設定
 
@@ -102,6 +160,9 @@
 - CSRF は `Origin/Referer` ベースの検証ミドルウェア（`app/core/security/csrf.py`）で保護します。
 - Cookie セキュリティは `SESSION_COOKIE_SECURE` で環境ごとに切り替えます。
 - ローカル開発時は `false`、HTTPS 必須環境は `true` を推奨します。
+- Entra トークン暗号化鍵は `ENTRA_TOKEN_ENCRYPTION_KEY` を使用します。
+- 本番では Secret Manager / Key Vault で安全に注入し、平文でリポジトリ管理しません。
+- 鍵を変更すると既存暗号化トークンは復号できなくなるため、ローテーション時は再ログイン導線を含めて運用設計します。
 - Email ログインのロック制御は設定値で管理します。
 - `EMAIL_LOGIN_MAX_FAILURES`（既定: 5）
 - `EMAIL_LOGIN_LOCK_MINUTES`（既定: 15）
@@ -118,6 +179,128 @@
 - `auth.audit.logout`
 - `auth.audit.session.refresh`
 - `auth.audit.session.revoke_all`
+
+## CI 実装方針
+
+- バックエンドの品質ゲートは「format / lint / typecheck / test」の4段階で構成します。
+- ローカルと CI で同じコマンドを使えるよう、`Makefile` ターゲットを正とします。
+
+### ruff（Formatter）
+
+- フォーマッタは `ruff format` を採用します。
+- check（差分検出）:
+- `make backend-format`
+- fix（整形反映）:
+- `make backend-format-fix`
+- ルール設定は `apps/backend/pyproject.toml` の `[tool.ruff]` を参照します。
+
+### ruff（Linter）
+
+- Linter は `ruff check` を採用します。
+- check:
+- `make backend-lint`
+- fix（自動修正可能な項目のみ）:
+- `make backend-lint-fix`
+- ルール設定は `apps/backend/pyproject.toml` の `[tool.ruff.lint]` を参照します。
+
+### pyright（Typecheck）
+
+- 型チェックは `pyright` を採用します。
+- 実行:
+- `make backend-typecheck`
+- 設定は `apps/backend/pyproject.toml` の `[tool.pyright]` を参照します。
+- `alembic` は型チェック対象から除外しています。
+
+### pytest（Test）
+
+- テスト実行は `pytest` を採用します。
+- 実行:
+- `make backend-test`
+- pytest 設定は `apps/backend/pyproject.toml` の `[tool.pytest.ini_options]` を参照します。
+
+### Makefile での CI 運用
+
+- バックエンド単体の CI 実行:
+- `make backend-ci`
+- 実行順: `backend-format` → `backend-lint` → `backend-typecheck` → `backend-test`
+- リポジトリ全体（frontend + backend）の CI 実行:
+- `make ci`
+- 実行順: `install` → `frontend-ci` → `backend-ci`
+
+## Alembic（Makefile 利用方法）
+
+- マイグレーション運用は `Makefile` ターゲット経由を標準とします。
+- 実行前提として `apps/backend/.env` の `DATABASE_URL` が正しく設定されている必要があります。
+
+### マイグレーション生成
+
+- 実行:
+- `make alembic-revision "add entra token columns to sessions"`
+- 内部で実行されるコマンド:
+- `uv run alembic revision --autogenerate -m "<message>"`
+- メッセージ未指定時はエラー終了します。
+
+### マイグレーション適用
+
+- 実行:
+- `make alembic-upgrade`
+- 内部で実行されるコマンド:
+- `uv run alembic upgrade head`
+
+### よくある注意点
+
+- `Target database is not up to date.` が出た場合:
+- 先に `make alembic-upgrade` で最新まで適用してから `make alembic-revision` を実行します。
+- 既に `alembic/versions` に手動追加済みファイルがある場合:
+- 追加で `revision` を切らず、`make alembic-upgrade` のみで適用します。
+
+## Graph プロファイル取得実装
+
+- Entra 認証ユーザー（`user_type=internal`）向けに、Microsoft Graph の `/me` を backend 経由で取得します。
+- フロントは Graph に直接アクセスせず、`/backend/auth/entra/profile` を呼びます。
+
+### API 仕様
+
+- エンドポイント:
+- `GET /backend/auth/entra/profile`
+- 認証:
+- セッション Cookie 必須（APIプロテクト対象）
+- アクセス制御:
+- internal ユーザーのみ許可（external は `403`）
+- 主なレスポンス項目:
+- `displayName`, `companyName`, `department`, `jobTitle`, `email`
+- `access_token_expires_at`
+
+### 実装フロー
+
+- 1. Entra ログイン（`/backend/auth/entra/callback`）時に token を取得
+- 2. `sessions` テーブルへ以下を保存
+- `entra_access_token`
+- `entra_refresh_token`
+- `entra_access_token_expires_at`
+- 3. `/backend/auth/entra/profile` 呼び出し時に access token の期限を判定
+- 4. 期限切れ/未設定の場合は refresh token grant で再取得
+- 5. 新しい token を `sessions` に更新してから Graph `/me` を呼び出し
+- 6. Graph 結果を API レスポンスとして返却
+
+### セキュリティ方針
+
+- access/refresh token は DB 保存前に暗号化します。
+- 復号鍵は `ENTRA_TOKEN_ENCRYPTION_KEY` を使用します。
+- 鍵未設定時はトークン処理で `503` を返します。
+- 既存平文データとの後方互換として、非暗号化値の読み取りも許容しています。
+
+### 必須設定
+
+- Entra アプリ側 permission:
+- `User.Read`（Graph `/me` 用）
+- `offline_access`（refresh token 用）
+- backend 環境変数:
+- `ENTRA_TENANT_ID`
+- `ENTRA_CLIENT_ID`
+- `ENTRA_CLIENT_SECRET`
+- `ENTRA_REDIRECT_URI`
+- `ENTRA_TOKEN_ENCRYPTION_KEY`
 
 ## Python コーディング規約
 

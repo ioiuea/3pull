@@ -128,6 +128,33 @@
 - 認証セッションは HttpOnly Cookie により送信され、JavaScript から直接参照しない前提です。
 - i18n の言語設定のみ Cookie キー `locale` に保存します（`apps/frontend/app/lib/i18n.ts`）。
 
+## APIプロテクト実装で意識すること
+
+- 保護API呼び出しは必ず `credentials: "include"` を付与します。
+- このプロジェクトでは `apps/frontend/app/lib/api-helper.ts` の `backendFetch` を利用すると、Cookie 付き呼び出しを統一できます。
+- `fetch` を直接使う場合は `credentials` の付け忘れに注意してください（付け忘れると未認証扱いになりやすい）。
+
+### 認証状態の判定
+
+- ログイン状態の判定は `GET /backend/auth/me` を正とします。
+- `401` は未認証として扱い、`/:lng/login` へ遷移します。
+- `403` は認可不足（ログイン済みだが権限不足）のため、未認証とは分けて扱います。
+
+### 画面実装の基本パターン
+
+- 認証必須ページは `protected-layout` 配下に置く。
+- ページ初期化で `getMe()`（または `backendFetch('/auth/me')`）を実行し、未認証時はログインへ戻す。
+- 保護APIの失敗時は以下を区別する。
+- `401`: 再ログイン導線
+- `403`: 権限不足メッセージ
+- `5xx`: 一時障害メッセージと再試行導線
+
+### Entra Graph プロファイル取得時の注意
+
+- フロントは Graph API を直接呼ばず、`GET /backend/auth/entra/profile` を利用します。
+- internal ユーザーのみ呼び出し可能なため、`user_type` を見てボタン表示を制御します。
+- `access_token_expires_at` は表示用情報であり、実際の更新は backend 側の refresh 処理に委譲します。
+
 ## CI 方針
 
 - Frontend の CI は `Makefile` 経由で実行することを基本方針とします。
