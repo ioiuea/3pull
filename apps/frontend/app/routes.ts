@@ -11,6 +11,7 @@ export default [
       route('profile-sample', 'routes/profile-sample/page.tsx'),
       route('zustand-sample', 'routes/zustand-sample/page.tsx'),
       route('validation-sample', 'routes/validation-sample/page.tsx'),
+      route('api-protection-sample', 'routes/api-protection-sample/page.tsx'),
     ]),
   ]),
 ] satisfies RouteConfig;

@@ -9,8 +9,25 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class TcpDependencyHealth(BaseModel):
+    """TCP 到達性チェック結果."""
+
+    host: str
+    port: int
+    ok: bool
+    latency_ms: int
+    error: str | None = None
+
+
+class HealthDependencies(BaseModel):
+    """依存先サービスごとの健全性."""
+
+    postgres: TcpDependencyHealth
+
+
 class HealthResponse(BaseModel):
     """ヘルスチェックレスポンス."""
 
-    # ヘルスエンドポイントでは正常時に "ok" のみを返す。
-    status: Literal["ok"]
+    # 依存先が全て到達可能なら ok、どれか失敗なら degraded。
+    status: Literal["ok", "degraded"]
+    dependencies: HealthDependencies

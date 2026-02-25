@@ -42,8 +42,13 @@
     "cta": "View Sample"
   },
   "formValidation": {
-    "title": "Form Validation Sample",
-    "description": "Review a sample implementation that combines react-hook-form and Zod for schema-based validation.",
+    "title": "Form Validation",
+    "description": "Review an implementation that combines react-hook-form and Zod for schema-based validation.",
+    "cta": "View Sample"
+  },
+  "apiProtection": {
+    "title": "API Protection",
+    "description": "Call the same /backend/health endpoint with and without cookies to compare a pass case and a blocked case for protected APIs.",
     "cta": "View Sample"
   }
 }

@@ -42,8 +42,13 @@
     "cta": "サンプルを見る"
   },
   "formValidation": {
-    "title": "フォームバリデーションサンプル",
+    "title": "フォームバリデーション",
     "description": "react-hook-form と Zod を組み合わせたスキーマベースのバリデーション実装を確認できます。",
+    "cta": "サンプルを見る"
+  },
+  "apiProtection": {
+    "title": "APIプロテクト",
+    "description": "同じ /backend/health を、Cookie付きとCookieなしで呼び分け、保護されたAPIを突破できるケースとできないケースを比較します。",
     "cta": "サンプルを見る"
   }
 }

@@ -1,0 +1,32 @@
+{
+  "title": "API Protection Sample",
+  "description": "This page compares behavior for the protected /backend/health endpoint when session cookies are sent vs not sent.",
+  "actions": {
+    "backToLp": "Back to LP",
+    "checking": "Checking..."
+  },
+  "allowed": {
+    "title": "Pass Case",
+    "description": "Call with credentials: include to send session cookies. If you are signed in, 200 is expected.",
+    "cta": "Check with cookies"
+  },
+  "blocked": {
+    "title": "Blocked Case",
+    "description": "Call with credentials: omit so no cookies are sent. Since the API is protected, 401 is expected.",
+    "cta": "Check without cookies"
+  },
+  "states": {
+    "emptyAllowed": "Not executed yet. Click the button above to call with cookies.",
+    "emptyBlocked": "Not executed yet. Click the button above to call without cookies."
+  },
+  "panels": {
+    "api": "API Status",
+    "postgres": "PostgreSQL Status",
+    "up": "Up",
+    "down": "Down / Error",
+    "blocked": "Blocked by auth",
+    "unauthorized": "Cannot check (unauthorized)",
+    "unknown": "Unknown",
+    "notChecked": "Not checked"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "title": "APIプロテクト サンプル",
+  "description": "このページでは、保護対象の /backend/health に対して、セッションCookieを送る場合と送らない場合の挙動差を確認します。",
+  "actions": {
+    "backToLp": "LPに戻る",
+    "checking": "確認中..."
+  },
+  "allowed": {
+    "title": "突破できるケース",
+    "description": "credentials: include でセッションCookieを送信して呼び出します。ログイン済みなら 200 が返る想定です。",
+    "cta": "Cookie付きでチェック"
+  },
+  "blocked": {
+    "title": "突破できないケース",
+    "description": "credentials: omit でCookieを送らず呼び出します。認証必須APIのため 401 が返る想定です。",
+    "cta": "Cookieなしでチェック"
+  },
+  "states": {
+    "emptyAllowed": "まだ実行していません。上のボタンでCookie付きリクエストを実行してください。",
+    "emptyBlocked": "まだ実行していません。上のボタンでCookieなしリクエストを実行してください。"
+  },
+  "panels": {
+    "api": "API稼働状態",
+    "postgres": "PostgreSQL稼働状態",
+    "up": "稼働中",
+    "down": "停止/異常",
+    "blocked": "認証でブロック",
+    "unauthorized": "未認証のため確認不可",
+    "unknown": "不明",
+    "notChecked": "未確認"
+  }
+}

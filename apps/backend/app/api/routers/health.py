@@ -5,14 +5,109 @@
 - レスポンスは `schemas.health.HealthResponse` で型定義する
 """
 
-from fastapi import APIRouter
+from __future__ import annotations
 
-from app.api.schemas.health import HealthResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
+
+from app.adapters.network.tcp import tcp_ping
+from app.adapters.postgres.session import get_session
+from app.api.schemas.health import HealthDependencies, HealthResponse, TcpDependencyHealth
+from app.core.settings import get_settings
+from app.services.auth.session_auth_service import (
+    SessionAuthError,
+    resolve_user_by_session_token,
+)
 
 router = APIRouter(tags=["health"])
 
 
+def _resolve_postgres_target(database_url: str) -> tuple[str, int]:
+    """
+    DATABASE_URL から PostgreSQL の host/port を抽出する.
+    """
+    try:
+        parsed = make_url(database_url)
+    except ArgumentError as error:
+        raise ValueError("DATABASE_URL is invalid") from error
+
+    host = parsed.host
+    if not host:
+        raise ValueError("DATABASE_URL host is missing")
+    port = parsed.port or 5432
+    return host, port
+
+
+async def _require_authenticated_session(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """
+    ヘルスチェック API 用の認証依存.
+
+    セッション Cookie からログインユーザーを解決できない場合は 401 を返す。
+    """
+    cookie_name = get_settings().session_cookie_name
+    raw_token = request.cookies.get(cookie_name)
+    if not raw_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "session_missing", "message": "Session cookie is missing"},
+        )
+    try:
+        await resolve_user_by_session_token(session, raw_token=raw_token)
+    except SessionAuthError as error:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": error.code.value, "message": error.message},
+        ) from error
+
+
 @router.get("/health", response_model=HealthResponse)
-def get_health() -> HealthResponse:
+async def get_health(_: None = Depends(_require_authenticated_session)) -> HealthResponse:
     """サービスの稼働状態を返す。"""
-    return HealthResponse(status="ok")
+    settings = get_settings()
+
+    if not settings.database_url:
+        postgres_result = TcpDependencyHealth(
+            host="",
+            port=5432,
+            ok=False,
+            latency_ms=0,
+            error="DATABASE_URL is not set",
+        )
+        return HealthResponse(
+            status="degraded",
+            dependencies=HealthDependencies(postgres=postgres_result),
+        )
+
+    try:
+        host, port = _resolve_postgres_target(settings.database_url)
+    except ValueError as error:
+        postgres_result = TcpDependencyHealth(
+            host="",
+            port=5432,
+            ok=False,
+            latency_ms=0,
+            error=str(error),
+        )
+        return HealthResponse(
+            status="degraded",
+            dependencies=HealthDependencies(postgres=postgres_result),
+        )
+
+    ok, latency_ms, error = await run_in_threadpool(tcp_ping, host, port)
+    postgres_result = TcpDependencyHealth(
+        host=host,
+        port=port,
+        ok=ok,
+        latency_ms=latency_ms,
+        error=error,
+    )
+    return HealthResponse(
+        status="ok" if ok else "degraded",
+        dependencies=HealthDependencies(postgres=postgres_result),
+    )

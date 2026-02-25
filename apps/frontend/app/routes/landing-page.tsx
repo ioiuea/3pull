@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
-import { ClipboardCheck, FlaskConical, Globe, Lock, Server, Wrench } from 'lucide-react';
+import { ClipboardCheck, FlaskConical, Globe, Lock, Server, ShieldCheck, Wrench } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
@@ -141,6 +141,20 @@ const LandingPage = () => {
             </div>
             <Button asChild variant="secondary">
               <Link to={`/${currentLanguage}/validation-sample`}>{t('formValidation.cta')}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="mt-4 border-primary/20 bg-primary/4">
+          <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <ShieldCheck className="size-4 text-primary" />
+                {t('apiProtection.title')}
+              </p>
+              <p className="text-sm text-muted-foreground">{t('apiProtection.description')}</p>
+            </div>
+            <Button asChild variant="secondary">
+              <Link to={`/${currentLanguage}/api-protection-sample`}>{t('apiProtection.cta')}</Link>
             </Button>
           </CardContent>
         </Card>
