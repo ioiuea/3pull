@@ -11,7 +11,7 @@ export const SUPPORTED_LANGUAGES = ['en', 'ja'] as const;
 /**
  * 利用可能な言語を解決できなかった場合に使う既定言語です。
  */
-export const DEFAULT_LANGUAGE = 'en';
+export const DEFAULT_LANGUAGE = 'ja';
 
 /**
  * 言語設定を保存する Cookie のキー名です。
