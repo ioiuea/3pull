@@ -60,7 +60,9 @@ async def get_email_verification_token_by_hash(
         EmailVerificationToken | None: 一致トークン
     """
     result = await session.execute(
-        select(EmailVerificationToken).where(EmailVerificationToken.token_hash == token_hash)
+        select(EmailVerificationToken).where(
+            EmailVerificationToken.token_hash == token_hash
+        )
     )
     return result.scalar_one_or_none()
 

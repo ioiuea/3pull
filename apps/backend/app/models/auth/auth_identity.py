@@ -30,11 +30,17 @@ class AuthIdentity(Base):
 
     __tablename__ = "auth_identities"
     __table_args__ = (
-        UniqueConstraint("provider", "provider_subject", name="uq_auth_identities_provider_subject"),
-        UniqueConstraint("provider", "email_normalized", name="uq_auth_identities_provider_email"),
+        UniqueConstraint(
+            "provider", "provider_subject", name="uq_auth_identities_provider_subject"
+        ),
+        UniqueConstraint(
+            "provider", "email_normalized", name="uq_auth_identities_provider_email"
+        ),
     )
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -52,10 +58,18 @@ class AuthIdentity(Base):
     provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
     email_normalized: Mapped[str | None] = mapped_column(String(320), nullable=True)
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    failed_login_count: Mapped[int] = mapped_column(nullable=False, default=0, server_default="0")
-    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_login_count: Mapped[int] = mapped_column(
+        nullable=False, default=0, server_default="0"
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    email_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

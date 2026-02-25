@@ -61,8 +61,12 @@ class AppSettings(BaseSettings):
     database_url: str | None = Field(default=None, validation_alias="DATABASE_URL")
     database_echo: bool = Field(default=False, validation_alias="DATABASE_ECHO")
     database_pool_size: int = Field(default=5, validation_alias="DATABASE_POOL_SIZE")
-    database_max_overflow: int = Field(default=10, validation_alias="DATABASE_MAX_OVERFLOW")
-    database_pool_timeout: int = Field(default=30, validation_alias="DATABASE_POOL_TIMEOUT")
+    database_max_overflow: int = Field(
+        default=10, validation_alias="DATABASE_MAX_OVERFLOW"
+    )
+    database_pool_timeout: int = Field(
+        default=30, validation_alias="DATABASE_POOL_TIMEOUT"
+    )
     email_verification_ttl_minutes: int = Field(
         default=60,
         validation_alias="EMAIL_VERIFICATION_TTL_MINUTES",
@@ -71,16 +75,28 @@ class AppSettings(BaseSettings):
         default=60,
         validation_alias="PASSWORD_RESET_TTL_MINUTES",
     )
-    email_login_max_failures: int = Field(default=5, validation_alias="EMAIL_LOGIN_MAX_FAILURES")
-    email_login_lock_minutes: int = Field(default=15, validation_alias="EMAIL_LOGIN_LOCK_MINUTES")
+    email_login_max_failures: int = Field(
+        default=5, validation_alias="EMAIL_LOGIN_MAX_FAILURES"
+    )
+    email_login_lock_minutes: int = Field(
+        default=15, validation_alias="EMAIL_LOGIN_LOCK_MINUTES"
+    )
     argon2_time_cost: int = Field(default=3, validation_alias="ARGON2_TIME_COST")
-    argon2_memory_cost: int = Field(default=65536, validation_alias="ARGON2_MEMORY_COST")
+    argon2_memory_cost: int = Field(
+        default=65536, validation_alias="ARGON2_MEMORY_COST"
+    )
     argon2_parallelism: int = Field(default=4, validation_alias="ARGON2_PARALLELISM")
     argon2_hash_len: int = Field(default=32, validation_alias="ARGON2_HASH_LEN")
     argon2_salt_len: int = Field(default=16, validation_alias="ARGON2_SALT_LEN")
-    session_ttl_minutes: int = Field(default=10080, validation_alias="SESSION_TTL_MINUTES")
-    session_cookie_name: str = Field(default="app_session", validation_alias="SESSION_COOKIE_NAME")
-    session_cookie_secure: bool = Field(default=True, validation_alias="SESSION_COOKIE_SECURE")
+    session_ttl_minutes: int = Field(
+        default=10080, validation_alias="SESSION_TTL_MINUTES"
+    )
+    session_cookie_name: str = Field(
+        default="app_session", validation_alias="SESSION_COOKIE_NAME"
+    )
+    session_cookie_secure: bool = Field(
+        default=True, validation_alias="SESSION_COOKIE_SECURE"
+    )
     session_cookie_samesite: Literal["lax", "strict", "none"] = Field(
         default="lax",
         validation_alias="SESSION_COOKIE_SAMESITE",
@@ -101,10 +117,18 @@ class AppSettings(BaseSettings):
         default="/en",
         validation_alias="AUTH_POST_LOGIN_DEFAULT_PATH",
     )
-    entra_tenant_id: str | None = Field(default=None, validation_alias="ENTRA_TENANT_ID")
-    entra_client_id: str | None = Field(default=None, validation_alias="ENTRA_CLIENT_ID")
-    entra_client_secret: str | None = Field(default=None, validation_alias="ENTRA_CLIENT_SECRET")
-    entra_redirect_uri: str | None = Field(default=None, validation_alias="ENTRA_REDIRECT_URI")
+    entra_tenant_id: str | None = Field(
+        default=None, validation_alias="ENTRA_TENANT_ID"
+    )
+    entra_client_id: str | None = Field(
+        default=None, validation_alias="ENTRA_CLIENT_ID"
+    )
+    entra_client_secret: str | None = Field(
+        default=None, validation_alias="ENTRA_CLIENT_SECRET"
+    )
+    entra_redirect_uri: str | None = Field(
+        default=None, validation_alias="ENTRA_REDIRECT_URI"
+    )
     entra_internal_domains: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
         validation_alias="ENTRA_INTERNAL_DOMAINS",

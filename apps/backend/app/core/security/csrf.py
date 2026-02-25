@@ -61,7 +61,11 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
 
         if referer:
             parsed = urlparse(referer)
-            referer_origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else ""
+            referer_origin = (
+                f"{parsed.scheme}://{parsed.netloc}"
+                if parsed.scheme and parsed.netloc
+                else ""
+            )
             if self._is_trusted_origin(referer_origin):
                 return await call_next(request)
             return self._reject("untrusted_referer")

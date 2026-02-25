@@ -54,7 +54,9 @@ async def get_identity_by_id(
     Returns:
         AuthIdentity | None: 一致アイデンティティ
     """
-    result = await session.execute(select(AuthIdentity).where(AuthIdentity.id == identity_id))
+    result = await session.execute(
+        select(AuthIdentity).where(AuthIdentity.id == identity_id)
+    )
     return result.scalar_one_or_none()
 
 

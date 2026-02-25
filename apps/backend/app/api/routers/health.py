@@ -15,7 +15,11 @@ from sqlalchemy.exc import ArgumentError
 
 from app.adapters.network.tcp import tcp_ping
 from app.adapters.postgres.session import get_session
-from app.api.schemas.health import HealthDependencies, HealthResponse, TcpDependencyHealth
+from app.api.schemas.health import (
+    HealthDependencies,
+    HealthResponse,
+    TcpDependencyHealth,
+)
 from app.core.settings import get_settings
 from app.services.auth.session_auth_service import (
     SessionAuthError,
@@ -67,7 +71,9 @@ async def _require_authenticated_session(
 
 
 @router.get("/health", response_model=HealthResponse)
-async def get_health(_: None = Depends(_require_authenticated_session)) -> HealthResponse:
+async def get_health(
+    _: None = Depends(_require_authenticated_session),
+) -> HealthResponse:
     """サービスの稼働状態を返す。"""
     settings = get_settings()
 

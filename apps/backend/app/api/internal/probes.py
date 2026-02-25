@@ -15,4 +15,3 @@ def livez() -> dict[str, str]:
 def readyz() -> dict[str, str]:
     """受け付け準備完了確認用の軽量プローブ。"""
     return {"status": "ok"}
-

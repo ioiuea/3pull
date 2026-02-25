@@ -61,4 +61,3 @@ def get_entra_oauth() -> OAuth:
         client_kwargs={"scope": "openid profile email"},
     )
     return oauth
-

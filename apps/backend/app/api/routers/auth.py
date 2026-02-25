@@ -302,13 +302,17 @@ async def post_email_signup(
             display_name=payload.display_name,
         )
         # 2) メール検証トークンを発行する。
-        verification_token = await issue_email_verification_token(session, email=payload.email)
+        verification_token = await issue_email_verification_token(
+            session, email=payload.email
+        )
     except AuthConflictError as error:
         # 業務ルール違反は統一フォーマットでHTTPへ変換。
         _raise_auth_error(error)
 
     # ローカル検証時のみトークンをレスポンスに含める。
-    debug_token = verification_token if get_settings().auth_debug_return_tokens else None
+    debug_token = (
+        verification_token if get_settings().auth_debug_return_tokens else None
+    )
     return EmailSignupResponse(
         status="verification_required",
         debug_verification_token=debug_token,
@@ -416,7 +420,9 @@ async def post_password_reset_request(
     raw_token = await issue_password_reset_token(session, email=payload.email)
     # デバッグ時のみ token を返す。
     debug_token = raw_token if get_settings().auth_debug_return_tokens else None
-    return PasswordResetRequestResponse(status="accepted", debug_reset_token=debug_token)
+    return PasswordResetRequestResponse(
+        status="accepted", debug_reset_token=debug_token
+    )
 
 
 @router.post("/password/reset/confirm", response_model=PasswordResetConfirmResponse)
@@ -525,9 +531,13 @@ async def get_auth_entra_callback(
 
     settings = get_settings()
     # ログイン開始時に保存した return_to を取り出す（取り出し後は削除）。
-    post_login_path = _sanitize_redirect_path(request.session.pop("entra_post_login_path", None))
+    post_login_path = _sanitize_redirect_path(
+        request.session.pop("entra_post_login_path", None)
+    )
     # FRONTEND_BASE_URL + return_to で最終遷移先を組み立てる。
-    target_url = urljoin(settings.frontend_base_url.rstrip("/") + "/", post_login_path.lstrip("/"))
+    target_url = urljoin(
+        settings.frontend_base_url.rstrip("/") + "/", post_login_path.lstrip("/")
+    )
     # フロントへ 302 リダイレクトする。
     response = RedirectResponse(url=target_url, status_code=status.HTTP_302_FOUND)
     # リダイレクトレスポンスにセッションCookieを付与する。

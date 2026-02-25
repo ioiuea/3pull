@@ -54,6 +54,12 @@ frontend-ci: frontend-format frontend-lint frontend-typecheck frontend-test
 backend-install:
 	cd $(BACKEND_DIR) && uv sync --frozen
 
+backend-format:
+	uv --directory $(BACKEND_DIR) run ruff format --check app
+
+backend-format-fix:
+	uv --directory $(BACKEND_DIR) run ruff format app
+
 alembic-revision:
 	@test -n "$(ALEMBIC_MESSAGE)" || (echo 'Usage: make alembic-revision "your migration message"' && exit 1)
 	cd $(BACKEND_DIR) && uv run alembic revision --autogenerate -m "$(ALEMBIC_MESSAGE)"

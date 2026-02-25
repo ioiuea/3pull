@@ -30,7 +30,9 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
     # Entra では userPrincipalName、Email 認証では登録メールアドレスを保存する。
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -43,7 +45,9 @@ class User(Base):
         ),
         nullable=False,
     )
-    is_active: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="true")
+    is_active: Mapped[bool] = mapped_column(
+        nullable=False, default=True, server_default="true"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

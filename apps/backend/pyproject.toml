@@ -21,9 +21,35 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pyright>=1.1.408",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
     "python-dotenv>=1.2.1",
+    "ruff>=0.15.2",
     "uvicorn>=0.41.0",
 ]
 
 [tool.uv]
 package = false
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = ["alembic"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+
+[tool.pyright]
+include = ["app", "test"]
+exclude = [".venv", "**/__pycache__", "alembic"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "standard"

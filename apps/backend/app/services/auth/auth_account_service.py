@@ -201,8 +201,13 @@ async def resolve_entra_login(
         )
         return user
 
-    entra_identity_for_user = await get_identity_by_user_and_provider(session, user.id, AuthProvider.ENTRA)
-    if entra_identity_for_user and entra_identity_for_user.provider_subject != entra_subject:
+    entra_identity_for_user = await get_identity_by_user_and_provider(
+        session, user.id, AuthProvider.ENTRA
+    )
+    if (
+        entra_identity_for_user
+        and entra_identity_for_user.provider_subject != entra_subject
+    ):
         raise AuthConflictError(
             code=AuthConflictCode.ENTRA_SUBJECT_CONFLICT,
             message="Email is already linked to another Entra subject",
@@ -219,7 +224,9 @@ async def resolve_entra_login(
 
     # Entra 優先ルール:
     # 先に Email 登録済みなら Email identity を撤去し Entra identity へ統合する。
-    email_identity = await get_identity_by_user_and_provider(session, user.id, AuthProvider.EMAIL)
+    email_identity = await get_identity_by_user_and_provider(
+        session, user.id, AuthProvider.EMAIL
+    )
     if email_identity:
         await delete_identity_by_id(session, email_identity.id)
 
@@ -527,7 +534,9 @@ async def issue_email_verification_token(
         )
 
     now = datetime.now(timezone.utc)
-    await revoke_active_tokens_by_identity_id(session, identity_id=identity.id, revoked_at=now)
+    await revoke_active_tokens_by_identity_id(
+        session, identity_id=identity.id, revoked_at=now
+    )
 
     ttl_minutes = expires_in_minutes or get_settings().email_verification_ttl_minutes
     raw_token = secrets.token_urlsafe(48)
@@ -558,7 +567,9 @@ async def verify_email_by_token(
         User: 検証完了後ユーザー
     """
     token_hash = _hash_token(token)
-    token_record = await get_email_verification_token_by_hash(session, token_hash=token_hash)
+    token_record = await get_email_verification_token_by_hash(
+        session, token_hash=token_hash
+    )
     if token_record is None or token_record.consumed_at is not None:
         raise AuthConflictError(
             code=AuthConflictCode.EMAIL_VERIFICATION_TOKEN_INVALID,
@@ -724,7 +735,9 @@ async def reset_password_by_token(
         new_password: 新しい生パスワード
     """
     token_hash = _hash_token(token)
-    token_record = await get_password_reset_token_by_hash(session, token_hash=token_hash)
+    token_record = await get_password_reset_token_by_hash(
+        session, token_hash=token_hash
+    )
     if token_record is None or token_record.consumed_at is not None:
         raise AuthConflictError(
             code=AuthConflictCode.PASSWORD_RESET_TOKEN_INVALID,
@@ -739,7 +752,11 @@ async def reset_password_by_token(
         )
 
     identity = await get_identity_by_id(session, token_record.identity_id)
-    if identity is None or identity.provider != AuthProvider.EMAIL or not identity.password_hash:
+    if (
+        identity is None
+        or identity.provider != AuthProvider.EMAIL
+        or not identity.password_hash
+    ):
         raise AuthConflictError(
             code=AuthConflictCode.EMAIL_IDENTITY_NOT_FOUND,
             message="Email identity is not found",
