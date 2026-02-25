@@ -84,6 +84,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
+                <FieldDescription>
+                  <Link to={`/${currentLanguage}/password-reset`}>Forgot your password?</Link>
+                </FieldDescription>
               </Field>
               {errorMessage && <FieldDescription className="text-destructive">{errorMessage}</FieldDescription>}
               <Field>

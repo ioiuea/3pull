@@ -21,5 +21,23 @@
   "values": {
     "active": "有効",
     "inactive": "無効"
+  },
+  "passwordChange": {
+    "title": "パスワード変更",
+    "description": "この画面で変更できるのは Email サインアップユーザーのみです。",
+    "disabledForInternal": "社内ユーザー（Entra ID）はこの画面からパスワード変更できません。",
+    "policy": "10文字以上かつ、英大文字/英小文字/数字/記号のうち3種以上を含めてください。",
+    "submit": "パスワードを更新",
+    "submitting": "更新中...",
+    "success": "パスワードを更新しました。全セッションからログアウトされます。",
+    "fields": {
+      "currentPassword": "現在のパスワード",
+      "newPassword": "新しいパスワード",
+      "confirmPassword": "新しいパスワード（確認）"
+    },
+    "errors": {
+      "confirmMismatch": "新しいパスワードと確認用パスワードが一致しません。",
+      "default": "パスワード変更に失敗しました。"
+    }
   }
 }

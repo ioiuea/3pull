@@ -5,6 +5,7 @@ export default [
   route(':lng', 'routes/layout.tsx', [
     route('login', 'routes/login.tsx'),
     route('signup', 'routes/signup.tsx'),
+    route('password-reset', 'routes/password-reset.tsx'),
     layout('routes/protected-layout.tsx', [
       index('routes/landing-page.tsx'),
       route('profile-sample', 'routes/profile-sample/page.tsx'),

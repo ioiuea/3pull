@@ -21,5 +21,23 @@
   "values": {
     "active": "active",
     "inactive": "inactive"
+  },
+  "passwordChange": {
+    "title": "Change Password",
+    "description": "Only email-signup users can change password here.",
+    "disabledForInternal": "Internal (Entra ID) users cannot change password on this page.",
+    "policy": "At least 10 chars, and include at least 3 of: upper/lower/digit/symbol.",
+    "submit": "Update Password",
+    "submitting": "Updating...",
+    "success": "Password updated. You have been logged out from all sessions.",
+    "fields": {
+      "currentPassword": "Current Password",
+      "newPassword": "New Password",
+      "confirmPassword": "Confirm New Password"
+    },
+    "errors": {
+      "confirmMismatch": "New password and confirmation do not match.",
+      "default": "Failed to change password."
+    }
   }
 }

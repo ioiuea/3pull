@@ -4,7 +4,8 @@ import { Link, useParams } from 'react-router';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
-import { getMe, type AuthMe } from '~/lib/api-helper';
+import { Input } from '~/components/ui/input';
+import { backendFetch, getMe, type AuthMe } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
 
 const ProfileSamplePage = () => {
@@ -14,6 +15,12 @@ const ProfileSamplePage = () => {
   const [profile, setProfile] = useState<AuthMe | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -47,8 +54,52 @@ const ProfileSamplePage = () => {
     };
   }, [t]);
 
+  const canChangePassword = profile?.user_type === 'external';
+
+  const onSubmitPasswordChange = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setPasswordMessage(null);
+    setPasswordError(null);
+
+    if (!canChangePassword) {
+      setPasswordError(t('passwordChange.disabledForInternal'));
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError(t('passwordChange.errors.confirmMismatch'));
+      return;
+    }
+
+    try {
+      setIsPasswordSubmitting(true);
+      const response = await backendFetch('/auth/password/change', {
+        method: 'POST',
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { detail?: { message?: string } }
+          | null;
+        throw new Error(payload?.detail?.message ?? t('passwordChange.errors.default'));
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordMessage(t('passwordChange.success'));
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : t('passwordChange.errors.default'));
+    } finally {
+      setIsPasswordSubmitting(false);
+    }
+  };
+
   return (
-    <main className="container mx-auto max-w-3xl px-4 py-14 h-screen">
+    <main className="container mx-auto max-w-3xl px-4 py-14 min-h-screen">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">{t('title')}</h1>
@@ -106,6 +157,70 @@ const ProfileSamplePage = () => {
               </div>
             </dl>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>{t('passwordChange.title')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-3" onSubmit={onSubmitPasswordChange}>
+            <p className="text-sm text-muted-foreground">{t('passwordChange.description')}</p>
+            {!canChangePassword && (
+              <p className="text-sm text-muted-foreground">{t('passwordChange.disabledForInternal')}</p>
+            )}
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="current-password">
+                {t('passwordChange.fields.currentPassword')}
+              </label>
+              <Input
+                id="current-password"
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                disabled={!canChangePassword || isPasswordSubmitting}
+                required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="new-password">
+                {t('passwordChange.fields.newPassword')}
+              </label>
+              <Input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                disabled={!canChangePassword || isPasswordSubmitting}
+                required
+              />
+              <p className="text-xs text-muted-foreground">{t('passwordChange.policy')}</p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium" htmlFor="confirm-password">
+                {t('passwordChange.fields.confirmPassword')}
+              </label>
+              <Input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                disabled={!canChangePassword || isPasswordSubmitting}
+                required
+              />
+            </div>
+
+            {passwordMessage && <p className="text-sm text-emerald-600">{passwordMessage}</p>}
+            {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
+
+            <Button type="submit" disabled={!canChangePassword || isPasswordSubmitting}>
+              {isPasswordSubmitting ? t('passwordChange.submitting') : t('passwordChange.submit')}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </main>
