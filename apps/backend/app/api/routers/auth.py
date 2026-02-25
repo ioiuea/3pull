@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from typing import NoReturn
 from urllib.parse import urljoin, urlparse
 
 from authlib.integrations.starlette_client import OAuthError
@@ -204,7 +205,7 @@ def _clear_session_cookie(response: Response) -> None:
     )
 
 
-def _raise_auth_error(error: AuthConflictError) -> None:
+def _raise_auth_error(error: AuthConflictError) -> NoReturn:
     """
     ドメインエラーを HTTP エラーへ変換して送出する.
 
@@ -238,7 +239,7 @@ def _raise_auth_error(error: AuthConflictError) -> None:
     )
 
 
-def _raise_session_error(error: SessionAuthError) -> None:
+def _raise_session_error(error: SessionAuthError) -> NoReturn:
     """
     セッションエラーを HTTP エラーへ変換して送出する.
 

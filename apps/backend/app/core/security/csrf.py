@@ -7,12 +7,11 @@ Cookie セッション向け CSRF 防御ミドルウェア.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import Request, Response, status
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse
 
 
@@ -35,7 +34,7 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self,
         request: Request,
-        call_next: Callable[[Request], Response],
+        call_next: RequestResponseEndpoint,
     ) -> Response:
         """
         状態変更リクエストの送信元を検証してから後続へ渡す.

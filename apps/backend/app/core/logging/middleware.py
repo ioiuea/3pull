@@ -6,12 +6,11 @@
 """
 
 import time
-from collections.abc import Callable
 from typing import Any
 
 import structlog
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 
 class AccessLogMiddleware(BaseHTTPMiddleware):
@@ -25,7 +24,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self,
         request: Request,
-        call_next: Callable[[Request], Response],
+        call_next: RequestResponseEndpoint,
     ) -> Response:
         """
         リクエスト処理時間を計測し、レスポンス結果をログ出力する.
