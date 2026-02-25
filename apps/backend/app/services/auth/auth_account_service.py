@@ -8,19 +8,19 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging.config import get_logger
-from app.models.auth.auth_identity import AuthProvider
-from app.models.auth.user import User, UserType
 from app.core.security.password import hash_password, needs_rehash, verify_password
 from app.core.settings import get_settings
+from app.models.auth.auth_identity import AuthProvider
+from app.models.auth.user import User, UserType
 from app.repositories.auth.auth_identity_repository import (
     create_identity,
     delete_identity_by_id,

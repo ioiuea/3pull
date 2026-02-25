@@ -60,6 +60,12 @@ backend-format:
 backend-format-fix:
 	uv --directory $(BACKEND_DIR) run ruff format app
 
+backend-lint:
+	uv --directory $(BACKEND_DIR) run ruff check app
+
+backend-lint-fix:
+	uv --directory $(BACKEND_DIR) run ruff check --fix app
+
 alembic-revision:
 	@test -n "$(ALEMBIC_MESSAGE)" || (echo 'Usage: make alembic-revision "your migration message"' && exit 1)
 	cd $(BACKEND_DIR) && uv run alembic revision --autogenerate -m "$(ALEMBIC_MESSAGE)"

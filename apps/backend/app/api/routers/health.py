@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.network.tcp import tcp_ping
 from app.adapters.postgres.session import get_session

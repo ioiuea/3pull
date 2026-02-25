@@ -9,53 +9,52 @@ from __future__ import annotations
 
 from urllib.parse import urljoin, urlparse
 
+from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from authlib.integrations.starlette_client import OAuthError
-
-from app.core.logging.config import get_logger
-from app.core.settings import get_settings
 
 from app.adapters.idp.entra import get_entra_oauth, validate_entra_settings
 from app.adapters.postgres.session import get_session
-from app.models.auth.user import User
 from app.api.schemas.auth import (
+    EmailLoginRequest,
+    EmailLoginResponse,
     EmailSignupRequest,
     EmailSignupResponse,
     EmailVerifyRequest,
     EmailVerifyResponse,
-    EmailLoginRequest,
-    EmailLoginResponse,
+    LogoutResponse,
     PasswordChangeRequest,
     PasswordChangeResponse,
-    PasswordResetRequestRequest,
-    PasswordResetRequestResponse,
     PasswordResetConfirmRequest,
     PasswordResetConfirmResponse,
-    UserMeResponse,
-    LogoutResponse,
+    PasswordResetRequestRequest,
+    PasswordResetRequestResponse,
     SessionRefreshResponse,
+    UserMeResponse,
 )
+from app.core.logging.config import get_logger
+from app.core.settings import get_settings
+from app.models.auth.user import User
 from app.services.auth.auth_account_service import (
     AuthConflictCode,
     AuthConflictError,
-    signup_email_user,
-    issue_email_verification_token,
-    verify_email_by_token,
-    resolve_email_login,
     change_email_password,
+    issue_email_verification_token,
     issue_password_reset_token,
     reset_password_by_token,
+    resolve_email_login,
     resolve_entra_login,
+    signup_email_user,
+    verify_email_by_token,
 )
 from app.services.auth.session_auth_service import (
     SessionAuthError,
     SessionAuthErrorCode,
     issue_user_session,
+    refresh_user_session,
     resolve_user_by_session_token,
     revoke_session_by_token,
-    refresh_user_session,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -223,7 +222,9 @@ def _raise_auth_error(error: AuthConflictError) -> None:
         AuthConflictCode.EMAIL_ACCOUNT_LOCKED: status.HTTP_423_LOCKED,
         AuthConflictCode.INVALID_CREDENTIALS: status.HTTP_401_UNAUTHORIZED,
         AuthConflictCode.CURRENT_PASSWORD_INVALID: status.HTTP_401_UNAUTHORIZED,
-        AuthConflictCode.PASSWORD_REUSE_NOT_ALLOWED: status.HTTP_422_UNPROCESSABLE_ENTITY,
+        AuthConflictCode.PASSWORD_REUSE_NOT_ALLOWED: (
+            status.HTTP_422_UNPROCESSABLE_ENTITY
+        ),
         AuthConflictCode.EMAIL_VERIFICATION_TOKEN_INVALID: status.HTTP_400_BAD_REQUEST,
         AuthConflictCode.EMAIL_VERIFICATION_TOKEN_EXPIRED: status.HTTP_400_BAD_REQUEST,
         AuthConflictCode.PASSWORD_RESET_TOKEN_INVALID: status.HTTP_400_BAD_REQUEST,
