@@ -45,10 +45,12 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
         body: JSON.stringify({ email, password }),
       });
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { detail?: { message?: string } }
-          | null;
-        throw new Error(payload?.detail?.message ?? t('login.errors.default', { status: response.status }));
+        const payload = (await response.json().catch(() => null)) as {
+          detail?: { message?: string };
+        } | null;
+        throw new Error(
+          payload?.detail?.message ?? t('login.errors.default', { status: response.status }),
+        );
       }
       navigate(returnTo, { replace: true });
     } catch (error) {
@@ -67,7 +69,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
     <div className={cn('flex flex-col gap-6', className)} {...props}>
       <Card>
         <CardHeader className="space-y-2 text-left">
-          <p className="w-fit rounded-full border px-3 py-1 text-xs text-muted-foreground">{PRODUCT_NAME}</p>
+          <p className="w-fit rounded-full border px-3 py-1 text-xs text-muted-foreground">
+            {PRODUCT_NAME}
+          </p>
           <CardTitle className="text-xl">{t('login.title')}</CardTitle>
           <CardDescription>{t('login.description')}</CardDescription>
         </CardHeader>
@@ -104,13 +108,16 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
                   <Link to={`/${currentLanguage}/password-reset`}>{t('login.forgotPassword')}</Link>
                 </FieldDescription>
               </Field>
-              {errorMessage && <FieldDescription className="text-destructive">{errorMessage}</FieldDescription>}
+              {errorMessage && (
+                <FieldDescription className="text-destructive">{errorMessage}</FieldDescription>
+              )}
               <Field>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? t('login.signingIn') : t('login.submit')}
                 </Button>
                 <FieldDescription className="text-center">
-                  {t('login.noAccount')} <Link to={`/${currentLanguage}/signup`}>{t('login.goSignup')}</Link>
+                  {t('login.noAccount')}{' '}
+                  <Link to={`/${currentLanguage}/signup`}>{t('login.goSignup')}</Link>
                 </FieldDescription>
               </Field>
             </FieldGroup>

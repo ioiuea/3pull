@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy.engine import make_url
-from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.network.tcp import tcp_ping
@@ -25,24 +23,9 @@ from app.services.auth.session_auth_service import (
     SessionAuthError,
     resolve_user_by_session_token,
 )
+from app.services.health import _host_port_from_url
 
 router = APIRouter(tags=["health"])
-
-
-def _resolve_postgres_target(database_url: str) -> tuple[str, int]:
-    """
-    DATABASE_URL から PostgreSQL の host/port を抽出する.
-    """
-    try:
-        parsed = make_url(database_url)
-    except ArgumentError as error:
-        raise ValueError("DATABASE_URL is invalid") from error
-
-    host = parsed.host
-    if not host:
-        raise ValueError("DATABASE_URL host is missing")
-    port = parsed.port or 5432
-    return host, port
 
 
 async def _require_authenticated_session(
@@ -90,20 +73,20 @@ async def get_health(
             dependencies=HealthDependencies(postgres=postgres_result),
         )
 
-    try:
-        host, port = _resolve_postgres_target(settings.database_url)
-    except ValueError as error:
+    postgres_target = _host_port_from_url(settings.database_url)
+    if postgres_target is None:
         postgres_result = TcpDependencyHealth(
             host="",
             port=5432,
             ok=False,
             latency_ms=0,
-            error=str(error),
+            error="DATABASE_URL is invalid",
         )
         return HealthResponse(
             status="degraded",
             dependencies=HealthDependencies(postgres=postgres_result),
         )
+    host, port = postgres_target
 
     ok, latency_ms, error = await run_in_threadpool(tcp_ping, host, port)
     postgres_result = TcpDependencyHealth(

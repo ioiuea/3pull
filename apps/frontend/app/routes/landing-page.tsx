@@ -1,6 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
-import { ClipboardCheck, FlaskConical, Globe, Lock, Server, ShieldCheck, Wrench } from 'lucide-react';
+import {
+  ClipboardCheck,
+  FlaskConical,
+  Globe,
+  Lock,
+  Server,
+  ShieldCheck,
+  Wrench,
+} from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';

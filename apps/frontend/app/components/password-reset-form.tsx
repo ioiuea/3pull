@@ -38,14 +38,16 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
         body: JSON.stringify({ email }),
       });
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { detail?: { message?: string } }
-          | null;
-        throw new Error(payload?.detail?.message ?? t('reset.errors.requestDefault', { status: response.status }));
+        const payload = (await response.json().catch(() => null)) as {
+          detail?: { message?: string };
+        } | null;
+        throw new Error(
+          payload?.detail?.message ?? t('reset.errors.requestDefault', { status: response.status }),
+        );
       }
-      const payload = (await response.json().catch(() => null)) as
-        | { debug_reset_token?: string | null }
-        | null;
+      const payload = (await response.json().catch(() => null)) as {
+        debug_reset_token?: string | null;
+      } | null;
       if (payload?.debug_reset_token) {
         setToken(payload.debug_reset_token);
       }
@@ -77,10 +79,12 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
         }),
       });
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { detail?: { message?: string } }
-          | null;
-        throw new Error(payload?.detail?.message ?? t('reset.errors.confirmDefault', { status: response.status }));
+        const payload = (await response.json().catch(() => null)) as {
+          detail?: { message?: string };
+        } | null;
+        throw new Error(
+          payload?.detail?.message ?? t('reset.errors.confirmDefault', { status: response.status }),
+        );
       }
       setConfirmMessage(t('reset.confirmSuccess'));
       setNewPassword('');
@@ -97,7 +101,9 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
     <div className={cn('flex flex-col gap-6', className)} {...props}>
       <Card>
         <CardHeader className="space-y-2 text-left">
-          <p className="w-fit rounded-full border px-3 py-1 text-xs text-muted-foreground">{PRODUCT_NAME}</p>
+          <p className="w-fit rounded-full border px-3 py-1 text-xs text-muted-foreground">
+            {PRODUCT_NAME}
+          </p>
           <CardTitle className="text-xl">{t('reset.title')}</CardTitle>
           <CardDescription>{t('reset.description')}</CardDescription>
         </CardHeader>
@@ -147,7 +153,9 @@ export function PasswordResetForm({ className, ...props }: React.ComponentProps<
                 <FieldDescription>{t('common.passwordPolicy')}</FieldDescription>
               </Field>
               <Field>
-                <FieldLabel htmlFor="confirm-new-password">{t('common.confirmNewPassword')}</FieldLabel>
+                <FieldLabel htmlFor="confirm-new-password">
+                  {t('common.confirmNewPassword')}
+                </FieldLabel>
                 <Input
                   id="confirm-new-password"
                   type="password"

@@ -52,10 +52,12 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
         }),
       });
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { detail?: { message?: string } }
-          | null;
-        throw new Error(payload?.detail?.message ?? t('signup.errors.default', { status: response.status }));
+        const payload = (await response.json().catch(() => null)) as {
+          detail?: { message?: string };
+        } | null;
+        throw new Error(
+          payload?.detail?.message ?? t('signup.errors.default', { status: response.status }),
+        );
       }
       const payload = (await response.json()) as SignupResponse;
       setIssuedToken(payload.debug_verification_token ?? null);
@@ -81,10 +83,12 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
         body: JSON.stringify({ token }),
       });
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { detail?: { message?: string } }
-          | null;
-        throw new Error(payload?.detail?.message ?? t('signup.errors.verifyDefault', { status: response.status }));
+        const payload = (await response.json().catch(() => null)) as {
+          detail?: { message?: string };
+        } | null;
+        throw new Error(
+          payload?.detail?.message ?? t('signup.errors.verifyDefault', { status: response.status }),
+        );
       }
       setSuccessMessage(t('signup.successVerified'));
       navigate(`/${currentLanguage}/login`, { replace: true });
@@ -99,7 +103,9 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
     <div className={cn('flex flex-col gap-6', className)} {...props}>
       <Card>
         <CardHeader className="space-y-2 text-left">
-          <p className="w-fit rounded-full border px-3 py-1 text-xs text-muted-foreground">{PRODUCT_NAME}</p>
+          <p className="w-fit rounded-full border px-3 py-1 text-xs text-muted-foreground">
+            {PRODUCT_NAME}
+          </p>
           <CardTitle className="text-xl">{t('signup.title')}</CardTitle>
           <CardDescription>{t('signup.description')}</CardDescription>
         </CardHeader>
@@ -148,14 +154,17 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
                 />
               </Field>
               <FieldDescription>{t('common.passwordPolicy')}</FieldDescription>
-              {errorMessage && <FieldDescription className="text-destructive">{errorMessage}</FieldDescription>}
+              {errorMessage && (
+                <FieldDescription className="text-destructive">{errorMessage}</FieldDescription>
+              )}
               {successMessage && <FieldDescription>{successMessage}</FieldDescription>}
               <Field>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? t('signup.creating') : t('signup.submit')}
                 </Button>
                 <FieldDescription className="text-center">
-                  {t('signup.hasAccount')} <Link to={`/${currentLanguage}/login`}>{t('signup.goLogin')}</Link>
+                  {t('signup.hasAccount')}{' '}
+                  <Link to={`/${currentLanguage}/login`}>{t('signup.goLogin')}</Link>
                 </FieldDescription>
               </Field>
             </FieldGroup>

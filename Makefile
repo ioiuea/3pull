@@ -69,6 +69,11 @@ backend-lint-fix:
 backend-typecheck:
 	uv --directory $(BACKEND_DIR) run pyright app
 
+backend-test:
+	uv --directory $(BACKEND_DIR) run pytest
+
+backend-ci: backend-format backend-lint backend-typecheck backend-test
+
 alembic-revision:
 	@test -n "$(ALEMBIC_MESSAGE)" || (echo 'Usage: make alembic-revision "your migration message"' && exit 1)
 	cd $(BACKEND_DIR) && uv run alembic revision --autogenerate -m "$(ALEMBIC_MESSAGE)"
@@ -92,6 +97,8 @@ env:
 		cp "$(BACKEND_DIR)/.env.example" "$(BACKEND_DIR)/.env"; \
 		echo "Created $(BACKEND_DIR)/.env from .env.example"; \
 	fi
+
+ci: install frontend-ci backend-ci
 
 # `up-api` は本番相当（Gunicorn）で API を起動できるか確認する用途。
 # macOS では fork 後の Objective-C 初期化安全性チェックで worker が SIGABRT し得るため、

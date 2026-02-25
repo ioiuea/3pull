@@ -81,9 +81,9 @@ const ProfileSamplePage = () => {
       });
 
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as
-          | { detail?: { message?: string } }
-          | null;
+        const payload = (await response.json().catch(() => null)) as {
+          detail?: { message?: string };
+        } | null;
         throw new Error(payload?.detail?.message ?? t('passwordChange.errors.default'));
       }
 
@@ -168,7 +168,9 @@ const ProfileSamplePage = () => {
           <form className="space-y-3" onSubmit={onSubmitPasswordChange}>
             <p className="text-sm text-muted-foreground">{t('passwordChange.description')}</p>
             {!canChangePassword && (
-              <p className="text-sm text-muted-foreground">{t('passwordChange.disabledForInternal')}</p>
+              <p className="text-sm text-muted-foreground">
+                {t('passwordChange.disabledForInternal')}
+              </p>
             )}
 
             <div className="space-y-1">

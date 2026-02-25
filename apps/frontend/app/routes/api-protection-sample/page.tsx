@@ -144,13 +144,17 @@ const ApiProtectionSamplePage = () => {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-md border bg-background/40 p-3">
                 <p className="text-xs text-muted-foreground">{t('panels.api')}</p>
-                <p className={`text-sm font-semibold ${toStatusTone(toApiStatusLabel(protectedResult))}`}>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toApiStatusLabel(protectedResult))}`}
+                >
                   {toApiStatusLabel(protectedResult)}
                 </p>
               </div>
               <div className="rounded-md border bg-background/40 p-3">
                 <p className="text-xs text-muted-foreground">{t('panels.postgres')}</p>
-                <p className={`text-sm font-semibold ${toStatusTone(toPostgresStatusLabel(protectedResult))}`}>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toPostgresStatusLabel(protectedResult))}`}
+                >
                   {toPostgresStatusLabel(protectedResult)}
                 </p>
               </div>
@@ -174,19 +178,27 @@ const ApiProtectionSamplePage = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">{t('blocked.description')}</p>
-            <Button variant="secondary" onClick={() => void requestWithoutSession()} disabled={isLoadingUnprotected}>
+            <Button
+              variant="secondary"
+              onClick={() => void requestWithoutSession()}
+              disabled={isLoadingUnprotected}
+            >
               {isLoadingUnprotected ? t('actions.checking') : t('blocked.cta')}
             </Button>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-md border bg-background/40 p-3">
                 <p className="text-xs text-muted-foreground">{t('panels.api')}</p>
-                <p className={`text-sm font-semibold ${toStatusTone(toApiStatusLabel(unprotectedResult))}`}>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toApiStatusLabel(unprotectedResult))}`}
+                >
                   {toApiStatusLabel(unprotectedResult)}
                 </p>
               </div>
               <div className="rounded-md border bg-background/40 p-3">
                 <p className="text-xs text-muted-foreground">{t('panels.postgres')}</p>
-                <p className={`text-sm font-semibold ${toStatusTone(toPostgresStatusLabel(unprotectedResult))}`}>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toPostgresStatusLabel(unprotectedResult))}`}
+                >
                   {toPostgresStatusLabel(unprotectedResult)}
                 </p>
               </div>
