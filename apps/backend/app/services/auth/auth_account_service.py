@@ -13,6 +13,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -607,6 +608,30 @@ async def verify_email_by_token(
     return user
 
 
+async def resolve_email_verify_user_id_for_audit(
+    session: AsyncSession,
+    *,
+    token: str,
+) -> UUID | None:
+    """
+    監査ログ用途で、メール検証トークンからユーザーIDをベストエフォート解決する.
+
+    本関数は監査補助専用のため、解決できない場合は例外を送出せず None を返す。
+    """
+    token_hash = _hash_token(token)
+    token_record = await get_email_verification_token_by_hash(
+        session,
+        token_hash=token_hash,
+    )
+    if token_record is None:
+        return None
+
+    identity = await get_identity_by_id(session, token_record.identity_id)
+    if identity is None:
+        return None
+    return identity.user_id
+
+
 async def change_email_password(
     session: AsyncSession,
     *,
@@ -675,7 +700,7 @@ async def issue_password_reset_token(
     *,
     email: str,
     expires_in_minutes: int | None = None,
-) -> str | None:
+) -> tuple[str | None, UUID | None]:
     """
     パスワードリセットトークンを発行する.
 
@@ -689,7 +714,9 @@ async def issue_password_reset_token(
         expires_in_minutes: トークン有効期限（分）。未指定時は設定値を利用
 
     Returns:
-        str | None: メール送信用の生トークン。対象がなければ None
+        tuple[str | None, UUID | None]:
+            メール送信用の生トークンとユーザーID。
+            対象がなければ `(None, None)`。
     """
     normalized_email = normalize_email(email)
     identity = await get_identity_by_provider_and_email(
@@ -698,7 +725,7 @@ async def issue_password_reset_token(
         email_normalized=normalized_email,
     )
     if identity is None or not identity.password_hash:
-        return None
+        return None, None
 
     now = datetime.now(timezone.utc)
     await revoke_active_password_reset_tokens_by_identity_id(
@@ -717,7 +744,7 @@ async def issue_password_reset_token(
         token_hash=token_hash,
         expires_at=expires_at,
     )
-    return raw_token
+    return raw_token, identity.user_id
 
 
 async def reset_password_by_token(
@@ -725,9 +752,9 @@ async def reset_password_by_token(
     *,
     token: str,
     new_password: str,
-) -> None:
+) -> UUID:
     """
-    リセットトークンを消費してパスワードを再設定する.
+    リセットトークンを消費してパスワードを再設定し、対象ユーザーIDを返す.
 
     Args:
         session: DB セッション
@@ -786,3 +813,28 @@ async def reset_password_by_token(
         user_id=str(identity.user_id),
         reason="password_reset",
     )
+    return identity.user_id
+
+
+async def resolve_password_reset_user_id_for_audit(
+    session: AsyncSession,
+    *,
+    token: str,
+) -> UUID | None:
+    """
+    監査ログ用途で、リセットトークンからユーザーIDをベストエフォート解決する.
+
+    本関数は監査補助専用のため、解決できない場合は例外を送出せず None を返す。
+    """
+    token_hash = _hash_token(token)
+    token_record = await get_password_reset_token_by_hash(
+        session,
+        token_hash=token_hash,
+    )
+    if token_record is None:
+        return None
+
+    identity = await get_identity_by_id(session, token_record.identity_id)
+    if identity is None:
+        return None
+    return identity.user_id

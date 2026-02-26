@@ -215,7 +215,7 @@ else:
 - 有効期限設定は以下で管理します。
 - `EMAIL_VERIFICATION_TTL_MINUTES`（既定: 60）
 - `PASSWORD_RESET_TTL_MINUTES`（既定: 60）
-- `SESSION_TTL_MINUTES`（既定: 10080 = 7日）
+- `SESSION_TTL_SECONDS`（既定: 604800 = 7日）
 
 ### 監査ログ（構造化ログ）
 

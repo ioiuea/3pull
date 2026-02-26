@@ -87,8 +87,29 @@ class AppSettings(BaseSettings):
     argon2_parallelism: int = Field(default=4, validation_alias="ARGON2_PARALLELISM")
     argon2_hash_len: int = Field(default=32, validation_alias="ARGON2_HASH_LEN")
     argon2_salt_len: int = Field(default=16, validation_alias="ARGON2_SALT_LEN")
-    session_ttl_minutes: int = Field(
-        default=10080, validation_alias="SESSION_TTL_MINUTES"
+    session_ttl_seconds: int = Field(
+        default=604800,
+        validation_alias="SESSION_TTL_SECONDS",
+    )
+    session_expired_grace_days: int = Field(
+        default=3,
+        validation_alias="SESSION_EXPIRED_GRACE_DAYS",
+    )
+    auth_audit_retention_days: int = Field(
+        default=365,
+        validation_alias="AUTH_AUDIT_RETENTION_DAYS",
+    )
+    session_cleanup_enabled: bool = Field(
+        default=True,
+        validation_alias="SESSION_CLEANUP_ENABLED",
+    )
+    audit_cleanup_enabled: bool = Field(
+        default=True,
+        validation_alias="AUDIT_CLEANUP_ENABLED",
+    )
+    cleanup_batch_size: int = Field(
+        default=5000,
+        validation_alias="CLEANUP_BATCH_SIZE",
     )
     session_cookie_name: str = Field(
         default="app_session", validation_alias="SESSION_COOKIE_NAME"
@@ -177,6 +198,54 @@ class AppSettings(BaseSettings):
         """
         if isinstance(value, str):
             return [item.strip().lower() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("session_ttl_seconds")
+    @classmethod
+    def _validate_session_ttl_seconds(cls, value: int) -> int:
+        """
+        SESSION_TTL_SECONDS の範囲を検証する.
+
+        許容範囲: 3600..2592000（1時間..30日）
+        """
+        if not 3600 <= value <= 2592000:
+            raise ValueError("SESSION_TTL_SECONDS must be between 3600 and 2592000")
+        return value
+
+    @field_validator("session_expired_grace_days")
+    @classmethod
+    def _validate_session_expired_grace_days(cls, value: int) -> int:
+        """
+        SESSION_EXPIRED_GRACE_DAYS の範囲を検証する.
+
+        許容範囲: 0..7
+        """
+        if not 0 <= value <= 7:
+            raise ValueError("SESSION_EXPIRED_GRACE_DAYS must be between 0 and 7")
+        return value
+
+    @field_validator("auth_audit_retention_days")
+    @classmethod
+    def _validate_auth_audit_retention_days(cls, value: int) -> int:
+        """
+        AUTH_AUDIT_RETENTION_DAYS の範囲を検証する.
+
+        許容範囲: 1..2555（約7年）
+        """
+        if not 1 <= value <= 2555:
+            raise ValueError("AUTH_AUDIT_RETENTION_DAYS must be between 1 and 2555")
+        return value
+
+    @field_validator("cleanup_batch_size")
+    @classmethod
+    def _validate_cleanup_batch_size(cls, value: int) -> int:
+        """
+        CLEANUP_BATCH_SIZE の範囲を検証する.
+
+        許容範囲: 100..50000
+        """
+        if not 100 <= value <= 50000:
+            raise ValueError("CLEANUP_BATCH_SIZE must be between 100 and 50000")
         return value
 
 

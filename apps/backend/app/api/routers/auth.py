@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import NoReturn
 from urllib.parse import urljoin, urlparse
+from uuid import UUID
 
 from authlib.integrations.starlette_client import OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -42,8 +43,10 @@ from app.api.schemas.auth import (
     UserMeResponse,
 )
 from app.core.logging.config import get_logger
+from app.core.network.client_ip import resolve_client_ips
 from app.core.security.token_cipher import decrypt_token, encrypt_token
 from app.core.settings import get_settings
+from app.models.auth.auth_audit_log import AuthAuditEventType
 from app.models.auth.user import User
 from app.repositories.auth.session_repository import update_entra_tokens_by_session_id
 from app.services.auth.auth_account_service import (
@@ -54,9 +57,15 @@ from app.services.auth.auth_account_service import (
     issue_password_reset_token,
     reset_password_by_token,
     resolve_email_login,
+    resolve_email_verify_user_id_for_audit,
     resolve_entra_login,
+    resolve_password_reset_user_id_for_audit,
     signup_email_user,
     verify_email_by_token,
+)
+from app.services.auth.auth_audit_log_service import (
+    AuthAuditLogPayload,
+    record_auth_audit_log,
 )
 from app.services.auth.session_auth_service import (
     SessionAuthError,
@@ -70,6 +79,45 @@ from app.services.auth.session_auth_service import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = get_logger(__name__)
+
+
+async def _record_auth_audit(
+    session: AsyncSession,
+    *,
+    event_type: AuthAuditEventType,
+    request: Request | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
+    provider: str | None = None,
+    reason_code: str | None = None,
+    metadata: dict[str, object] | None = None,
+) -> None:
+    """
+    認証監査ログを記録する（記録失敗時も認証フローは継続）。
+    """
+    try:
+        resolved_ips = resolve_client_ips(request) if request else None
+        await record_auth_audit_log(
+            session,
+            payload=AuthAuditLogPayload(
+                event_type=event_type,
+                user_id=UUID(user_id) if user_id else None,
+                session_id=UUID(session_id) if session_id else None,
+                provider=provider,
+                client_ip=resolved_ips.client_ip if resolved_ips else None,
+                xff_raw=resolved_ips.xff_raw if resolved_ips else None,
+                connection_ip=resolved_ips.connection_ip if resolved_ips else None,
+                user_agent=request.headers.get("user-agent") if request else None,
+                reason_code=reason_code,
+                metadata=metadata,
+            ),
+        )
+    except Exception as error:
+        logger.warning(
+            "auth.audit.log.write_failed",
+            event_type=event_type.value,
+            reason=str(error),
+        )
 
 
 def _sanitize_redirect_path(path: str | None) -> str:
@@ -204,7 +252,7 @@ def _set_session_cookie(response: Response, raw_token: str) -> None:
     response.set_cookie(
         key=settings.session_cookie_name,
         value=raw_token,
-        max_age=settings.session_ttl_minutes * 60,
+        max_age=settings.session_ttl_seconds,
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite=settings.session_cookie_samesite,
@@ -330,12 +378,13 @@ async def _require_session_user(
 @router.post("/email/signup", response_model=EmailSignupResponse)
 async def post_email_signup(
     payload: EmailSignupRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> EmailSignupResponse:
     """Email サインアップを実行し、検証トークン発行状態を返す."""
     try:
         # 1) ユーザー/アイデンティティを作成する。
-        await signup_email_user(
+        user = await signup_email_user(
             session,
             email=payload.email,
             password=payload.password,
@@ -346,9 +395,25 @@ async def post_email_signup(
             session, email=payload.email
         )
     except AuthConflictError as error:
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.SIGNUP_FAIL,
+            request=request,
+            provider="email",
+            reason_code=error.code.value,
+            metadata={"path": "/backend/auth/email/signup", "method": "POST"},
+        )
         # 業務ルール違反は統一フォーマットでHTTPへ変換。
         _raise_auth_error(error)
 
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.SIGNUP_SUCCESS,
+        request=request,
+        user_id=str(user.id),
+        provider="email",
+        metadata={"path": "/backend/auth/email/signup", "method": "POST"},
+    )
     # ローカル検証時のみトークンをレスポンスに含める。
     debug_token = (
         verification_token if get_settings().auth_debug_return_tokens else None
@@ -362,14 +427,36 @@ async def post_email_signup(
 @router.post("/email/verify", response_model=EmailVerifyResponse)
 async def post_email_verify(
     payload: EmailVerifyRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> EmailVerifyResponse:
     """Email 検証トークンを消費して検証を完了する."""
     try:
         # トークンを消費し、メール検証済みに更新する。
-        await verify_email_by_token(session, token=payload.token)
+        user = await verify_email_by_token(session, token=payload.token)
     except AuthConflictError as error:
+        audit_user_id = await resolve_email_verify_user_id_for_audit(
+            session,
+            token=payload.token,
+        )
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.EMAIL_VERIFY_FAIL,
+            request=request,
+            user_id=str(audit_user_id) if audit_user_id else None,
+            provider="email",
+            reason_code=error.code.value,
+            metadata={"path": "/backend/auth/email/verify", "method": "POST"},
+        )
         _raise_auth_error(error)
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.EMAIL_VERIFY_SUCCESS,
+        request=request,
+        user_id=str(user.id),
+        provider="email",
+        metadata={"path": "/backend/auth/email/verify", "method": "POST"},
+    )
     return EmailVerifyResponse(status="verified")
 
 
@@ -395,6 +482,10 @@ async def post_email_login(
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
+        created_session = await resolve_active_session_by_token(
+            session,
+            raw_token=raw_token,
+        )
     except AuthConflictError as error:
         # 失敗監査ログ（理由コード付き）。
         logger.warning(
@@ -403,6 +494,18 @@ async def post_email_login(
             email=payload.email,
             code=error.code.value,
             client_ip=request.client.host if request.client else None,
+        )
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.LOGIN_FAIL,
+            request=request,
+            provider="email",
+            reason_code=error.code.value,
+            metadata={
+                "path": "/backend/auth/email/login",
+                "method": "POST",
+                "reason_detail": "auth_conflict",
+            },
         )
         _raise_auth_error(error)
 
@@ -416,6 +519,15 @@ async def post_email_login(
         email=user.email,
         client_ip=request.client.host if request.client else None,
     )
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.LOGIN_SUCCESS,
+        request=request,
+        user_id=str(user.id),
+        session_id=str(created_session.id),
+        provider="email",
+        metadata={"path": "/backend/auth/email/login", "method": "POST"},
+    )
     return EmailLoginResponse(status="authenticated", user=_to_user_me_response(user))
 
 
@@ -428,7 +540,14 @@ async def post_password_change(
 ) -> PasswordChangeResponse:
     """現在パスワード確認つきでパスワード変更を行う."""
     # セッションから現在ユーザーを解決する（未ログインなら 401）。
-    user, _ = await _require_session_user(request, session)
+    user, raw_token = await _require_session_user(request, session)
+    try:
+        current_session = await resolve_active_session_by_token(
+            session,
+            raw_token=raw_token,
+        )
+    except SessionAuthError as error:
+        _raise_session_error(error)
 
     try:
         # 現在パスワードを検証し、新パスワードへ更新する。
@@ -439,8 +558,27 @@ async def post_password_change(
             new_password=payload.new_password,
         )
     except AuthConflictError as error:
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.PASSWORD_CHANGE_FAIL,
+            request=request,
+            user_id=str(user.id),
+            session_id=str(current_session.id),
+            provider="email",
+            reason_code=error.code.value,
+            metadata={"path": "/backend/auth/password/change", "method": "POST"},
+        )
         _raise_auth_error(error)
 
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.PASSWORD_CHANGE_SUCCESS,
+        request=request,
+        user_id=str(user.id),
+        session_id=str(current_session.id),
+        provider="email",
+        metadata={"path": "/backend/auth/password/change", "method": "POST"},
+    )
     # パスワード変更時は全セッション失効ポリシーのため Cookie も削除する。
     _clear_session_cookie(response)
     return PasswordChangeResponse(status="password_changed")
@@ -449,6 +587,7 @@ async def post_password_change(
 @router.post("/password/reset/request", response_model=PasswordResetRequestResponse)
 async def post_password_reset_request(
     payload: PasswordResetRequestRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> PasswordResetRequestResponse:
     """
@@ -457,7 +596,21 @@ async def post_password_reset_request(
     対象アカウントの存在有無にかかわらず、レスポンス形状は一定にする。
     """
     # アカウント有無を外部に漏らさない設計のため、内部的に token(None含む)を受け取る。
-    raw_token = await issue_password_reset_token(session, email=payload.email)
+    raw_token, reset_user_id = await issue_password_reset_token(
+        session,
+        email=payload.email,
+    )
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.PASSWORD_RESET_REQUEST_SUCCESS,
+        request=request,
+        user_id=str(reset_user_id) if reset_user_id else None,
+        provider="email",
+        metadata={
+            "path": "/backend/auth/password/reset/request",
+            "method": "POST",
+        },
+    )
     # デバッグ時のみ token を返す。
     debug_token = raw_token if get_settings().auth_debug_return_tokens else None
     return PasswordResetRequestResponse(
@@ -468,18 +621,46 @@ async def post_password_reset_request(
 @router.post("/password/reset/confirm", response_model=PasswordResetConfirmResponse)
 async def post_password_reset_confirm(
     payload: PasswordResetConfirmRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> PasswordResetConfirmResponse:
     """リセットトークンでパスワード再設定を確定する."""
     try:
         # トークン検証後、パスワードを再設定する。
-        await reset_password_by_token(
+        reset_user_id = await reset_password_by_token(
             session,
             token=payload.token,
             new_password=payload.new_password,
         )
     except AuthConflictError as error:
+        audit_user_id = await resolve_password_reset_user_id_for_audit(
+            session,
+            token=payload.token,
+        )
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.PASSWORD_RESET_CONFIRM_FAIL,
+            request=request,
+            user_id=str(audit_user_id) if audit_user_id else None,
+            provider="email",
+            reason_code=error.code.value,
+            metadata={
+                "path": "/backend/auth/password/reset/confirm",
+                "method": "POST",
+            },
+        )
         _raise_auth_error(error)
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.PASSWORD_RESET_CONFIRM_SUCCESS,
+        request=request,
+        user_id=str(reset_user_id),
+        provider="email",
+        metadata={
+            "path": "/backend/auth/password/reset/confirm",
+            "method": "POST",
+        },
+    )
     return PasswordResetConfirmResponse(status="password_reset")
 
 
@@ -533,6 +714,14 @@ async def get_auth_entra_callback(
             code="entra_callback_failed",
             client_ip=request.client.host if request.client else None,
         )
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.ENTRA_CALLBACK_FAIL,
+            request=request,
+            provider="entra",
+            reason_code="entra_callback_failed",
+            metadata={"path": "/backend/auth/entra/callback", "method": "GET"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "entra_callback_failed", "message": str(error)},
@@ -561,7 +750,19 @@ async def get_auth_entra_callback(
             entra_refresh_token=str(token.get("refresh_token") or "") or None,
             entra_access_token_expires_at=_resolve_entra_token_expires_at(token),
         )
+        created_session = await resolve_active_session_by_token(
+            session,
+            raw_token=raw_token,
+        )
     except RuntimeError as error:
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.ENTRA_CALLBACK_FAIL,
+            request=request,
+            provider="entra",
+            reason_code="entra_token_crypto_error",
+            metadata={"path": "/backend/auth/entra/callback", "method": "GET"},
+        )
         _raise_token_crypto_error(error)
     except AuthConflictError as error:
         # 競合・業務ルール違反は監査ログを残してHTTP化する。
@@ -571,6 +772,14 @@ async def get_auth_entra_callback(
             email=login_email,
             code=error.code.value,
             client_ip=request.client.host if request.client else None,
+        )
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.ENTRA_CALLBACK_FAIL,
+            request=request,
+            provider="entra",
+            reason_code=error.code.value,
+            metadata={"path": "/backend/auth/entra/callback", "method": "GET"},
         )
         _raise_auth_error(error)
 
@@ -594,6 +803,15 @@ async def get_auth_entra_callback(
         user_id=str(user.id),
         email=user.email,
         client_ip=request.client.host if request.client else None,
+    )
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.ENTRA_CALLBACK_SUCCESS,
+        request=request,
+        user_id=str(user.id),
+        session_id=str(created_session.id),
+        provider="entra",
+        metadata={"path": "/backend/auth/entra/callback", "method": "GET"},
     )
     return response
 
@@ -619,6 +837,15 @@ async def get_auth_entra_profile(
     """
     user, raw_token = await _require_session_user(request, session)
     if user.user_type.value != "internal":
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.ENTRA_PROFILE_FETCH_FAIL,
+            request=request,
+            user_id=str(user.id),
+            provider="entra",
+            reason_code="entra_profile_forbidden",
+            metadata={"path": "/backend/auth/entra/profile", "method": "GET"},
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={
@@ -633,12 +860,31 @@ async def get_auth_entra_profile(
             raw_token=raw_token,
         )
     except SessionAuthError as error:
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.ENTRA_PROFILE_FETCH_FAIL,
+            request=request,
+            user_id=str(user.id),
+            provider="entra",
+            reason_code=error.code.value,
+            metadata={"path": "/backend/auth/entra/profile", "method": "GET"},
+        )
         _raise_session_error(error)
 
     try:
         access_token = decrypt_token(current_session.entra_access_token)
         refresh_token = decrypt_token(current_session.entra_refresh_token)
     except RuntimeError as error:
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.ENTRA_PROFILE_FETCH_FAIL,
+            request=request,
+            user_id=str(user.id),
+            session_id=str(current_session.id),
+            provider="entra",
+            reason_code="entra_token_crypto_error",
+            metadata={"path": "/backend/auth/entra/profile", "method": "GET"},
+        )
         _raise_token_crypto_error(error)
     access_token_expires_at = current_session.entra_access_token_expires_at
     token_expired = (
@@ -647,6 +893,16 @@ async def get_auth_entra_profile(
     )
     if not access_token or token_expired:
         if not refresh_token:
+            await _record_auth_audit(
+                session,
+                event_type=AuthAuditEventType.ENTRA_PROFILE_FETCH_FAIL,
+                request=request,
+                user_id=str(user.id),
+                session_id=str(current_session.id),
+                provider="entra",
+                reason_code="entra_refresh_token_missing",
+                metadata={"path": "/backend/auth/entra/profile", "method": "GET"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={
@@ -667,10 +923,30 @@ async def get_auth_entra_profile(
                 access_token_expires_at=access_token_expires_at,
             )
         except RuntimeError as error:
+            await _record_auth_audit(
+                session,
+                event_type=AuthAuditEventType.ENTRA_PROFILE_FETCH_FAIL,
+                request=request,
+                user_id=str(user.id),
+                session_id=str(current_session.id),
+                provider="entra",
+                reason_code="entra_token_crypto_error",
+                metadata={"path": "/backend/auth/entra/profile", "method": "GET"},
+            )
             _raise_token_crypto_error(error)
         access_token = new_access_token
 
     if not access_token:
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.ENTRA_PROFILE_FETCH_FAIL,
+            request=request,
+            user_id=str(user.id),
+            session_id=str(current_session.id),
+            provider="entra",
+            reason_code="entra_access_token_missing",
+            metadata={"path": "/backend/auth/entra/profile", "method": "GET"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
@@ -680,6 +956,15 @@ async def get_auth_entra_profile(
         )
 
     profile = await fetch_entra_me_profile(access_token=access_token)
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.ENTRA_PROFILE_FETCH_SUCCESS,
+        request=request,
+        user_id=str(user.id),
+        session_id=str(current_session.id),
+        provider="entra",
+        metadata={"path": "/backend/auth/entra/profile", "method": "GET"},
+    )
     return EntraGraphProfileResponse(
         **profile,
         access_token_expires_at=access_token_expires_at,
@@ -696,12 +981,39 @@ async def post_auth_logout(
     cookie_name = get_settings().session_cookie_name
     # リクエストCookieから現在セッションを取得する。
     raw_token = request.cookies.get(cookie_name)
+    resolved_user_id: str | None = None
+    resolved_session_id: str | None = None
     if raw_token:
         try:
+            current_session = await resolve_active_session_by_token(
+                session,
+                raw_token=raw_token,
+            )
+            resolved_user_id = str(current_session.user_id)
+            resolved_session_id = str(current_session.id)
             # DB 側のセッションを失効させる。
             await revoke_session_by_token(session, raw_token=raw_token)
+            await _record_auth_audit(
+                session,
+                event_type=AuthAuditEventType.SESSION_REVOKE_SUCCESS,
+                request=request,
+                user_id=resolved_user_id,
+                session_id=resolved_session_id,
+                provider="session",
+                metadata={"path": "/backend/auth/logout", "method": "POST"},
+            )
         except SessionAuthError:
             # 既に失効済み/無効トークンでもログアウト成功として扱う。
+            await _record_auth_audit(
+                session,
+                event_type=AuthAuditEventType.SESSION_REVOKE_FAIL,
+                request=request,
+                user_id=resolved_user_id,
+                session_id=resolved_session_id,
+                provider="session",
+                reason_code="session_invalid",
+                metadata={"path": "/backend/auth/logout", "method": "POST"},
+            )
             pass
     # ブラウザ側Cookieも削除する。
     _clear_session_cookie(response)
@@ -710,6 +1022,15 @@ async def post_auth_logout(
         "auth.audit.logout",
         has_session_cookie=bool(raw_token),
         client_ip=request.client.host if request.client else None,
+    )
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.LOGOUT_SUCCESS,
+        request=request,
+        user_id=resolved_user_id,
+        session_id=resolved_session_id,
+        provider="session",
+        metadata={"path": "/backend/auth/logout", "method": "POST"},
     )
     return LogoutResponse(status="logged_out")
 
@@ -724,11 +1045,31 @@ async def post_auth_session_refresh(
     cookie_name = get_settings().session_cookie_name
     # 現在セッションCookieを取得する。
     raw_token = request.cookies.get(cookie_name)
+    resolved_user_id: str | None = None
+    resolved_session_id: str | None = None
     if not raw_token:
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.SESSION_REFRESH_FAIL,
+            request=request,
+            provider="session",
+            reason_code="session_missing",
+            metadata={"path": "/backend/auth/session/refresh", "method": "POST"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "session_missing", "message": "Session cookie is missing"},
         )
+    try:
+        current_session = await resolve_active_session_by_token(
+            session,
+            raw_token=raw_token,
+        )
+        resolved_user_id = str(current_session.user_id)
+        resolved_session_id = str(current_session.id)
+    except SessionAuthError:
+        # 無効/期限切れ時は fail ログで reason_code に反映する。
+        pass
     try:
         # 現在セッションを失効し、新トークンを発行してユーザーを返す。
         user, new_token = await refresh_user_session(
@@ -737,7 +1078,21 @@ async def post_auth_session_refresh(
             ip_address=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
         )
+        refreshed_session = await resolve_active_session_by_token(
+            session,
+            raw_token=new_token,
+        )
     except SessionAuthError as error:
+        await _record_auth_audit(
+            session,
+            event_type=AuthAuditEventType.SESSION_REFRESH_FAIL,
+            request=request,
+            user_id=resolved_user_id,
+            session_id=resolved_session_id,
+            provider="session",
+            reason_code=error.code.value,
+            metadata={"path": "/backend/auth/session/refresh", "method": "POST"},
+        )
         _raise_session_error(error)
 
     # 新しいセッションCookieへ差し替える。
@@ -747,5 +1102,14 @@ async def post_auth_session_refresh(
         "auth.audit.session.refresh",
         user_id=str(user.id),
         client_ip=request.client.host if request.client else None,
+    )
+    await _record_auth_audit(
+        session,
+        event_type=AuthAuditEventType.SESSION_REFRESH_SUCCESS,
+        request=request,
+        user_id=str(user.id),
+        session_id=str(refreshed_session.id),
+        provider="session",
+        metadata={"path": "/backend/auth/session/refresh", "method": "POST"},
     )
     return SessionRefreshResponse(status="refreshed", user=_to_user_me_response(user))

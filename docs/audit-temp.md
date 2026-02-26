@@ -458,23 +458,131 @@
 
 ## Phase 2: アプリケーション実装
 
-1. 設定クラス（pydantic-settings）へ新 env を追加しバリデーション実装。
-2. 監査ログ Repository / Service 作成（ENUM、IPカラム、metadata 取扱い対応）。
-3. `metadata` の allowlist フィルタと 4KB 制限（`metadata_truncated` 付与）を実装。
-4. 認証フロー各所へ監査イベント記録を追加（success/fail 両方）。
-5. `client_ip` / `xff_raw` / `connection_ip` 解決ロジックを実装（信頼プロキシ前提）。
-6. cleanup 実行モジュール（CLI）を追加。
+1. 設定クラス（pydantic-settings）へ新 env を追加し、境界値バリデーションを実装する。
+   - `SESSION_TTL_SECONDS`（min/max）
+   - `SESSION_EXPIRED_GRACE_DAYS`（0..7）
+   - `AUTH_AUDIT_RETENTION_DAYS`（1..2555）
+   - `SESSION_CLEANUP_ENABLED`
+   - `AUDIT_CLEANUP_ENABLED`
+   - `CLEANUP_BATCH_SIZE`（min/max）
+   - 互換目的で残している `SESSION_TTL_MINUTES` は、本ステップの最終作業で廃止する（参照コード・envコメントを整理し、`SESSION_TTL_SECONDS` に一本化）。
+2. 監査ログ Repository / Service を作成する。
+   - `event_type` は ENUM 前提で保存
+   - `user_id/session_id/provider/client_ip/xff_raw/connection_ip/user_agent/reason_code/metadata` を統一インタフェースで受け取る
+3. `metadata` の保存制御を実装する。
+   - allowlist フィルタ
+   - 4KB 制限
+   - 超過時 `metadata_truncated=true` 付与
+4. 認証フロー各所へ監査イベント記録を追加する（success/fail 両方）。
+   - login / logout / session_refresh / session_revoke
+   - signup / email_verify / password_change
+   - password_reset_request / password_reset_confirm
+   - entra_callback / entra_profile_fetch
+5. `client_ip` / `xff_raw` / `connection_ip` 解決ロジックを実装する（信頼プロキシ前提）。
+   - 本番想定（AppGW→FW→AKS）:
+     - `client_ip`: `X-Forwarded-For` 先頭
+     - `xff_raw`: ヘッダー生値
+     - `connection_ip`: `request.client.host`
+   - ローカル開発/検証（AppGW/FW 経路なし）:
+     - `X-Forwarded-For` が無い場合は `xff_raw=None`
+     - `client_ip` と `connection_ip` は `request.client.host` を採用
+     - テスト時はヘッダー有無の両ケースを必ず検証する
+6. cleanup 実行モジュール（CLI）を追加する。
    - `sessions cleanup` コマンド
    - `audit retention cleanup` コマンド
-7. `sessions` cleanup 実装（期限切れ + 猶予 + バッチ削除）。
-8. `auth_audit_logs` retention cleanup 実装（DROP 主体 + 境界月補正 DELETE）。
-9. cleanup 実行結果を App Insights 向け構造化ログで出力。
+7. `sessions cleanup` を実装する。
+   - 条件: `expires_at` + `SESSION_EXPIRED_GRACE_DAYS` 超過
+   - 実行: バッチ削除（`CLEANUP_BATCH_SIZE`）
+8. `auth_audit_logs retention cleanup` を実装する。
+   - 月次パーティション `DROP` 主体
+   - 境界月のみ `DELETE` 補正
+   - 将来月パーティション作成（当月/翌月/必要なら翌々月）を同一ジョブで実施
+9. cleanup 実行結果を App Insights 向け構造化ログで出力する。
+   - `job_name`
+   - `status`
+   - `deleted_count`
+   - `duration_ms`
+   - `error`
 
 成果物:
 
 - `app/jobs/...` 追加
 - `app/core/settings/config.py` 更新
 - 認証サービス更新
+
+### Phase 2 詳細設計: 監査ログ記録仕様（実装反映）
+
+本節は、`auth_audit_logs` への記録仕様を「現行実装」に合わせて固定する。
+
+#### 2-1. 基本方針
+
+- `event_type` は `AuthAuditEventType`（ENUM）を使用する。
+- `user_id` / `session_id` は「取得可能な場合のみ」保存する。
+- 監査ログ記録失敗は本処理を失敗させない（ベストエフォート）。
+- 監査ログの `metadata` は allowlist + 4KB 制限を適用する。
+
+#### 2-2. IP 記録方針
+
+- `client_ip`: `X-Forwarded-For` 先頭 IP（不在/不正時は `connection_ip`）
+- `xff_raw`: `X-Forwarded-For` ヘッダー生値（空文字は `None`）
+- `connection_ip`: `request.client.host`
+
+実装:
+
+- `app/core/network/client_ip.py::resolve_client_ips`
+- `app/api/routers/auth.py::_record_auth_audit`
+
+#### 2-3. 正常系イベントの `user_id/session_id` 記録
+
+| event_type | user_id | session_id | 仕様 |
+|---|---|---|---|
+| `auth.signup.success` | あり | なし | ユーザー作成後、セッション未発行 |
+| `auth.email_verify.success` | あり | なし | 検証トークン処理でユーザー確定 |
+| `auth.login.success` | あり | あり | セッション発行後に再解決して記録 |
+| `auth.password_change.success` | あり | あり | 現在セッションを解決して記録 |
+| `auth.password_reset_request.success` | 条件付き | なし | 対象ユーザー存在時のみ `user_id` |
+| `auth.password_reset_confirm.success` | あり | なし | リセット確定時に `user_id` を返却 |
+| `auth.entra_callback.success` | あり | あり | Entra 認証成功後セッション発行済み |
+| `auth.entra_profile_fetch.success` | あり | あり | セッション認証済みルート |
+| `auth.session_revoke.success` | 条件付き | 条件付き | logout 時に有効セッション解決できた場合 |
+| `auth.logout.success` | 条件付き | 条件付き | revoke と同じ解決結果を引き継ぐ |
+| `auth.session_refresh.success` | あり | あり | refresh 後の新セッションを解決して記録 |
+
+#### 2-4. 異常系イベントの `user_id/session_id` 記録
+
+| event_type | user_id | session_id | 仕様 |
+|---|---|---|---|
+| `auth.signup.fail` | なし | なし | 作成前失敗（主体未確定） |
+| `auth.email_verify.fail` | 条件付き | なし | 監査用ベストエフォート解決で付与可能 |
+| `auth.login.fail` | なし | なし | 認証失敗時は主体を確定しない |
+| `auth.password_change.fail` | あり | あり | ログイン済み + セッション解決済み |
+| `auth.password_reset_confirm.fail` | 条件付き | なし | 監査用ベストエフォート解決で付与可能 |
+| `auth.entra_callback.fail` | なし | なし | ユーザー/セッション確定前失敗 |
+| `auth.entra_profile_fetch.fail` | あり（多く） | 条件付き | `current_session` 解決後分岐は `session_id` あり |
+| `auth.session_revoke.fail` | 条件付き | 条件付き | 事前解決できた場合のみ付与 |
+| `auth.session_refresh.fail` | 条件付き | 条件付き | 事前解決できた場合のみ付与 |
+
+#### 2-5. 監査用ベストエフォート解決
+
+失敗系でも主体特定率を上げるため、以下の監査専用ヘルパーを使用する。
+
+- `resolve_password_reset_user_id_for_audit(token)`
+  - 対象: `auth.password_reset_confirm.fail`
+  - 手順: token hash -> password_reset_token -> identity -> user_id
+- `resolve_email_verify_user_id_for_audit(token)`
+  - 対象: `auth.email_verify.fail`
+  - 手順: token hash -> email_verification_token -> identity -> user_id
+
+運用ルール:
+
+- いずれも「監査補助専用」であり、解決不能時は `None` を返す。
+- 本来の認証成否判定・レスポンスには影響させない。
+
+### Phase 2 補足（ローカル検証観点）
+
+- ローカル環境では AppGW/FW を通らないため、`X-Forwarded-For` 不在が通常である。
+- そのためローカル検証の期待値は「`client_ip == connection_ip`、`xff_raw is None`」を基本ケースとする。
+- 併せて、明示的に `X-Forwarded-For` を付与した疑似本番ケースもテストし、先頭IP採用ロジックを確認する。
 
 ## Phase 3: コンテナ化
 

@@ -74,7 +74,7 @@ async def issue_user_session(
     user_id: UUID,
     ip_address: str | None,
     user_agent: str | None,
-    ttl_minutes: int | None = None,
+    ttl_seconds: int | None = None,
     entra_access_token: str | None = None,
     entra_refresh_token: str | None = None,
     entra_access_token_expires_at: datetime | None = None,
@@ -87,7 +87,7 @@ async def issue_user_session(
         user_id: ユーザー ID
         ip_address: クライアント IP
         user_agent: User-Agent
-        ttl_minutes: TTL（分）。未指定時は設定値を利用
+        ttl_seconds: TTL（秒）。未指定時は設定値を利用
         entra_access_token: Entra Graph 用アクセストークン
         entra_refresh_token: Entra Graph 用リフレッシュトークン
         entra_access_token_expires_at: Entra アクセストークン有効期限
@@ -96,11 +96,11 @@ async def issue_user_session(
         str: Cookie に設定する生トークン
     """
     settings = get_settings()
-    effective_ttl = ttl_minutes or settings.session_ttl_minutes
+    effective_ttl_seconds = ttl_seconds or settings.session_ttl_seconds
     now = datetime.now(timezone.utc)
     raw_token = secrets.token_urlsafe(48)
     token_hash = _hash_token(raw_token)
-    expires_at = now + timedelta(minutes=effective_ttl)
+    expires_at = now + timedelta(seconds=effective_ttl_seconds)
     await create_session(
         session,
         user_id=user_id,
