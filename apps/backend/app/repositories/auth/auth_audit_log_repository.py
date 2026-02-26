@@ -6,10 +6,10 @@ AuthAuditLog モデル向けリポジトリ.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth.auth_audit_log import AuthAuditEventType, AuthAuditLog
@@ -125,3 +125,158 @@ async def list_auth_audit_logs(
     total_count = (await session.execute(count_stmt)).scalar_one()
 
     return items, int(total_count)
+
+
+async def list_audit_partitions_for_drop(
+    session: AsyncSession,
+    *,
+    drop_before_month: date,
+) -> list[tuple[str, str]]:
+    """
+    retention で DROP 対象となる月次パーティション一覧を返す.
+
+    Args:
+        session: DB セッション
+        drop_before_month: この月初より前のパーティションを DROP 対象にする
+
+    Returns:
+        list[tuple[str, str]]: (schema_name, table_name)
+    """
+    stmt = text(
+        """
+        SELECT child_ns.nspname AS schema_name, child.relname AS table_name
+        FROM pg_inherits inh
+        JOIN pg_class parent ON parent.oid = inh.inhparent
+        JOIN pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
+        JOIN pg_class child ON child.oid = inh.inhrelid
+        JOIN pg_namespace child_ns ON child_ns.oid = child.relnamespace
+        WHERE parent.relname = 'auth_audit_logs'
+          AND parent_ns.nspname = current_schema()
+          AND child.relname ~ '^auth_audit_logs_[0-9]{4}_[0-9]{2}$'
+          AND to_date(substring(child.relname from '([0-9]{4}_[0-9]{2})$'), 'YYYY_MM')
+              < :drop_before_month
+        ORDER BY child.relname
+        """
+    )
+    result = await session.execute(stmt, {"drop_before_month": drop_before_month})
+    return [(str(row[0]), str(row[1])) for row in result.all()]
+
+
+async def count_rows_in_audit_partition(
+    session: AsyncSession,
+    *,
+    schema_name: str,
+    table_name: str,
+) -> int:
+    """
+    指定パーティション内の件数を返す.
+    """
+    stmt = text(f'SELECT count(*) FROM "{schema_name}"."{table_name}"')
+    result = await session.execute(stmt)
+    return int(result.scalar_one())
+
+
+async def drop_audit_partition(
+    session: AsyncSession,
+    *,
+    schema_name: str,
+    table_name: str,
+) -> None:
+    """
+    指定パーティションを DROP する.
+    """
+    await session.execute(text(f'DROP TABLE IF EXISTS "{schema_name}"."{table_name}"'))
+
+
+async def delete_audit_logs_before_cutoff_in_boundary_month(
+    session: AsyncSession,
+    *,
+    boundary_month_start: datetime,
+    cutoff: datetime,
+    batch_size: int,
+) -> int:
+    """
+    境界月に残る保持期限超過データをバッチ削除する.
+    """
+    stmt = text(
+        """
+        WITH targets AS (
+            SELECT id, occurred_at
+            FROM auth_audit_logs
+            WHERE occurred_at >= :boundary_month_start
+              AND occurred_at < :cutoff
+            ORDER BY occurred_at ASC, id ASC
+            LIMIT :batch_size
+        ),
+        deleted AS (
+            DELETE FROM auth_audit_logs AS logs
+            USING targets
+            WHERE logs.id = targets.id
+              AND logs.occurred_at = targets.occurred_at
+            RETURNING 1
+        )
+        SELECT count(*) FROM deleted
+        """
+    )
+    result = await session.execute(
+        stmt,
+        {
+            "boundary_month_start": boundary_month_start,
+            "cutoff": cutoff,
+            "batch_size": batch_size,
+        },
+    )
+    return int(result.scalar_one())
+
+
+async def count_audit_logs_before_cutoff_in_boundary_month(
+    session: AsyncSession,
+    *,
+    boundary_month_start: datetime,
+    cutoff: datetime,
+) -> int:
+    """
+    境界月で保持期限超過となる件数を返す.
+    """
+    stmt = text(
+        """
+        SELECT count(*)
+        FROM auth_audit_logs
+        WHERE occurred_at >= :boundary_month_start
+          AND occurred_at < :cutoff
+        """
+    )
+    result = await session.execute(
+        stmt,
+        {
+            "boundary_month_start": boundary_month_start,
+            "cutoff": cutoff,
+        },
+    )
+    return int(result.scalar_one())
+
+
+async def ensure_next_month_audit_partition(
+    session: AsyncSession,
+    *,
+    partition_start: datetime,
+    partition_end: datetime,
+) -> None:
+    """
+    翌月分パーティションを作成する（存在時は何もしない）。
+    """
+    table_name = f"auth_audit_logs_{partition_start:%Y_%m}"
+    stmt = text(
+        f"""
+        CREATE TABLE IF NOT EXISTS {table_name}
+        PARTITION OF auth_audit_logs
+        FOR VALUES FROM (:partition_start) TO (:partition_end)
+        """
+    )
+    await session.execute(
+        stmt,
+        {
+            "partition_start": partition_start,
+            "partition_end": partition_end,
+        },
+    )

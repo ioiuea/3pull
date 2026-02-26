@@ -49,7 +49,7 @@ frontend-ci: frontend-format frontend-lint frontend-typecheck frontend-test
 # ------------------------------
 # Backend targets
 # ------------------------------
-.PHONY: backend-install alembic-revision alembic-upgrade
+.PHONY: backend-install alembic-revision alembic-upgrade cleanup-sessions cleanup-sessions-dry-run cleanup-audit cleanup-audit-dry-run
 
 backend-install:
 	cd $(BACKEND_DIR) && uv sync --frozen
@@ -80,6 +80,18 @@ alembic-revision:
 
 alembic-upgrade:
 	cd $(BACKEND_DIR) && uv run alembic upgrade head
+
+cleanup-sessions:
+	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup sessions
+
+cleanup-sessions-dry-run:
+	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup sessions --dry-run
+
+cleanup-audit:
+	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup audit
+
+cleanup-audit-dry-run:
+	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup audit --dry-run
 
 # ------------------------------
 # Combined runtime targets

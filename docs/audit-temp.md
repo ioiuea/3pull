@@ -57,8 +57,8 @@
 - 監査ログはセッション管理テーブルから分離して別テーブル化する。
 - 全認証イベントを DB 保存する。
 - 保持期間は環境変数化する。
-- デフォルトは 1 年（365 日）。
-- 最大は 7 年（2555 日程度）まで設定可能にする。
+- デフォルトは 12 か月（1 年）。
+- 最大は 84 か月（7 年）まで設定可能にする。
 - 監査ログはパーティショニングで管理する。
 
 ## 3.3 インフラ/実行要件
@@ -187,9 +187,9 @@
 
 ## 7.2 監査ログ関連
 
-- `AUTH_AUDIT_RETENTION_DAYS`
-  - 既定: `365`
-  - 許容: `1..2555`（約 7 年）
+- `AUTH_AUDIT_RETENTION_MONTHS`
+  - 既定: `12`
+  - 許容: `1..84`（1か月..7年）
   - 説明: 監査ログ保持期間
 
 ## 7.3 cleanup 実行制御
@@ -289,10 +289,10 @@
   - max: `7`
   - 意図: 運用調査猶予を確保しつつ、セッションテーブル肥大化を抑制する。
 
-- `AUTH_AUDIT_RETENTION_DAYS`
-  - default: `365`
+- `AUTH_AUDIT_RETENTION_MONTHS`
+  - default: `12`
   - min: `1`
-  - max: `2555`（約7年）
+  - max: `84`（7年）
   - 意図: 監査保持要件（デフォルト1年、最大7年）を満たす。
 
 - `SESSION_CLEANUP_ENABLED`
@@ -405,9 +405,9 @@
 - retention cleanup は「月次パーティション + DROP 主体」とする。
   - パーティション粒度は月単位（`occurred_at` の RANGE partition）。
   - 保持期限を超えた月パーティションは `DROP` で廃棄する。
-  - 保持日数境界月（例: 365日）は必要に応じて `DELETE` で補正する。
+  - 保持は月単位で判定し、境界月の `DELETE` 補正は行わない。
   - 運用は `audit retention cleanup` ジョブに統合し、削除だけでなく将来月パーティション作成も同時に実施する。
-    - 例: 実行時点で「当月・翌月（必要なら翌々月）」のパーティションを `CREATE TABLE IF NOT EXISTS` で確保する。
+    - 例: 実行時点で「翌月」のパーティションを `CREATE TABLE IF NOT EXISTS` で確保する。
     - これにより、月替わり時の INSERT 失敗（子パーティション不足）を防止する。
 
 - cleanup 実行頻度は用途別に分離する。
@@ -461,7 +461,7 @@
 1. 設定クラス（pydantic-settings）へ新 env を追加し、境界値バリデーションを実装する。
    - `SESSION_TTL_SECONDS`（min/max）
    - `SESSION_EXPIRED_GRACE_DAYS`（0..7）
-   - `AUTH_AUDIT_RETENTION_DAYS`（1..2555）
+   - `AUTH_AUDIT_RETENTION_MONTHS`（1..84）
    - `SESSION_CLEANUP_ENABLED`
    - `AUDIT_CLEANUP_ENABLED`
    - `CLEANUP_BATCH_SIZE`（min/max）
@@ -499,8 +499,8 @@
    - 実行: バッチ削除（`CLEANUP_BATCH_SIZE`）
 9. `auth_audit_logs retention cleanup` を実装する。
    - 月次パーティション `DROP` 主体
-   - 境界月のみ `DELETE` 補正
-   - 将来月パーティション作成（当月/翌月/必要なら翌々月）を同一ジョブで実施
+   - 保持期間は月単位で判定
+   - 将来月パーティション作成（翌月）を同一ジョブで実施
 10. cleanup 実行結果を App Insights 向け構造化ログで出力する。
    - `job_name`
    - `status`

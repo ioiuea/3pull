@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.auth.session import UserSession
@@ -160,3 +160,59 @@ async def update_entra_tokens_by_session_id(
         .where(UserSession.id == session_id, UserSession.revoked_at.is_(None))
         .values(**values)
     )
+
+
+async def count_expired_sessions_for_cleanup(
+    session: AsyncSession,
+    *,
+    expires_before: datetime,
+) -> int:
+    """
+    cleanup 対象となる期限切れセッション件数を返す.
+
+    Args:
+        session: DB セッション
+        expires_before: この時刻より前に期限切れしたセッションを対象にする
+
+    Returns:
+        int: 対象件数
+    """
+    result = await session.execute(
+        select(func.count(UserSession.id)).where(
+            UserSession.expires_at < expires_before
+        )
+    )
+    return int(result.scalar_one())
+
+
+async def delete_expired_sessions_batch(
+    session: AsyncSession,
+    *,
+    expires_before: datetime,
+    batch_size: int,
+) -> int:
+    """
+    期限切れセッションをバッチ単位で削除する.
+
+    Args:
+        session: DB セッション
+        expires_before: この時刻より前に期限切れしたセッションを対象にする
+        batch_size: 1 回で削除する最大件数
+
+    Returns:
+        int: 実際に削除した件数
+    """
+    target_ids_result = await session.execute(
+        select(UserSession.id)
+        .where(UserSession.expires_at < expires_before)
+        .order_by(UserSession.expires_at.asc())
+        .limit(batch_size)
+    )
+    target_ids = list(target_ids_result.scalars().all())
+    if not target_ids:
+        return 0
+
+    await session.execute(
+        delete(UserSession).where(UserSession.id.in_(target_ids))
+    )
+    return len(target_ids)

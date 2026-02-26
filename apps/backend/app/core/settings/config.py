@@ -95,9 +95,9 @@ class AppSettings(BaseSettings):
         default=3,
         validation_alias="SESSION_EXPIRED_GRACE_DAYS",
     )
-    auth_audit_retention_days: int = Field(
-        default=365,
-        validation_alias="AUTH_AUDIT_RETENTION_DAYS",
+    auth_audit_retention_months: int = Field(
+        default=12,
+        validation_alias="AUTH_AUDIT_RETENTION_MONTHS",
     )
     session_cleanup_enabled: bool = Field(
         default=True,
@@ -224,16 +224,16 @@ class AppSettings(BaseSettings):
             raise ValueError("SESSION_EXPIRED_GRACE_DAYS must be between 0 and 7")
         return value
 
-    @field_validator("auth_audit_retention_days")
+    @field_validator("auth_audit_retention_months")
     @classmethod
-    def _validate_auth_audit_retention_days(cls, value: int) -> int:
+    def _validate_auth_audit_retention_months(cls, value: int) -> int:
         """
-        AUTH_AUDIT_RETENTION_DAYS の範囲を検証する.
+        AUTH_AUDIT_RETENTION_MONTHS の範囲を検証する.
 
-        許容範囲: 1..2555（約7年）
+        許容範囲: 1..84（1か月..7年）
         """
-        if not 1 <= value <= 2555:
-            raise ValueError("AUTH_AUDIT_RETENTION_DAYS must be between 1 and 2555")
+        if not 1 <= value <= 84:
+            raise ValueError("AUTH_AUDIT_RETENTION_MONTHS must be between 1 and 84")
         return value
 
     @field_validator("cleanup_batch_size")
