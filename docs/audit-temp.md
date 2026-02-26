@@ -406,6 +406,9 @@
   - パーティション粒度は月単位（`occurred_at` の RANGE partition）。
   - 保持期限を超えた月パーティションは `DROP` で廃棄する。
   - 保持日数境界月（例: 365日）は必要に応じて `DELETE` で補正する。
+  - 運用は `audit retention cleanup` ジョブに統合し、削除だけでなく将来月パーティション作成も同時に実施する。
+    - 例: 実行時点で「当月・翌月（必要なら翌々月）」のパーティションを `CREATE TABLE IF NOT EXISTS` で確保する。
+    - これにより、月替わり時の INSERT 失敗（子パーティション不足）を防止する。
 
 - cleanup 実行頻度は用途別に分離する。
   - `sessions cleanup`: 1時間毎

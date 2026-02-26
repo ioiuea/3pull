@@ -81,9 +81,7 @@ async def refresh_entra_access_token(
         dict[str, object]: トークンレスポンス
     """
     settings = get_settings()
-    token_url = (
-        f"https://login.microsoftonline.com/{settings.entra_tenant_id}/oauth2/v2.0/token"
-    )
+    token_url = f"https://login.microsoftonline.com/{settings.entra_tenant_id}/oauth2/v2.0/token"
     form_data = {
         "grant_type": "refresh_token",
         "client_id": settings.entra_client_id or "",
@@ -115,8 +113,7 @@ async def refresh_entra_access_token(
             detail={
                 "code": "entra_token_refresh_failed",
                 "message": (
-                    "Entra token endpoint failed with status "
-                    f"{response.status_code}"
+                    f"Entra token endpoint failed with status {response.status_code}"
                 ),
             },
         )
