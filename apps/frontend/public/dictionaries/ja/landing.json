@@ -50,5 +50,10 @@
     "title": "APIプロテクト",
     "description": "同じ /backend/health を、Cookie付きとCookieなしで呼び分け、保護されたAPIを突破できるケースとできないケースを比較します。",
     "cta": "サンプルを見る"
+  },
+  "auditLog": {
+    "title": "監査ログビューア",
+    "description": "認証イベントの監査ログを、event_type・user_id・session_id・発生時刻で確認できる参照画面です。",
+    "cta": "サンプルを見る"
   }
 }

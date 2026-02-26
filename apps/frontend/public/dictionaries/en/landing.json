@@ -50,5 +50,10 @@
     "title": "API Protection",
     "description": "Call the same /backend/health endpoint with and without cookies to compare a pass case and a blocked case for protected APIs.",
     "cta": "View Sample"
+  },
+  "auditLog": {
+    "title": "Audit Log Viewer",
+    "description": "Review authentication audit events with filters and pagination, including event type, user ID, session ID, and timestamp.",
+    "cta": "View Sample"
   }
 }

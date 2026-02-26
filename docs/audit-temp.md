@@ -487,17 +487,21 @@
      - `X-Forwarded-For` が無い場合は `xff_raw=None`
      - `client_ip` と `connection_ip` は `request.client.host` を採用
      - テスト時はヘッダー有無の両ケースを必ず検証する
-6. cleanup 実行モジュール（CLI）を追加する。
+6. 監査ログ表示画面（参照UI）を作成する。
+   - バックエンド: 監査ログ一覧取得APIを追加（ページング / 絞り込み / 並び替え）
+   - フロントエンド: 監査ログ一覧画面を追加（event_type, user_id, session_id, occurred_at を中心に表示）
+   - 表示ポリシー: 現時点は「ログイン済みユーザー参照可」とし、将来「システム管理者のみ参照可」へ切り替える
+7. cleanup 実行モジュール（CLI）を追加する。
    - `sessions cleanup` コマンド
    - `audit retention cleanup` コマンド
-7. `sessions cleanup` を実装する。
+8. `sessions cleanup` を実装する。
    - 条件: `expires_at` + `SESSION_EXPIRED_GRACE_DAYS` 超過
    - 実行: バッチ削除（`CLEANUP_BATCH_SIZE`）
-8. `auth_audit_logs retention cleanup` を実装する。
+9. `auth_audit_logs retention cleanup` を実装する。
    - 月次パーティション `DROP` 主体
    - 境界月のみ `DELETE` 補正
    - 将来月パーティション作成（当月/翌月/必要なら翌々月）を同一ジョブで実施
-9. cleanup 実行結果を App Insights 向け構造化ログで出力する。
+10. cleanup 実行結果を App Insights 向け構造化ログで出力する。
    - `job_name`
    - `status`
    - `deleted_count`

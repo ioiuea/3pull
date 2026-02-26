@@ -1,0 +1,34 @@
+{
+  "title": "Audit Log Viewer",
+  "description": "Browse authentication audit logs with pagination and basic filters.",
+  "actions": {
+    "reload": "Reload",
+    "backToLp": "Back to LP",
+    "search": "Search",
+    "prev": "Prev",
+    "next": "Next"
+  },
+  "states": {
+    "loading": "Loading audit logs...",
+    "empty": "No audit logs found.",
+    "error": "Failed to load audit logs."
+  },
+  "filters": {
+    "title": "Filters",
+    "eventType": "event_type (exact match)",
+    "userId": "user_id (UUID)"
+  },
+  "table": {
+    "title": "Audit Logs (total: {{total}})",
+    "occurredAt": "Occurred At",
+    "eventType": "Event Type",
+    "userId": "User ID",
+    "userName": "User Name",
+    "userEmail": "User Email",
+    "sessionId": "Session ID",
+    "provider": "Provider",
+    "clientIp": "Client IP",
+    "reasonCode": "Reason Code",
+    "pagination": "Page {{page}} / {{totalPages}}"
+  }
+}

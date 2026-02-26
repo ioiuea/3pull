@@ -13,7 +13,7 @@ from urllib.parse import urljoin, urlparse
 from uuid import UUID
 
 from authlib.integrations.starlette_client import OAuthError
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,8 @@ from app.adapters.idp.entra import (
 )
 from app.adapters.postgres.session import get_session
 from app.api.schemas.auth import (
+    AuthAuditLogItemResponse,
+    AuthAuditLogListResponse,
     EmailLoginRequest,
     EmailLoginResponse,
     EmailSignupRequest,
@@ -46,8 +48,9 @@ from app.core.logging.config import get_logger
 from app.core.network.client_ip import resolve_client_ips
 from app.core.security.token_cipher import decrypt_token, encrypt_token
 from app.core.settings import get_settings
-from app.models.auth.auth_audit_log import AuthAuditEventType
+from app.models.auth.auth_audit_log import AuthAuditEventType, AuthAuditLog
 from app.models.auth.user import User
+from app.repositories.auth.auth_audit_log_repository import list_auth_audit_logs
 from app.repositories.auth.session_repository import update_entra_tokens_by_session_id
 from app.services.auth.auth_account_service import (
     AuthConflictCode,
@@ -257,6 +260,33 @@ def _set_session_cookie(response: Response, raw_token: str) -> None:
         secure=settings.session_cookie_secure,
         samesite=settings.session_cookie_samesite,
         path="/",
+    )
+
+
+def _to_auth_audit_log_item(
+    log: AuthAuditLog,
+    *,
+    user_display_name: str | None,
+    user_email: str | None,
+) -> AuthAuditLogItemResponse:
+    """
+    AuthAuditLog モデルを一覧レスポンス行へ変換する.
+    """
+    return AuthAuditLogItemResponse(
+        id=log.id,
+        occurred_at=log.occurred_at,
+        event_type=log.event_type,
+        user_id=log.user_id,
+        user_display_name=user_display_name,
+        user_email=user_email,
+        session_id=log.session_id,
+        provider=log.provider,
+        client_ip=str(log.client_ip) if log.client_ip is not None else None,
+        xff_raw=log.xff_raw,
+        connection_ip=str(log.connection_ip) if log.connection_ip is not None else None,
+        user_agent=log.user_agent,
+        reason_code=log.reason_code,
+        metadata=log.audit_metadata,
     )
 
 
@@ -825,6 +855,47 @@ async def get_auth_me(
     # セッションからユーザーを引いて返すだけの読み取りAPI。
     user, _ = await _require_session_user(request, session)
     return _to_user_me_response(user)
+
+
+@router.get("/audit-logs", response_model=AuthAuditLogListResponse)
+async def get_auth_audit_logs(
+    request: Request,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    event_type: AuthAuditEventType | None = None,
+    user_id: UUID | None = None,
+    session_id: UUID | None = None,
+    occurred_from: datetime | None = Query(default=None, alias="from"),
+    occurred_to: datetime | None = Query(default=None, alias="to"),
+    session: AsyncSession = Depends(get_session),
+) -> AuthAuditLogListResponse:
+    """
+    監査ログ一覧を返す（ログイン済みユーザー向け）.
+    """
+    await _require_session_user(request, session)
+    items, total = await list_auth_audit_logs(
+        session,
+        page=page,
+        page_size=page_size,
+        event_type=event_type,
+        user_id=user_id,
+        session_id=session_id,
+        occurred_from=occurred_from,
+        occurred_to=occurred_to,
+    )
+    return AuthAuditLogListResponse(
+        page=page,
+        page_size=page_size,
+        total=total,
+        items=[
+            _to_auth_audit_log_item(
+                log,
+                user_display_name=user_display_name,
+                user_email=user_email,
+            )
+            for log, user_display_name, user_email in items
+        ],
+    )
 
 
 @router.get("/entra/profile", response_model=EntraGraphProfileResponse)

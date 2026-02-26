@@ -1,0 +1,34 @@
+{
+  "title": "監査ログビューア",
+  "description": "認証監査ログを、ページングと基本フィルタで参照します。",
+  "actions": {
+    "reload": "再読み込み",
+    "backToLp": "LPに戻る",
+    "search": "検索",
+    "prev": "前へ",
+    "next": "次へ"
+  },
+  "states": {
+    "loading": "監査ログを読み込み中...",
+    "empty": "監査ログがありません。",
+    "error": "監査ログの取得に失敗しました。"
+  },
+  "filters": {
+    "title": "フィルタ",
+    "eventType": "event_type（完全一致）",
+    "userId": "user_id（UUID）"
+  },
+  "table": {
+    "title": "監査ログ（合計: {{total}}件）",
+    "occurredAt": "発生時刻",
+    "eventType": "イベント種別",
+    "userId": "ユーザーID",
+    "userName": "ユーザー名",
+    "userEmail": "メールアドレス",
+    "sessionId": "セッションID",
+    "provider": "プロバイダ",
+    "clientIp": "クライアントIP",
+    "reasonCode": "理由コード",
+    "pagination": "{{page}} / {{totalPages}} ページ"
+  }
+}

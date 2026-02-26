@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import {
+  BookOpenText,
   ClipboardCheck,
   FlaskConical,
   Globe,
@@ -163,6 +164,20 @@ const LandingPage = () => {
             </div>
             <Button asChild variant="secondary">
               <Link to={`/${currentLanguage}/api-protection-sample`}>{t('apiProtection.cta')}</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="mt-4 border-primary/20 bg-primary/4">
+          <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <BookOpenText className="size-4 text-primary" />
+                {t('auditLog.title')}
+              </p>
+              <p className="text-sm text-muted-foreground">{t('auditLog.description')}</p>
+            </div>
+            <Button asChild variant="secondary">
+              <Link to={`/${currentLanguage}/audit-log-sample`}>{t('auditLog.cta')}</Link>
             </Button>
           </CardContent>
         </Card>
