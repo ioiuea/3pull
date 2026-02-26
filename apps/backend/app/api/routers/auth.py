@@ -45,7 +45,7 @@ from app.api.schemas.auth import (
     UserMeResponse,
 )
 from app.core.logging.config import get_logger
-from app.core.network.client_ip import resolve_client_ips
+from app.core.security.client_ip import resolve_client_ips
 from app.core.security.token_cipher import decrypt_token, encrypt_token
 from app.core.settings import get_settings
 from app.models.auth.auth_audit_log import AuthAuditEventType, AuthAuditLog

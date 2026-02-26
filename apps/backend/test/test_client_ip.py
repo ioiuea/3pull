@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from starlette.requests import Request
 
-from app.core.network.client_ip import resolve_client_ips
+from app.core.security.client_ip import resolve_client_ips
 
 
 def _build_request(
