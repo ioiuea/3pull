@@ -215,7 +215,7 @@ else:
 - 有効期限設定は以下で管理します。
 - `EMAIL_VERIFICATION_TTL_MINUTES`（既定: 60）
 - `PASSWORD_RESET_TTL_MINUTES`（既定: 60）
-- `SESSION_TTL_SECONDS`（既定: 604800 = 7日）
+- `SESSION_TTL_HOURS`（既定: 168 = 7日）
 
 ### 監査ログ（構造化ログ）
 
@@ -225,6 +225,67 @@ else:
 - `auth.audit.logout`
 - `auth.audit.session.refresh`
 - `auth.audit.session.revoke_all`
+
+## 認証データ cleanup CLI 仕様
+
+- 認証データの定期削除は `app.jobs.auth_cleanup` を使用します。
+- 実行は API リクエスト経路ではなく、バッチ（CronJob / 手動実行）で行います。
+
+### 実行コマンド
+
+- sessions cleanup:
+- `make cleanup-sessions`
+- `make cleanup-sessions-dry-run`
+- audit retention cleanup:
+- `make cleanup-audit`
+- `make cleanup-audit-dry-run`
+
+- 直接実行:
+- `uv --directory apps/backend run python -m app.jobs.auth_cleanup sessions`
+- `uv --directory apps/backend run python -m app.jobs.auth_cleanup sessions --dry-run`
+- `uv --directory apps/backend run python -m app.jobs.auth_cleanup audit`
+- `uv --directory apps/backend run python -m app.jobs.auth_cleanup audit --dry-run`
+
+### sessions cleanup の仕様
+
+- 目的: `sessions` テーブルの期限切れデータを削除する。
+- 削除基準: `expires_at < (run_at_utc - SESSION_EXPIRED_GRACE_DAYS)`。
+- バッチ削除: `CLEANUP_BATCH_SIZE` 件ずつ削除する。
+- `--dry-run` は削除せず、対象件数のみ計測する。
+- `SESSION_CLEANUP_ENABLED=false` の場合は `disabled` として終了する。
+
+### audit retention cleanup の仕様
+
+- 目的: `auth_audit_logs` を月単位で保持する。
+- 保持基準: `AUTH_AUDIT_RETENTION_MONTHS`（月）。
+- 保持開始月 `keep_from_month` を算出し、`keep_from_month` より前の月パーティションを `DROP` する。
+- 境界月の行単位 `DELETE` は行わない（完全月単位運用）。
+- 実行時に翌月パーティションを `CREATE TABLE IF NOT EXISTS` で事前作成する。
+- `--dry-run` は削除せず、対象パーティション数・対象行数のみ計測する。
+- `AUDIT_CLEANUP_ENABLED=false` の場合は `disabled` として終了する。
+
+### 環境変数
+
+- `SESSION_TTL_HOURS`（既定: 168）
+- `SESSION_EXPIRED_GRACE_DAYS`（既定: 3）
+- `AUTH_AUDIT_RETENTION_MONTHS`（既定: 12）
+- `SESSION_CLEANUP_ENABLED`（既定: true）
+- `AUDIT_CLEANUP_ENABLED`（既定: true）
+- `CLEANUP_BATCH_SIZE`（既定: 5000）
+
+### 構造化ログ
+
+- cleanup 実行時は以下イベントを JSON 出力する。
+- `cleanup.started`
+- `cleanup.completed`
+- `cleanup.failed`
+- sessions は `cleanup.sessions.criteria` / `cleanup.sessions.deleted` を出力する。
+- audit は `cleanup.audit.dry_run` / `cleanup.audit.retention` を出力する。
+- 主要キー:
+- `job_name`, `run_at`, `dry_run`, `batch_size`
+- `delete_before_expires_at`, `grace_days`, `target_count`（sessions）
+- `current_month`, `keep_from_month`, `drop_before_month`, `drop_partition_count`, `drop_candidate_row_count`, `next_partition`（audit）
+- `deleted_count`, `duration_ms`, `status`, `error`
 
 ## CI 実装方針
 

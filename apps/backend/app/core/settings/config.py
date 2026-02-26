@@ -87,9 +87,9 @@ class AppSettings(BaseSettings):
     argon2_parallelism: int = Field(default=4, validation_alias="ARGON2_PARALLELISM")
     argon2_hash_len: int = Field(default=32, validation_alias="ARGON2_HASH_LEN")
     argon2_salt_len: int = Field(default=16, validation_alias="ARGON2_SALT_LEN")
-    session_ttl_seconds: int = Field(
-        default=604800,
-        validation_alias="SESSION_TTL_SECONDS",
+    session_ttl_hours: int = Field(
+        default=168,
+        validation_alias="SESSION_TTL_HOURS",
     )
     session_expired_grace_days: int = Field(
         default=3,
@@ -200,16 +200,16 @@ class AppSettings(BaseSettings):
             return [item.strip().lower() for item in value.split(",") if item.strip()]
         return value
 
-    @field_validator("session_ttl_seconds")
+    @field_validator("session_ttl_hours")
     @classmethod
-    def _validate_session_ttl_seconds(cls, value: int) -> int:
+    def _validate_session_ttl_hours(cls, value: int) -> int:
         """
-        SESSION_TTL_SECONDS の範囲を検証する.
+        SESSION_TTL_HOURS の範囲を検証する.
 
-        許容範囲: 3600..2592000（1時間..30日）
+        許容範囲: 1..720（1時間..30日）
         """
-        if not 3600 <= value <= 2592000:
-            raise ValueError("SESSION_TTL_SECONDS must be between 3600 and 2592000")
+        if not 1 <= value <= 720:
+            raise ValueError("SESSION_TTL_HOURS must be between 1 and 720")
         return value
 
     @field_validator("session_expired_grace_days")

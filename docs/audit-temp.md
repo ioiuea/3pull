@@ -175,8 +175,8 @@
 
 ## 7.1 セッション関連
 
-- `SESSION_TTL_SECONDS`
-  - 既定: `604800`（7日）
+- `SESSION_TTL_HOURS`
+  - 既定: `168`（7日）
   - 説明: アプリセッション有効期間
   - 注意: Entra 実運用ポリシーより長すぎない値を推奨
 
@@ -277,10 +277,10 @@
 
 ### 0-1. 環境変数仕様（確定）
 
-- `SESSION_TTL_SECONDS`
-  - default: `604800`（7日）
-  - min: `3600`（1時間）
-  - max: `2592000`（30日）
+- `SESSION_TTL_HOURS`
+  - default: `168`（7日）
+  - min: `1`（1時間）
+  - max: `720`（30日）
   - 意図: 短すぎる設定ミスを防止しつつ、過度に長いセッションを防止する。
 
 - `SESSION_EXPIRED_GRACE_DAYS`
@@ -459,13 +459,13 @@
 ## Phase 2: アプリケーション実装
 
 1. 設定クラス（pydantic-settings）へ新 env を追加し、境界値バリデーションを実装する。
-   - `SESSION_TTL_SECONDS`（min/max）
+   - `SESSION_TTL_HOURS`（min/max）
    - `SESSION_EXPIRED_GRACE_DAYS`（0..7）
    - `AUTH_AUDIT_RETENTION_MONTHS`（1..84）
    - `SESSION_CLEANUP_ENABLED`
    - `AUDIT_CLEANUP_ENABLED`
    - `CLEANUP_BATCH_SIZE`（min/max）
-   - 互換目的で残している `SESSION_TTL_MINUTES` は、本ステップの最終作業で廃止する（参照コード・envコメントを整理し、`SESSION_TTL_SECONDS` に一本化）。
+   - `SESSION_TTL_SECONDS` は廃止し、参照コード・env・ドキュメントを `SESSION_TTL_HOURS` に一本化する。
 2. 監査ログ Repository / Service を作成する。
    - `event_type` は ENUM 前提で保存
    - `user_id/session_id/provider/client_ip/xff_raw/connection_ip/user_agent/reason_code/metadata` を統一インタフェースで受け取る
