@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { Button } from '~/components/ui/button';
-import { backendFetch, getMe } from '~/lib/api-helper';
+import { useMe } from '~/hooks/use-me';
+import { backendFetch } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
 
 /**
@@ -15,31 +15,9 @@ import { isSupportedLanguage } from '~/lib/i18n';
 const LogoutSwitcher = () => {
   const { t } = useTranslation('common');
   const { lng } = useParams();
-  const { pathname, search, hash } = useLocation();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  useEffect(() => {
-    let ignore = false;
-
-    const checkAuth = async () => {
-      try {
-        const me = await getMe();
-        if (!ignore) {
-          setIsAuthenticated(Boolean(me));
-        }
-      } catch {
-        if (!ignore) {
-          setIsAuthenticated(false);
-        }
-      }
-    };
-
-    void checkAuth();
-    return () => {
-      ignore = true;
-    };
-  }, [pathname, search, hash]);
+  const { data: me, error } = useMe();
+  const isAuthenticated = Boolean(me) && !error;
 
   if (!isAuthenticated) {
     return null;

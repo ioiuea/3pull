@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
-import { backendFetch, getMe, type AuthMe } from '~/lib/api-helper';
+import { useMe } from '~/hooks/use-me';
+import { backendFetch } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
 
 type EntraGraphProfile = {
@@ -21,9 +22,8 @@ const ProfileSamplePage = () => {
   const { t } = useTranslation('profileSample');
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
-  const [profile, setProfile] = useState<AuthMe | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const { data: profile, error: meError, isLoading } = useMe();
+  const errorMessage = meError instanceof Error ? meError.message : null;
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -33,40 +33,6 @@ const ProfileSamplePage = () => {
   const [entraProfile, setEntraProfile] = useState<EntraGraphProfile | null>(null);
   const [entraProfileError, setEntraProfileError] = useState<string | null>(null);
   const [isLoadingEntraProfile, setIsLoadingEntraProfile] = useState(false);
-
-  useEffect(() => {
-    let ignore = false;
-
-    const fetchProfile = async () => {
-      try {
-        setIsLoading(true);
-        setErrorMessage(null);
-        setEntraProfileError(null);
-
-        const me = await getMe();
-        if (!me) {
-          throw new Error('Unauthorized');
-        }
-        if (!ignore) {
-          setProfile(me);
-        }
-      } catch (error) {
-        if (!ignore) {
-          const message = error instanceof Error ? error.message : t('states.error');
-          setErrorMessage(message);
-        }
-      } finally {
-        if (!ignore) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void fetchProfile();
-    return () => {
-      ignore = true;
-    };
-  }, [t]);
 
   const canChangePassword = profile?.user_type === 'external';
   const canFetchEntraProfile = profile?.user_type === 'internal';

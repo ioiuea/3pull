@@ -196,6 +196,78 @@ apps/frontend
 - internal ユーザーのみ呼び出し可能なため、`user_type` を見てボタン表示を制御します。
 - `access_token_expires_at` は表示用情報であり、実際の更新は backend 側の refresh 処理に委譲します。
 
+## フェッチ戦略（SWR + api-helper）
+
+- Fetch の実体（`fetch` 呼び出し）は `apps/frontend/app/lib/api-helper.ts` に集約します。
+- キャッシュ・再検証は呼び出し側（React）で `SWR` を使って制御します。
+- 方針:
+- `api-helper`: transport と API 単位クライアント（`backendFetch`, `getMe`, `getAuditLogs`）
+- `hooks`: SWR key 設計、再検証戦略、UI 向けデータ整形
+- `components/routes`: hook を呼んで表示とイベント処理に専念する
+
+### 実装ルール
+
+- SWR key にはページング/検索条件を必ず含め、条件単位でキャッシュを分離します。
+- 認証付き呼び出しは `backendFetch` 経由で `credentials: "include"` を維持します。
+- `revalidateOnFocus` の使い分け:
+- 頻繁な自動再読込が不要な画面（管理画面・一覧・検索結果）は `false` を推奨。
+- 常に最新性を優先したい画面（通知件数など）は `true` を検討。
+- `keepPreviousData` の使い分け:
+- ページングやフィルタ変更時に表示のちらつきを抑えたい場合は `true` を推奨。
+- 常に条件変更ごとに完全ローディング状態を見せたい場合は `false` でもよい。
+
+### 記述例（推奨）
+
+```ts
+// 1) api-helper: fetch の実体
+// apps/frontend/app/lib/api-helper.ts
+export const getMe = async () => {
+  // backendFetch は同ファイル内の共通ラッパー。
+  // `VITE_BACKEND_BASE_URL + /backend` を自動付与し、
+  // `credentials: "include"` とヘッダー正規化を統一する。
+  const response = await backendFetch('/auth/me');
+  // /auth/me は「未ログイン」を通常状態として扱うため、401 は null を返す。
+  if (response.status === 401) return null;
+  // 401 以外の失敗は例外として呼び出し側へ通知する。
+  if (!response.ok) throw new Error(`/auth/me failed: ${response.status}`);
+  // 成功時は AuthMe として返す。
+  return (await response.json()) as AuthMe;
+};
+```
+
+```ts
+// 2) hook: SWR でキャッシュ/再検証を制御
+// apps/frontend/app/hooks/use-me.ts
+import useSWR from 'swr';
+import { getMe } from '~/lib/api-helper';
+
+export const useMe = () =>
+  useSWR('auth-me', getMe, {
+    revalidateOnFocus: false,
+  });
+```
+
+```tsx
+// 3) component/route: hook を使って表示とイベントを実装
+import { useMe } from '~/hooks/use-me';
+
+const { data, error, isLoading, mutate } = useMe();
+if (isLoading) return <Loading />;
+if (error) return <ErrorView />;
+if (!data) return <LoginLink />;
+return <Profile me={data} onReload={() => void mutate()} />;
+```
+
+### エラー取り扱い
+
+- 一般ルール:
+- 「未ログイン」を通常状態として扱いたい API（例: `getMe`）は `401` を `null` で返す。
+- それ以外の API は `!ok` を `Error` として throw し、UI 側で `error` を表示する。
+- UI 側の基本対応:
+- `isLoading`: ローディング表示
+- `error`: 失敗メッセージ + 再試行ボタン（`mutate`）
+- `data` なし（`null`）: 未ログイン導線や空状態を表示
+
 ## CI 方針
 
 - Frontend の CI は `Makefile` 経由で実行することを基本方針とします。

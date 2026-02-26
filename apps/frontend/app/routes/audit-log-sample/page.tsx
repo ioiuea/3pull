@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
 import { ArrowLeft, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
-import { getAuditLogs, type AuditLogItem } from '~/lib/api-helper';
+import { useAuditLogs } from '~/hooks/use-audit-logs';
 import { isSupportedLanguage } from '~/lib/i18n';
 
 const PAGE_SIZE = 20;
@@ -15,44 +15,25 @@ const AuditLogSamplePage = () => {
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
 
-  const [items, setItems] = useState<AuditLogItem[]>([]);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const [eventType, setEventType] = useState('');
   const [userId, setUserId] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const { data, error, isLoading, mutate } = useAuditLogs({
+    page,
+    pageSize: PAGE_SIZE,
+    eventType,
+    userId,
+  });
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const errorMessage = error instanceof Error ? error.message : null;
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
-  const loadLogs = async (nextPage: number) => {
-    try {
-      setIsLoading(true);
-      setErrorMessage(null);
-      const response = await getAuditLogs({
-        page: nextPage,
-        pageSize: PAGE_SIZE,
-        eventType: eventType.trim() || undefined,
-        userId: userId.trim() || undefined,
-      });
-      setItems(response.items);
-      setPage(response.page);
-      setTotal(response.total);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : t('states.error'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadLogs(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const onSearch = async (event: React.FormEvent<HTMLFormElement>) => {
+  const onSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await loadLogs(1);
+    setPage(1);
   };
 
   return (
@@ -63,7 +44,7 @@ const AuditLogSamplePage = () => {
           <p className="mt-2 text-muted-foreground">{t('description')}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => void loadLogs(page)} disabled={isLoading}>
+          <Button variant="outline" onClick={() => void mutate()} disabled={isLoading}>
             {isLoading ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -167,14 +148,14 @@ const AuditLogSamplePage = () => {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => void loadLogs(page - 1)}
+                onClick={() => setPage((prev) => prev - 1)}
                 disabled={isLoading || page <= 1}
               >
                 {t('actions.prev')}
               </Button>
               <Button
                 variant="outline"
-                onClick={() => void loadLogs(page + 1)}
+                onClick={() => setPage((prev) => prev + 1)}
                 disabled={isLoading || page >= totalPages}
               >
                 {t('actions.next')}
