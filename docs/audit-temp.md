@@ -264,21 +264,190 @@
 
 ## Phase 0: 仕様確定
 
-1. 環境変数名・既定値・上限下限を確定。
-2. 監査イベント一覧と `event_type` 命名規約を確定。
-3. 監査ログに保存する PII の境界を確定。
+目的:
+
+1. 環境変数名・既定値・上限下限を確定する。
+2. 監査イベント一覧と `event_type` 命名規約を確定する。
+3. 監査ログに保存する PII 境界を確定する。
 
 成果物:
 
 - 設計メモ更新
 - `.env.example` 追記仕様
 
+### 0-1. 環境変数仕様（確定）
+
+- `SESSION_TTL_SECONDS`
+  - default: `604800`（7日）
+  - min: `3600`（1時間）
+  - max: `2592000`（30日）
+  - 意図: 短すぎる設定ミスを防止しつつ、過度に長いセッションを防止する。
+
+- `SESSION_EXPIRED_GRACE_DAYS`
+  - default: `3`
+  - min: `0`
+  - max: `7`
+  - 意図: 運用調査猶予を確保しつつ、セッションテーブル肥大化を抑制する。
+
+- `AUTH_AUDIT_RETENTION_DAYS`
+  - default: `365`
+  - min: `1`
+  - max: `2555`（約7年）
+  - 意図: 監査保持要件（デフォルト1年、最大7年）を満たす。
+
+- `SESSION_CLEANUP_ENABLED`
+  - default: `true`
+
+- `AUDIT_CLEANUP_ENABLED`
+  - default: `true`
+
+- `CLEANUP_BATCH_SIZE`
+  - default: `5000`
+  - min: `100`
+  - max: `50000`
+  - 意図: 大量削除時のロック/IO負荷と実行時間のバランスを取る。
+
+### 0-2. 監査イベント仕様（確定）
+
+- `event_type` は `ENUM` で管理する。
+- 形式は `<domain>.<action>.<result>` とする。
+- `domain` は固定で `auth`。
+- `action` は以下を許可する。
+  - `login`
+  - `logout`
+  - `session_refresh`
+  - `session_revoke`
+  - `signup`
+  - `email_verify`
+  - `password_change`
+  - `password_reset_request`
+  - `password_reset_confirm`
+  - `entra_callback`
+  - `entra_profile_fetch`
+- `result` は `success` / `fail`。
+- 例:
+  - `auth.login.success`
+  - `auth.login.fail`
+  - `auth.password_reset_confirm.success`
+  - `auth.entra_callback.fail`
+- 新イベント追加時は Alembic migration で ENUM 値を追加する。
+
+### 0-3. 監査ログのデータ保持境界（確定）
+
+保存してよい:
+
+- `user_id`
+- `session_id`
+- `provider`（`entra` / `email`）
+- `client_ip`
+- `xff_raw`
+- `connection_ip`
+- `user_agent`
+- `reason_code`
+- 最小限の `metadata`
+
+保存しない（禁止）:
+
+- 平文パスワード
+- 平文 access token / refresh token
+- メール本文・本人確認トークンの平文
+- Authorization ヘッダ生値
+- Cookie 生値
+
+補足:
+
+- `email` は原則 `metadata` に保存しない（必要時のみマスクまたはハッシュ化）。
+
+### 0-4. User 参照整合性ポリシー（確定）
+
+- `users` テーブルは物理削除しない（論理運用）。
+- ユーザー有効/無効は `users.is_active` で制御する。
+- 監査ログは `user_id` 参照を維持し、表示/CSV出力時は `users` と JOIN して情報解決する。
+- 監査ログ `user_id` の外部キーは `ON DELETE SET NULL` とする。
+  - 現行運用では発動しない想定だが、将来の運用変更や手動削除事故時の保険として採用する。
+
+### 0-5. クライアントIP保存仕様（確定）
+
+- `client_ip`: 実クライアントIP（`X-Forwarded-For` 先頭値）を保存する。
+- `xff_raw`: `X-Forwarded-For` ヘッダー生値を保存する。
+- `connection_ip`: `request.client.host`（直近接続元）を保存する。
+- 前提:
+  - AppGW が `X-Forwarded-For` を付与していること。
+  - 信頼できるプロキシ経路のみで本APIへ到達すること。
+
+### 0-6. `metadata` 仕様（確定 / 4KB上限）
+
+- `metadata` は `JSONB` とする。
+- サイズ上限は `4KB` とする。
+- 保存可能キーは allowlist で固定する。
+  - `path`
+  - `method`
+  - `request_id`
+  - `user_type`（`internal` / `external`）
+  - `reason_detail`
+  - `lockout_count`
+  - `lockout_until`
+  - `entra_tenant_id`
+  - `entra_oid`
+  - `mfa_performed`（boolean）
+  - `metadata_truncated`（boolean）
+- 運用ルール:
+  - 上限超過時は値をトリムし、`metadata_truncated=true` を付与する。
+  - allowlist 外キーは保存しない。
+  - 機密情報（トークン/パスワード/Cookie/Authorization 生値）は保存禁止。
+
+### 0-7. cleanup・保持運用仕様（確定）
+
+- 監査ログテーブル主キーは `BIGINT` とする。
+  - 理由: 高頻度INSERT前提で、`UUID` より行/インデックスが小さく、書き込み・検索効率が高い。
+  - 将来外部連携が必要な場合は、主キーとは別に外部公開用識別子（UUID等）を追加する。
+
+- retention cleanup は「月次パーティション + DROP 主体」とする。
+  - パーティション粒度は月単位（`occurred_at` の RANGE partition）。
+  - 保持期限を超えた月パーティションは `DROP` で廃棄する。
+  - 保持日数境界月（例: 365日）は必要に応じて `DELETE` で補正する。
+
+- cleanup 実行頻度は用途別に分離する。
+  - `sessions cleanup`: 1時間毎
+  - `audit retention cleanup`: 1日1回
+  - 理由: セッション削除負荷の平準化と、日次判定による運用安定化の両立。
+
+- cleanup 実行結果の記録先は `Application Insights` とする。
+  - ジョブごとに構造化ログ（`job_name`, `status`, `deleted_count`, `duration_ms`, `error` など）を出力する。
+  - 監視・分析は App Insights / Log Analytics クエリを基準とする。
+  - 本フェーズでは Slack/Teams 連携は対象外とする。
+
+### 0-8. Phase 0 完了条件（DoD）
+
+- `.env.example` へ追記すべき項目（既定値・範囲・注意点）が仕様として定義されている。
+- `AppSettings` へ追加すべき項目と境界値バリデーション仕様が定義されている。
+- 監査イベント一覧と `event_type` 命名規約（ENUM 方針含む）が文書化されている。
+- PII 境界（保存可/不可）が文書化されている。
+- `metadata` allowlist と 4KB 制約が文書化されている。
+- cleanup 運用方針（DROP 主体、頻度、App Insights 記録）が文書化されている。
+- Phase 0 の未確定事項が 0 件である。
+
 ## Phase 1: DB スキーマ準備
 
-1. `auth_audit_logs` 親テーブル migration 作成。
-2. 初期パーティション（月次）作成 migration。
-3. インデックス作成 migration。
-4. 既存 `sessions` インデックス見直し（不足があれば追加 migration）。
+1. `event_type` 用 ENUM 型 migration 作成（確定イベント値を初期登録）。
+2. `auth_audit_logs` 親テーブル migration 作成。
+3. `auth_audit_logs` に必要カラムを定義。
+   - `id`（BIGINT）
+   - `occurred_at`
+   - `event_type`（ENUM）
+   - `user_id`（FK: `ON DELETE SET NULL`）
+   - `session_id`
+   - `provider`
+   - `client_ip`
+   - `xff_raw`
+   - `connection_ip`
+   - `user_agent`
+   - `reason_code`
+   - `metadata`（JSONB）
+4. 初期パーティション（月次）作成 migration。
+5. インデックス作成 migration（`occurred_at`, `event_type+occurred_at`, `user_id+occurred_at` など）。
+6. 既存 `sessions` インデックス見直し（不足があれば追加 migration）。
+7. パーティション保守方針を反映するため、将来月の事前作成手順（またはジョブ）を設計する。
 
 成果物:
 
@@ -286,12 +455,17 @@
 
 ## Phase 2: アプリケーション実装
 
-1. 監査ログ Repository / Service 作成。
-2. 認証フロー各所へ監査イベント記録を追加。
-3. cleanup 実行モジュール（CLI）を追加。
-4. `sessions` cleanup 実装（期限切れ + 猶予 + バッチ削除）。
-5. `auth_audit_logs` retention cleanup 実装（期間超過パーティション/データ削除）。
-6. 設定クラス（pydantic-settings）へ新 env を追加しバリデーション実装。
+1. 設定クラス（pydantic-settings）へ新 env を追加しバリデーション実装。
+2. 監査ログ Repository / Service 作成（ENUM、IPカラム、metadata 取扱い対応）。
+3. `metadata` の allowlist フィルタと 4KB 制限（`metadata_truncated` 付与）を実装。
+4. 認証フロー各所へ監査イベント記録を追加（success/fail 両方）。
+5. `client_ip` / `xff_raw` / `connection_ip` 解決ロジックを実装（信頼プロキシ前提）。
+6. cleanup 実行モジュール（CLI）を追加。
+   - `sessions cleanup` コマンド
+   - `audit retention cleanup` コマンド
+7. `sessions` cleanup 実装（期限切れ + 猶予 + バッチ削除）。
+8. `auth_audit_logs` retention cleanup 実装（DROP 主体 + 境界月補正 DELETE）。
+9. cleanup 実行結果を App Insights 向け構造化ログで出力。
 
 成果物:
 
@@ -303,7 +477,10 @@
 
 1. `apps/backend/Dockerfile` 作成。
 2. API 起動コマンド確認。
-3. cleanup ジョブコマンド確認。
+3. cleanup ジョブコマンド確認（2種）。
+   - `sessions cleanup`
+   - `audit retention cleanup`
+4. コンテナ起動時の env 注入とログ出力先（App Insights 連携前提）を確認。
 
 成果物:
 
@@ -315,6 +492,14 @@
 2. Deployment/Service を chart 化。
 3. CronJob 2 種を chart 化。
 4. `values.yaml` / `values-dev.yaml` へ cleanup/retention パラメータ追加。
+5. 既定スケジュールを values に定義。
+   - `sessions cleanup`: 1時間毎
+   - `audit retention cleanup`: 1日1回
+6. CronJob の運用設定を values に定義。
+   - `concurrencyPolicy: Forbid`
+   - `backoffLimit`
+   - `successfulJobsHistoryLimit` / `failedJobsHistoryLimit`
+   - `ttlSecondsAfterFinished`
 
 成果物:
 
@@ -324,15 +509,20 @@
 
 1. Unit test:
    - env バリデーション
+   - event_type ENUM マッピング
+   - metadata allowlist/4KB 制限
+   - IP 抽出ロジック（`X-Forwarded-For`）
    - retention 判定
    - cleanup 対象抽出
 2. Integration test:
    - セッション期限切れ削除
    - 監査ログ retention 削除
    - 認証イベント記録
+   - `ON DELETE SET NULL` の整合性
 3. Staging 検証:
    - CronJob 手動実行
    - 再実行時の多重起動抑止
+   - App Insights へ cleanup 実行ログが記録されること
 
 成果物:
 
@@ -345,6 +535,7 @@
 2. cleanup を dry-run 相当で観測（可能なら）。
 3. 本削除有効化。
 4. 運用メトリクス/アラート調整。
+5. Runbook（障害時復旧、手動実行、ロールバック）を確定。
 
 ---
 
@@ -393,12 +584,3 @@
 8. README / Runbook 更新
 
 ---
-
-## 14. 未確定事項（次回決定）
-
-- 監査ログテーブルの主キー方式（UUID/BIGINT）
-- 監査ログでの `event_type` を ENUM にするか TEXT にするか
-- retention cleanup を「パーティション DROP」主体にするか「DELETE」主体にするか
-- cleanup の実行頻度（1時間毎 or 1日毎）
-- cleanup 実行結果の通知先（Slack / Teams / App Insights）
-
