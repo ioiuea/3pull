@@ -8,7 +8,6 @@ from app.adapters.postgres.session import get_session_factory
 from app.adapters.storage import delete_blob
 from app.core.logging.config import get_logger
 from app.core.settings import get_settings
-from app.jobs.cleanup.common import CleanupResult
 from app.repositories.jobs import (
     count_async_job_artifacts_by_job_id,
     count_expired_async_job_artifacts,
@@ -16,6 +15,7 @@ from app.repositories.jobs import (
     list_expired_async_job_artifacts,
     mark_async_jobs_expired_by_ids,
 )
+from app.schedulers.cleanup.common import CleanupResult
 
 logger = get_logger(__name__)
 

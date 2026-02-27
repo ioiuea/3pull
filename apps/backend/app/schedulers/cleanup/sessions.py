@@ -6,11 +6,11 @@ from time import perf_counter
 from app.adapters.postgres.session import get_session_factory
 from app.core.logging.config import get_logger
 from app.core.settings import get_settings
-from app.jobs.cleanup.common import CleanupResult
 from app.repositories.auth.session_repository import (
     count_expired_sessions_for_cleanup,
     delete_expired_sessions_batch,
 )
+from app.schedulers.cleanup.common import CleanupResult
 
 logger = get_logger(__name__)
 

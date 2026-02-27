@@ -6,13 +6,13 @@ from time import perf_counter
 from app.adapters.postgres.session import get_session_factory
 from app.core.logging.config import get_logger
 from app.core.settings import get_settings
-from app.jobs.cleanup.common import CleanupResult, add_months, month_start
 from app.repositories.auth.auth_audit_log_repository import (
     count_rows_in_audit_partition,
     drop_audit_partition,
     ensure_next_month_audit_partition,
     list_audit_partitions_for_drop,
 )
+from app.schedulers.cleanup.common import CleanupResult, add_months, month_start
 
 logger = get_logger(__name__)
 

@@ -7,16 +7,16 @@ from time import perf_counter
 
 from app.core.logging.config import configure_logging, get_logger
 from app.core.settings import get_settings
-from app.jobs.cleanup.async_jobs import run_jobs_cleanup
-from app.jobs.cleanup.audit_logs import run_audit_cleanup
-from app.jobs.cleanup.common import batch_size_type
-from app.jobs.cleanup.sessions import run_sessions_cleanup
+from app.schedulers.cleanup.async_jobs import run_jobs_cleanup
+from app.schedulers.cleanup.audit_logs import run_audit_cleanup
+from app.schedulers.cleanup.common import batch_size_type
+from app.schedulers.cleanup.sessions import run_sessions_cleanup
 
 logger = get_logger(__name__)
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m app.jobs.auth_cleanup")
+    parser = argparse.ArgumentParser(prog="python -m app.schedulers.scheduler_cleanup")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     sessions_parser = subparsers.add_parser("sessions")

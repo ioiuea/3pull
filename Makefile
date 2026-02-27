@@ -84,22 +84,22 @@ alembic-upgrade:
 	cd $(BACKEND_DIR) && uv run alembic upgrade head
 
 cleanup-sessions:
-	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup sessions
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup sessions
 
 cleanup-sessions-dry-run:
-	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup sessions --dry-run
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup sessions --dry-run
 
 cleanup-audit:
-	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup audit
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup audit
 
 cleanup-audit-dry-run:
-	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup audit --dry-run
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup audit --dry-run
 
 cleanup-jobs:
-	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup jobs
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup jobs
 
 cleanup-jobs-dry-run:
-	uv --directory $(BACKEND_DIR) run python -m app.jobs.auth_cleanup jobs --dry-run
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup jobs --dry-run
 
 # ------------------------------
 # Combined runtime targets

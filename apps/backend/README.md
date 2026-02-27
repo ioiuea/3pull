@@ -51,8 +51,8 @@ apps/backend
 │   ├── repositories/                     # 永続化アクセス層（CRUD/クエリ）
 │   │   ├── auth/                         # 認証機能のRepository群
 │   │   └── jobs/                         # 非同期ジョブ基盤のRepository群
-│   ├── jobs/                             # バッチ/定期実行ジョブ層（cleanup等）
-│   │   ├── auth_cleanup.py               # cleanup CLIエントリポイント
+│   ├── schedulers/                       # 定期実行・保守バッチ層（cleanup等）
+│   │   ├── scheduler_cleanup.py               # cleanup CLIエントリポイント
 │   │   └── cleanup/                      # 対象別 cleanup 実装（sessions/audit/jobs）
 │   ├── workers/                          # Celery worker / task 実装
 │   └── services/                         # ユースケース層（業務ロジック）
@@ -239,7 +239,7 @@ else:
 
 ## 認証データ cleanup CLI 仕様
 
-- 認証データの定期削除は `app.jobs.auth_cleanup` を使用します。
+- 定期データの cleanup は `app.schedulers.scheduler_cleanup` を使用します。
 - 実行は API リクエスト経路ではなく、バッチ（CronJob / 手動実行）で行います。
 
 ### 実行コマンド
@@ -255,12 +255,12 @@ else:
 - `make cleanup-jobs-dry-run`
 
 - 直接実行:
-- `uv --directory apps/backend run python -m app.jobs.auth_cleanup sessions`
-- `uv --directory apps/backend run python -m app.jobs.auth_cleanup sessions --dry-run`
-- `uv --directory apps/backend run python -m app.jobs.auth_cleanup audit`
-- `uv --directory apps/backend run python -m app.jobs.auth_cleanup audit --dry-run`
-- `uv --directory apps/backend run python -m app.jobs.auth_cleanup jobs`
-- `uv --directory apps/backend run python -m app.jobs.auth_cleanup jobs --dry-run`
+- `uv --directory apps/backend run python -m app.schedulers.scheduler_cleanup sessions`
+- `uv --directory apps/backend run python -m app.schedulers.scheduler_cleanup sessions --dry-run`
+- `uv --directory apps/backend run python -m app.schedulers.scheduler_cleanup audit`
+- `uv --directory apps/backend run python -m app.schedulers.scheduler_cleanup audit --dry-run`
+- `uv --directory apps/backend run python -m app.schedulers.scheduler_cleanup jobs`
+- `uv --directory apps/backend run python -m app.schedulers.scheduler_cleanup jobs --dry-run`
 
 ### sessions cleanup の仕様
 

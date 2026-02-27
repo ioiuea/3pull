@@ -1,4 +1,4 @@
-from app.jobs.auth_cleanup import _build_parser
+from app.schedulers.scheduler_cleanup import _build_parser
 
 
 def test_jobs_cleanup_command_is_available() -> None:
