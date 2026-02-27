@@ -45,6 +45,8 @@ apps/backend
 │   │   └── auth/                         # 認証機能のモデル群
 │   ├── repositories/                     # 永続化アクセス層（CRUD/クエリ）
 │   │   └── auth/                         # 認証機能のRepository群
+│   ├── jobs/                             # バッチ/定期実行ジョブ層（cleanup等）
+│   │   └── auth_cleanup.py               # 認証データcleanup CLIエントリポイント
 │   └── services/                         # ユースケース層（業務ロジック）
 │       ├── auth/                         # 認証ユースケース
 │       └── health.py                     # ヘルスチェックユースケース
