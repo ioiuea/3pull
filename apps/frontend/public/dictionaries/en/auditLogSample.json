@@ -1,34 +1,55 @@
 {
-  "title": "Audit Log Viewer",
-  "description": "Browse authentication audit logs with pagination and basic filters.",
+  "title": "Audit Logs",
   "actions": {
-    "reload": "Reload",
     "backToLp": "Back to LP",
-    "search": "Search",
     "prev": "Prev",
     "next": "Next"
   },
   "states": {
     "loading": "Loading audit logs...",
-    "empty": "No audit logs found.",
+    "empty": "No audit logs matched the current filters.",
     "error": "Failed to load audit logs."
+  },
+  "overview": {
+    "totalRows": "Visible rows (current page)",
+    "serverTotal": "Server total: {{total}}",
+    "resultRatio": "Result ratio",
+    "successFail": "Success / Fail",
+    "uniqueUsers": "Unique users",
+    "uniqueClientIps": "Unique client IPs",
+    "withinFilter": "Within current filters"
   },
   "filters": {
     "title": "Filters",
-    "eventType": "event_type (exact match)",
-    "userId": "user_id (UUID)"
+    "description": "These filters affect both chart and table.",
+    "keywordPlaceholder": "keyword",
+    "dateAll": "date: all",
+    "eventTypeAll": "event type: all",
+    "providerAll": "provider: all"
+  },
+  "ranges": {
+    "last3Months": "Last 3 months",
+    "last30Days": "Last 30 days",
+    "last7Days": "Last 7 days"
+  },
+  "chart": {
+    "title": "Event types timeline",
+    "description": "Daily counts for top event types in the selected range"
   },
   "table": {
-    "title": "Audit Logs (total: {{total}})",
-    "occurredAt": "Occurred At",
-    "eventType": "Event Type",
-    "userId": "User ID",
-    "userName": "User Name",
-    "userEmail": "User Email",
-    "sessionId": "Session ID",
-    "provider": "Provider",
-    "clientIp": "Client IP",
-    "reasonCode": "Reason Code",
-    "pagination": "Page {{page}} / {{totalPages}}"
+    "title": "Audit records",
+    "description": "Page {{page}} / {{totalPages}} (server total: {{total}})",
+    "queryPageSize": "Query page size: {{pageSize}}",
+    "columns": {
+      "occurredAt": "Occurred At",
+      "eventType": "Event Type",
+      "userId": "User ID",
+      "userName": "User Name",
+      "userEmail": "User Email",
+      "sessionId": "Session ID",
+      "provider": "Provider",
+      "clientIp": "Client IP",
+      "reasonCode": "Reason Code"
+    }
   }
 }

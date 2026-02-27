@@ -109,9 +109,7 @@ async def _run_sessions_cleanup(*, dry_run: bool, batch_size: int) -> CleanupRes
         )
 
     run_at = datetime.now(timezone.utc)
-    cutoff = run_at - timedelta(
-        days=settings.session_expired_grace_days
-    )
+    cutoff = run_at - timedelta(days=settings.session_expired_grace_days)
     session_factory = get_session_factory()
     target_count = 0
 

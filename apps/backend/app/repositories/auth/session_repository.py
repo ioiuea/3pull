@@ -212,7 +212,5 @@ async def delete_expired_sessions_batch(
     if not target_ids:
         return 0
 
-    await session.execute(
-        delete(UserSession).where(UserSession.id.in_(target_ids))
-    )
+    await session.execute(delete(UserSession).where(UserSession.id.in_(target_ids)))
     return len(target_ids)
