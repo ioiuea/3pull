@@ -67,9 +67,14 @@ apps/backend
 │       └── health.py                     # ヘルスチェックユースケース
 ├── alembic/                              # マイグレーション管理層
 │   └── versions/                         # 生成されたリビジョンファイル
-└── postgres/                             # 初期DB構築スクリプト群
-    ├── run_all.sh                        # DB/Schema/Roleセットアップ実行
-    └── scripts/                          # 個別セットアップスクリプト
+├── scripts/                              # 初期構築・運用補助スクリプト群
+│   ├── postgres/                         # PostgreSQL 初期構築スクリプト群
+│   │   ├── run_all.sh                    # DB/Schema/Roleセットアップ実行
+│   │   ├── README.md                     # PostgreSQL 初期構築手順
+│   │   └── scripts/                      # 個別セットアップスクリプト
+│   └── storage/                          # Storage 初期構築スクリプト群
+│       ├── create_blob_container.py      # Blob コンテナ作成 CLI
+│       └── README.md                     # Storage 初期構築手順
 ```
 
 - `api/` は HTTP 入出力、`services/` はユースケース、`repositories/` は DB 操作、`models/` は ORM 定義を担当します。

@@ -40,15 +40,18 @@
    フロントエンド/バックエンドの依存関係をまとめてセットアップします。
 
 3. PostgreSQL 初期セットアップを行う
-   `apps/backend/postgres/README.md` を参照して、データベース/スキーマ/ロール/`search_path` を作成します。
+   `apps/backend/scripts/postgres/README.md` を参照して、データベース/スキーマ/ロール/`search_path` を作成します。
 
-4. Entra ID の OIDC アプリを作成する
+4. 非同期ジョブ用の Blob コンテナを作成する
+   `apps/backend/scripts/storage/README.md` を参照して、非同期ジョブ成果物の保存先となる Blob コンテナを作成します。
+
+5. Entra ID の OIDC アプリを作成する
    Entra ID 側で OIDC 用アプリを作成し、クライアントID/シークレット/リダイレクトURIを準備します。
 
-5. 環境変数ファイルを展開して更新する
+6. 環境変数ファイルを展開して更新する
    まず `make env` で `.env` を生成し、生成後に各 `.env` を環境値に更新します。
 
-6. アプリを起動する
+7. アプリを起動する
    用途に応じて以下を実行します。
    - 本番相当起動: `make up-api` / `make up-web`
    - 開発起動: `make dev-api` / `make dev-web`

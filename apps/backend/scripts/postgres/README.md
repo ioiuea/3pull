@@ -9,19 +9,19 @@
 
 ### 各スクリプトの役割
 
-- `apps/backend/postgres/run_all.sh`
+- `apps/backend/scripts/postgres/run_all.sh`
   - 初期化スクリプトを順番にすべて実行します。
 
-- `apps/backend/postgres/scripts/001_create_database.sh`
+- `apps/backend/scripts/postgres/scripts/001_create_database.sh`
   - デフォルト DB `postgres` に接続し、`PGDATABASE` で指定した DB がなければ作成します。
 
-- `apps/backend/postgres/scripts/002_create_schema.sh`
+- `apps/backend/scripts/postgres/scripts/002_create_schema.sh`
   - `PGDATABASE` に接続し、`core` スキーマを作成します（未作成時のみ）。
 
-- `apps/backend/postgres/scripts/003_roles.sh`
+- `apps/backend/scripts/postgres/scripts/003_roles.sh`
   - API 用ロール（`core` スキーマ管理）を作成し、最小権限を付与し、`PUBLIC` 権限を制限します。
 
-- `apps/backend/postgres/scripts/004_search_path.sh`
+- `apps/backend/scripts/postgres/scripts/004_search_path.sh`
   - API 用ロールの `search_path` 既定値を設定します。
   - api 用: `core,public`
 
@@ -41,7 +41,7 @@ export APP_DB_USER=threepull_api
 #### 1) 初期化スクリプトを一括実行（通常はこちら）
 
 ```bash
-bash apps/backend/postgres/run_all.sh
+bash apps/backend/scripts/postgres/run_all.sh
 ```
 
 補足:
@@ -53,25 +53,25 @@ bash apps/backend/postgres/run_all.sh
 ##### 2-1) データベース作成
 
 ```bash
-bash apps/backend/postgres/scripts/001_create_database.sh
+bash apps/backend/scripts/postgres/scripts/001_create_database.sh
 ```
 
 ##### 2-2) スキーマ作成
 
 ```bash
-bash apps/backend/postgres/scripts/002_create_schema.sh
+bash apps/backend/scripts/postgres/scripts/002_create_schema.sh
 ```
 
 ##### 2-3) ロール作成・権限設定
 
 ```bash
-bash apps/backend/postgres/scripts/003_roles.sh
+bash apps/backend/scripts/postgres/scripts/003_roles.sh
 ```
 
 ##### 2-4) `search_path` 既定値設定
 
 ```bash
-bash apps/backend/postgres/scripts/004_search_path.sh
+bash apps/backend/scripts/postgres/scripts/004_search_path.sh
 ```
 
 データベース作成後のスキーマ変更は、`core` を Alembic で管理してください。
