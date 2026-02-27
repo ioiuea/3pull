@@ -27,7 +27,13 @@ apps/backend
 │   ├── api/                              # APIインタフェース層（HTTP入出力）
 │   │   ├── routers/                      # エンドポイント定義層
 │   │   │   ├── auth.py                   # 認証API
-│   │   │   └── jobs.py                   # 非同期ジョブAPI
+│   │   │   └── jobs/                     # 非同期ジョブAPI（機能別分割）
+│   │   │       ├── __init__.py           # jobs ルーター集約
+│   │   │       ├── common.py             # 共通ヘルパー
+│   │   │       ├── read.py               # 参照系（一覧/詳細/成果物DL）
+│   │   │       ├── control.py            # 制御系（キャンセル等）
+│   │   │       ├── auth_audit_export.py  # 監査ログエクスポート作成
+│   │   │       └── sample_wait_blob.py   # サンプル待機ジョブ作成
 │   │   ├── schemas/                      # Request/Responseスキーマ層
 │   │   │   ├── auth.py                   # 認証APIスキーマ
 │   │   │   └── jobs.py                   # 非同期ジョブAPIスキーマ
@@ -327,17 +333,26 @@ else:
 
 - `async_jobs`
 - 主な列: `job_type`, `status`, `queue_name`, `task_name`, `requested_payload`, `result_payload`, `error_message`, `retry_count`, `started_at`, `finished_at`, `expires_at`
+- `job_type` は `VARCHAR` で管理し、許可値はアプリケーション層（`AsyncJobType`）で管理します。
 - `status`: `queued` / `running` / `succeeded` / `failed` / `canceled` / `expired`
 
 - `async_job_artifacts`
 - 主な列: `job_id`, `artifact_type`, `storage_provider`, `container_name`, `blob_path`, `content_type`, `file_size_bytes`, `expires_at`
+- `artifact_type` は `VARCHAR` で管理し、許可値はアプリケーション層（`AsyncJobArtifactType`）で管理します。
 - `job_id` は `async_jobs.id` を参照し、`ON DELETE CASCADE` で連動削除されます。
 
 #### Jobs API
 
-- `POST /backend/jobs`
-- ジョブ作成とキュー投入を行い、`202 Accepted` を返します。
-- 同時実行上限:
+- `POST /backend/jobs/auth-audit-export`
+- 監査ログエクスポートジョブを作成し、`202 Accepted` を返します。
+
+- `POST /backend/jobs/sample-wait-blob`
+- サンプル待機ジョブを作成し、`202 Accepted` を返します。
+
+- `POST /backend/jobs/{job_id}/cancel`
+- 自分の `queued` / `running` ジョブを `canceled` へ更新します。
+
+- 共通の同時実行上限:
 - 全体: `CELERY_GLOBAL_CONCURRENCY`
 - ユーザー単位: `CELERY_PER_USER_CONCURRENCY`
 
@@ -394,6 +409,42 @@ else:
 - task 設定: `CELERY_AUTH_AUDIT_EXPORT_TASK_NAME`（既定: `jobs.auth_audit_export`）
 - worker 実装: `app.workers.audit_export_tasks`
 - クエリ実装: `app.services.jobs.query.auth_audit_export_query_service`
+
+### ジョブ種別仕様: `sample_wait_blob`
+
+- 用途: 非同期ジョブ基盤の動作確認（待機後にテキスト成果物を生成）。
+- `job_type`: `sample_wait_blob`
+- queue 設定: `CELERY_SAMPLE_WAIT_BLOB_QUEUE_NAME`
+- task 設定: `CELERY_SAMPLE_WAIT_BLOB_TASK_NAME`（既定: `jobs.sample_wait_blob`）
+- worker 実装: `app.workers.sample_wait_blob_tasks`
+- ファイル名プレフィクスは固定値 `sample-wait-blob`（API入力で可変にしない）。
+
+### 新規ジョブ追加手順（実装テンプレート）
+
+- 1. ジョブ種別を定義する
+- `app/models/jobs/async_job.py` の `AsyncJobType` に新しい種別を追加する。
+- 成果物がある場合は `app/models/jobs/async_job_artifact.py` の `AsyncJobArtifactType` に追加する。
+
+- 2. 設定値を追加する
+- `app/core/settings/config.py` に queue 名 / task 名（`CELERY_<JOB>_QUEUE_NAME`, `CELERY_<JOB>_TASK_NAME`）を追加する。
+- `CELERY_TASK_MODULES` の既定値に新タスクモジュールを追加する。
+- `.env.example` に新しい環境変数の説明とサンプル値を追加する。
+- `.env`（実行環境）に同じ環境変数を設定する。
+- worker が新キューを購読できるよう、`CELERY_WORKER_QUEUES` に新キュー名を追加する。
+- `make dev-worker` / `make up-worker` を使う場合は、`Makefile` の既定値（`CELERY_WORKER_QUEUES ?= ...`）にも新キューが含まれることを確認する。
+
+- 3. API を追加する
+- `app/api/routers/jobs/` 配下に機能別ファイル（例: `foo_job.py`）を追加する。
+- `POST /backend/jobs/<job-name>` で `create_async_job` + `dispatch_async_job` を実装する。
+- 必要に応じてペイロードバリデーション（Pydantic）と同時実行制御を入れる。
+
+- 4. worker を追加する
+- `app/workers/` 配下に Celery タスクを追加し、`queued -> running -> succeeded/failed/canceled` を更新する。
+- 成果物生成時は `create_async_job_artifact` で DB メタ情報を保存する。
+
+- 5. cleanup と UI 連携を追加する
+- 成果物 TTL がある場合は既存 `scheduler_cleanup jobs` フローに乗るよう `expires_at` を設定する。
+- フロントのグローバル表示に載せる場合は `apps/frontend/app/lib/async-job-providers.ts` に provider を追加する。
 
 ## CI 実装方針
 

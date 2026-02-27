@@ -148,7 +148,10 @@ class AppSettings(BaseSettings):
         validation_alias="CELERY_TASK_TIME_LIMIT_SECONDS",
     )
     celery_task_modules: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["app.workers.audit_export_tasks"],
+        default_factory=lambda: [
+            "app.workers.audit_export_tasks",
+            "app.workers.sample_wait_blob_tasks",
+        ],
         validation_alias="CELERY_TASK_MODULES",
     )
     auth_audit_export_queue_name: str = Field(
@@ -158,6 +161,14 @@ class AppSettings(BaseSettings):
     auth_audit_export_task_name: str = Field(
         default="jobs.auth_audit_export",
         validation_alias="CELERY_AUTH_AUDIT_EXPORT_TASK_NAME",
+    )
+    sample_wait_blob_queue_name: str = Field(
+        default="sample_wait_blob",
+        validation_alias="CELERY_SAMPLE_WAIT_BLOB_QUEUE_NAME",
+    )
+    sample_wait_blob_task_name: str = Field(
+        default="jobs.sample_wait_blob",
+        validation_alias="CELERY_SAMPLE_WAIT_BLOB_TASK_NAME",
     )
     azure_blob_account_url: str | None = Field(
         default=None,

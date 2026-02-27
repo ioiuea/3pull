@@ -25,7 +25,8 @@ def test_parse_datetime_value_accepts_iso_string() -> None:
 
 
 def test_extract_filters_parses_event_type_and_dates() -> None:
-    # 目的: requested_filters の各入力が worker 用フィルタに正しく変換されることを保証する。
+    # 目的: requested_filters の各入力が
+    # worker 用フィルタに正しく変換されることを保証する。
     # 条件: event_type/provider/keyword/date_from/date_to を与える。
     # 期待値: event_type enum 化、文字列 trim、日時パースが行われる。
     event_type, provider, keyword, date_from, date_to = _extract_filters(

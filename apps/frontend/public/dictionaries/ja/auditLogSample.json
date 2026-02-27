@@ -1,5 +1,6 @@
 {
   "title": "監査ログ",
+  "description": "監査ログのフィルタ・可視化・エクスポートジョブを一体で確認できます。",
   "actions": {
     "backToLp": "LPへ戻る",
     "prev": "前へ",

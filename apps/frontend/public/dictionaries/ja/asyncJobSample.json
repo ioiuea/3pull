@@ -1,0 +1,63 @@
+{
+  "title": "非同期ジョブサンプル",
+  "description": "非同期ジョブ基盤の動作確認として、待機・成果物出力・キャンセルを試せます。",
+  "actions": {
+    "backToLp": "LPへ戻る",
+    "create": "ジョブ作成",
+    "download": "ダウンロード",
+    "cancel": "キャンセル"
+  },
+  "create": {
+    "title": "サンプルジョブ作成",
+    "description": "このジョブは120秒待機後、Blobへテストファイルを出力し、ダウンロード可能になります。",
+    "waitSeconds": "待機秒数",
+    "waitSecondsHelp": "ジョブが待機する秒数です（1〜600秒）。",
+    "content": "ファイル内容",
+    "contentHelp": "出力ファイルに追記する任意テキストです。"
+  },
+  "history": {
+    "title": "ジョブ履歴",
+    "description": "最新20件のサンプルジョブ（5秒ごと自動更新）。",
+    "filter": {
+      "statusLabel": "ステータス絞り込み",
+      "status": {
+        "all": "すべて",
+        "queued": "queued",
+        "running": "running",
+        "succeeded": "succeeded",
+        "failed": "failed",
+        "canceled": "canceled",
+        "expired": "expired"
+      }
+    },
+    "sort": {
+      "keyLabel": "並び替え項目",
+      "directionLabel": "並び順",
+      "key": {
+        "createdAt": "作成時刻",
+        "finishedAt": "完了時刻"
+      },
+      "direction": {
+        "desc": "新しい順",
+        "asc": "古い順"
+      }
+    },
+    "columns": {
+      "id": "ジョブID",
+      "status": "状態",
+      "waitSeconds": "待機",
+      "createdAt": "作成時刻",
+      "finishedAt": "完了時刻",
+      "actions": "操作"
+    }
+  },
+  "states": {
+    "loading": "ジョブを読み込み中...",
+    "empty": "サンプルジョブはまだありません。"
+  },
+  "errors": {
+    "createFailed": "サンプルジョブの作成に失敗しました。",
+    "downloadFailed": "サンプル成果物のダウンロードに失敗しました。",
+    "cancelFailed": "サンプルジョブのキャンセルに失敗しました。"
+  }
+}

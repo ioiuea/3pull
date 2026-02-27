@@ -13,6 +13,7 @@ export default [
       route('validation-sample', 'routes/validation-sample/page.tsx'),
       route('api-protection-sample', 'routes/api-protection-sample/page.tsx'),
       route('audit-log-sample', 'routes/audit-log-sample/page.tsx'),
+      route('async-job-sample', 'routes/async-job-sample/page.tsx'),
     ]),
   ]),
 ] satisfies RouteConfig;

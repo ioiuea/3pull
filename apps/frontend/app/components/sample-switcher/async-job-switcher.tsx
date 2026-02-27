@@ -103,7 +103,7 @@ const AsyncJobSwitcher = () => {
           <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px]">{runningCount}</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent side="bottom" align="end" className="w-[360px] p-0">
+      <PopoverContent side="bottom" align="end" className="w-90 max-h-[70vh] overflow-hidden p-0">
         <div className="border-b px-3 py-2">
           <p className="text-sm font-medium">{t('switcher.jobs.title')}</p>
           <p className="text-xs text-muted-foreground">{summaryDescription}</p>
@@ -113,7 +113,7 @@ const AsyncJobSwitcher = () => {
             {t('switcher.jobs.noHistory')}
           </div>
         ) : (
-          <ScrollArea className="max-h-80">
+          <ScrollArea className="h-[min(26rem,calc(70vh-3rem))]">
             <ul className="divide-y">
               {jobs.map((job) => (
                 <li key={job.id} className="space-y-1 px-3 py-2">

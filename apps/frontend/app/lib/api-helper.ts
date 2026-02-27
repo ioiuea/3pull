@@ -65,6 +65,28 @@ export type AuditLogExportJobListResponse = {
   items: AuditLogExportJob[];
 };
 
+export type SampleWaitBlobCreateRequest = {
+  wait_seconds?: number;
+  content?: string;
+};
+
+export type SampleWaitBlobJob = {
+  id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'expired';
+  wait_seconds: number;
+  content: string | null;
+  file_path: string | null;
+  file_size_bytes: number | null;
+  error_message: string | null;
+  created_at: string;
+  finished_at: string | null;
+};
+
+export type SampleWaitBlobJobListResponse = {
+  total: number;
+  items: SampleWaitBlobJob[];
+};
+
 type AsyncJobArtifact = {
   id: string;
   artifact_type: string;
@@ -194,25 +216,41 @@ const toAuditLogExportJob = (job: AsyncJobResponse): AuditLogExportJob => {
   };
 };
 
+const toSampleWaitBlobJob = (job: AsyncJobResponse): SampleWaitBlobJob => {
+  const requestedPayload = job.requested_payload ?? {};
+  const waitSecondsRaw = requestedPayload.wait_seconds;
+  const contentRaw = requestedPayload.content;
+  const firstArtifact = job.artifacts[0] ?? null;
+  return {
+    id: job.id,
+    status: job.status,
+    wait_seconds:
+      typeof waitSecondsRaw === 'number' && Number.isFinite(waitSecondsRaw) ? waitSecondsRaw : 120,
+    content: typeof contentRaw === 'string' ? contentRaw : null,
+    file_path: firstArtifact?.blob_path ?? null,
+    file_size_bytes: firstArtifact?.file_size_bytes ?? null,
+    error_message: job.error_message,
+    created_at: job.created_at,
+    finished_at: job.finished_at,
+  };
+};
+
 export const createAuditLogExport = async (
   payload: AuditLogExportCreateRequest,
 ): Promise<AuditLogExportJob> => {
-  const response = await backendFetch('/jobs', {
+  const response = await backendFetch('/jobs/auth-audit-export', {
     method: 'POST',
     body: JSON.stringify({
-      job_type: 'auth_audit_export',
-      payload: {
-        event_type: payload.event_type,
-        provider: payload.provider,
-        keyword: payload.keyword,
-        date_from: payload.date_from,
-        date_to: payload.date_to,
-        timezone: payload.timezone ?? 'UTC',
-      },
+      event_type: payload.event_type,
+      provider: payload.provider,
+      keyword: payload.keyword,
+      date_from: payload.date_from,
+      date_to: payload.date_to,
+      timezone: payload.timezone ?? 'UTC',
     }),
   });
   if (!response.ok) {
-    throw new Error(`/jobs POST failed: ${response.status}`);
+    throw new Error(`/jobs/auth-audit-export POST failed: ${response.status}`);
   }
   const job = (await response.json()) as AsyncJobResponse;
   return toAuditLogExportJob(job);
@@ -244,6 +282,73 @@ export const getAuditLogExportById = async (jobId: string): Promise<AuditLogExpo
   }
   const job = (await response.json()) as AsyncJobResponse;
   return toAuditLogExportJob(job);
+};
+
+export const createSampleWaitBlobJob = async (
+  payload: SampleWaitBlobCreateRequest = {},
+): Promise<SampleWaitBlobJob> => {
+  const response = await backendFetch('/jobs/sample-wait-blob', {
+    method: 'POST',
+    body: JSON.stringify({
+      wait_seconds: payload.wait_seconds ?? 120,
+      content: payload.content ?? null,
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`/jobs/sample-wait-blob POST failed: ${response.status}`);
+  }
+  const job = (await response.json()) as AsyncJobResponse;
+  return toSampleWaitBlobJob(job);
+};
+
+export const getSampleWaitBlobJobs = async (
+  params: GetAuditLogExportsParams = {},
+): Promise<SampleWaitBlobJobListResponse> => {
+  const search = new URLSearchParams();
+  search.set('page', String(params.page ?? 1));
+  search.set('page_size', String(params.pageSize ?? 20));
+  search.set('job_type', 'sample_wait_blob');
+
+  const response = await backendFetch(`/jobs?${search.toString()}`);
+  if (!response.ok) {
+    throw new Error(`/jobs GET failed: ${response.status}`);
+  }
+  const data = (await response.json()) as AsyncJobListResponse;
+  return {
+    total: data.total,
+    items: data.items.map(toSampleWaitBlobJob),
+  };
+};
+
+export const downloadSampleWaitBlobJob = async (jobId: string): Promise<Blob> => {
+  const response = await backendFetch(`/jobs/${jobId}`);
+  if (!response.ok) {
+    throw new Error(`/jobs/${jobId} GET failed: ${response.status}`);
+  }
+  const detail = (await response.json()) as AsyncJobResponse;
+  const artifact = detail.artifacts[0];
+  if (!artifact) {
+    throw new Error(`No artifact found for job ${jobId}`);
+  }
+
+  const downloadResponse = await backendFetch(`/jobs/${jobId}/artifacts/${artifact.id}/download`);
+  if (!downloadResponse.ok) {
+    throw new Error(
+      `/jobs/${jobId}/artifacts/${artifact.id}/download failed: ${downloadResponse.status}`,
+    );
+  }
+  return await downloadResponse.blob();
+};
+
+export const cancelSampleWaitBlobJob = async (jobId: string): Promise<SampleWaitBlobJob> => {
+  const response = await backendFetch(`/jobs/${jobId}/cancel`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error(`/jobs/${jobId}/cancel POST failed: ${response.status}`);
+  }
+  const job = (await response.json()) as AsyncJobResponse;
+  return toSampleWaitBlobJob(job);
 };
 
 export const downloadAuditLogExport = async (jobId: string): Promise<Blob> => {

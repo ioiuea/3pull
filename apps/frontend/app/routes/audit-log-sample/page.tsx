@@ -325,20 +325,21 @@ const AuditLogSamplePage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur lg:px-6">
-        <div className="flex items-center gap-2">
-          <h1 className="text-base font-semibold">{t('title')}</h1>
-          <Button variant="outline" asChild>
-            <Link to={`/${currentLanguage}`}>
-              <ArrowLeft className="size-4" />
-              {t('actions.backToLp')}
-            </Link>
-          </Button>
+    <main className="container mx-auto min-h-screen max-w-6xl px-4 py-14">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">{t('title')}</h1>
+          <p className="mt-2 text-muted-foreground">{t('description')}</p>
         </div>
-      </header>
+        <Button variant="outline" asChild>
+          <Link to={`/${currentLanguage}`}>
+            <ArrowLeft className="size-4" />
+            {t('actions.backToLp')}
+          </Link>
+        </Button>
+      </div>
 
-      <main className="flex flex-1 flex-col gap-4 p-4 md:p-6">
+      <div className="flex flex-1 flex-col gap-4">
         <section id="overview" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
@@ -698,8 +699,8 @@ const AuditLogSamplePage = () => {
             </CardContent>
           </Card>
         </section>
-      </main>
-    </div>
+      </div>
+    </main>
   );
 };
 

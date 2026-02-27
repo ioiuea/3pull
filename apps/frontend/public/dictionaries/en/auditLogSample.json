@@ -1,5 +1,6 @@
 {
   "title": "Audit Logs",
+  "description": "Filter, visualize, and run export jobs for audit logs from one page.",
   "actions": {
     "backToLp": "Back to LP",
     "prev": "Prev",

@@ -268,6 +268,34 @@ return <Profile me={data} onReload={() => void mutate()} />;
 - `error`: 失敗メッセージ + 再試行ボタン（`mutate`）
 - `data` なし（`null`）: 未ログイン導線や空状態を表示
 
+## 非同期ジョブUI実装方針
+
+- ジョブ作成/一覧/詳細/成果物ダウンロードの API 呼び出しは `apps/frontend/app/lib/api-helper.ts` に集約します。
+- グローバルジョブ状態の取得は `apps/frontend/app/hooks/use-global-async-jobs.ts` を標準利用します。
+- グローバルジョブ状態は `refreshInterval: 5000`（5秒）でポーリングし、ページ間で同一 key（`global-async-jobs`）を共有します。
+
+### 実装構成
+
+- `apps/frontend/app/lib/async-jobs.ts`
+- グローバルジョブ表示の共通型（`GlobalAsyncJobItem`, `GlobalAsyncJobProvider`）と状態判定を定義します。
+- `apps/frontend/app/lib/async-job-providers.ts`
+- ジョブ種別ごとの取得関数を `GlobalAsyncJobProvider[]` として登録します。
+- `apps/frontend/app/hooks/use-global-async-jobs.ts`
+- すべての provider をまとめて取得し、作成時刻降順で統一して返します。
+- `apps/frontend/app/components/sample-switcher/async-job-switcher.tsx`
+- グローバルジョブ状態の表示コンポーネント。ポップオーバーで履歴表示し、完了トーストを出します。
+
+### 新規ジョブを追加する手順（フロント）
+
+- 1. `api-helper.ts` にジョブ専用 API を追加する
+- 作成API、一覧API、必要なら詳細/ダウンロードAPIを追加します。
+- 2. 取得結果を `GlobalAsyncJobItem` へ変換する provider を作る
+- `apps/frontend/app/lib/async-job-providers.ts` に `source` 固有の `fetchJobs` を追加します。
+- 3. `GLOBAL_ASYNC_JOB_PROVIDERS` に登録する
+- 追加後は `useGlobalAsyncJobs` のポーリング結果に自動で統合されます。
+- 4. 個別ページでは必要に応じて `useSWR` を併用する
+- 画面固有の表示項目（例: 独自メタデータ）は個別フック/個別 `useSWR` で取得し、グローバル状態は再利用します。
+
 ## CI 方針
 
 - Frontend の CI は `Makefile` 経由で実行することを基本方針とします。

@@ -81,7 +81,7 @@ describe('api-helper jobs', () => {
   it('posts /jobs with auth_audit_export payload', async () => {
     // 目的: 監査ログエクスポート作成時のリクエスト契約を固定する。
     // 条件: createAuditLogExport を実行し fetch 呼び出しを検査する。
-    // 期待値: POST で job_type=auth_audit_export を含む body が送信される。
+    // 期待値: POST /jobs/auth-audit-export が呼ばれ、要求フィールドが送信される。
     const payload: AuditLogExportCreateRequest = {
       provider: 'email',
       keyword: 'alice',
@@ -109,9 +109,10 @@ describe('api-helper jobs', () => {
     await createAuditLogExport(payload);
 
     const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/jobs/auth-audit-export');
     expect(init.method).toBe('POST');
-    expect(String(init.body)).toContain('"job_type":"auth_audit_export"');
+    expect(String(init.body)).toContain('"provider":"email"');
   });
 
   it('downloads first artifact via /jobs/{id}/artifacts/{artifact_id}/download', async () => {

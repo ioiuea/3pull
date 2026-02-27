@@ -55,5 +55,10 @@
     "title": "監査ログビューア",
     "description": "認証イベントの監査ログを、event_type・user_id・session_id・発生時刻で確認できる参照画面です。",
     "cta": "サンプルを見る"
+  },
+  "asyncJobSample": {
+    "title": "非同期ジョブサンプル",
+    "description": "待機してBlobへテストファイルを出力し、バックエンド経由でダウンロードする非同期ジョブのサンプルです。",
+    "cta": "サンプルを見る"
   }
 }

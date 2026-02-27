@@ -1,0 +1,63 @@
+{
+  "title": "Async Job Sample",
+  "description": "Use this page to verify wait, artifact output, and cancel behavior of the async job platform.",
+  "actions": {
+    "backToLp": "Back to LP",
+    "create": "Create Job",
+    "download": "Download",
+    "cancel": "Cancel"
+  },
+  "create": {
+    "title": "Create Sample Job",
+    "description": "This job waits 120 seconds, writes a test file to Blob, then allows download.",
+    "waitSeconds": "Wait Seconds",
+    "waitSecondsHelp": "Number of seconds to wait before writing the file (1-600).",
+    "content": "File Content",
+    "contentHelp": "Optional text appended to the generated file."
+  },
+  "history": {
+    "title": "Job History",
+    "description": "Latest 20 sample jobs (auto refresh every 5 seconds).",
+    "filter": {
+      "statusLabel": "Status Filter",
+      "status": {
+        "all": "All",
+        "queued": "queued",
+        "running": "running",
+        "succeeded": "succeeded",
+        "failed": "failed",
+        "canceled": "canceled",
+        "expired": "expired"
+      }
+    },
+    "sort": {
+      "keyLabel": "Sort by",
+      "directionLabel": "Order",
+      "key": {
+        "createdAt": "Created At",
+        "finishedAt": "Finished At"
+      },
+      "direction": {
+        "desc": "Newest first",
+        "asc": "Oldest first"
+      }
+    },
+    "columns": {
+      "id": "Job ID",
+      "status": "Status",
+      "waitSeconds": "Wait",
+      "createdAt": "Created At",
+      "finishedAt": "Finished At",
+      "actions": "Actions"
+    }
+  },
+  "states": {
+    "loading": "Loading jobs...",
+    "empty": "No sample jobs yet."
+  },
+  "errors": {
+    "createFailed": "Failed to create sample job.",
+    "downloadFailed": "Failed to download sample artifact.",
+    "cancelFailed": "Failed to cancel sample job."
+  }
+}

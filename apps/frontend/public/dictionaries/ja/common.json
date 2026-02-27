@@ -38,7 +38,8 @@
         "unknown": "不明"
       },
       "sources": {
-        "auditExport": "監査ログエクスポート"
+        "auditExport": "監査ログエクスポート",
+        "sampleWaitBlob": "サンプル待機ジョブ"
       }
     }
   }

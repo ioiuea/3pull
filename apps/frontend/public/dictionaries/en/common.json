@@ -38,7 +38,8 @@
         "unknown": "Unknown"
       },
       "sources": {
-        "auditExport": "Audit Export"
+        "auditExport": "Audit Export",
+        "sampleWaitBlob": "Sample Wait Blob"
       }
     }
   }

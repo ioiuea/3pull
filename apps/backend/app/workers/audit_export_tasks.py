@@ -48,6 +48,10 @@ class RetryableExportError(RuntimeError):
     """再試行で解消する可能性がある一時エラー."""
 
 
+class JobCanceledExportError(RuntimeError):
+    """ジョブがキャンセル済みであることを表すエラー."""
+
+
 def _parse_datetime_value(raw: object) -> datetime | None:
     if raw is None:
         return None
@@ -198,11 +202,9 @@ async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
             if job.job_type != AsyncJobType.AUTH_AUDIT_EXPORT:
                 raise PermanentExportError("Invalid job type for audit export task")
 
-            if job.status in {
-                AsyncJobStatus.SUCCEEDED,
-                AsyncJobStatus.EXPIRED,
-                AsyncJobStatus.CANCELED,
-            }:
+            if job.status == AsyncJobStatus.CANCELED:
+                raise JobCanceledExportError("Export job was canceled before start")
+            if job.status in {AsyncJobStatus.SUCCEEDED, AsyncJobStatus.EXPIRED}:
                 raise PermanentExportError("Export job is already finalized")
 
             await update_async_job_status(
@@ -250,6 +252,11 @@ async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
     while offset < total_count:
         async with session_factory() as session:
             async with session.begin():
+                current = await get_async_job_by_id(session, job_id=parsed_job_id)
+                if current is None:
+                    raise PermanentExportError("Export job not found during processing")
+                if current.status == AsyncJobStatus.CANCELED:
+                    raise JobCanceledExportError("Export job was canceled")
                 chunk = await list_auth_audit_logs_for_export_job(
                     session,
                     limit=min(_EXPORT_CHUNK_SIZE, settings.celery_max_rows_per_job),
@@ -278,6 +285,8 @@ async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
             )
             if job is None:
                 raise PermanentExportError("Export job not found after upload")
+            if job.status == AsyncJobStatus.CANCELED:
+                raise JobCanceledExportError("Export job was canceled before finalize")
             await create_async_job_artifact(
                 session,
                 job_id=job.id,
@@ -350,6 +359,12 @@ def export_auth_audit_logs(self, job_id: str) -> None:
             job_id=job_id,
             retryable=False,
             error=str(exc),
+        )
+        return
+    except JobCanceledExportError:
+        logger.info(
+            "export.job.canceled",
+            job_id=job_id,
         )
         return
     except Exception as exc:  # pragma: no cover

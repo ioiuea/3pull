@@ -55,5 +55,10 @@
     "title": "Audit Log Viewer",
     "description": "Review authentication audit events with filters and pagination, including event type, user ID, session ID, and timestamp.",
     "cta": "View Sample"
+  },
+  "asyncJobSample": {
+    "title": "Async Job Sample",
+    "description": "Run a sample async job that waits, writes a test file to Blob, and downloads it through backend APIs.",
+    "cta": "View Sample"
   }
 }

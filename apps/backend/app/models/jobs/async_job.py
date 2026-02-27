@@ -20,6 +20,7 @@ class AsyncJobType(StrEnum):
     """非同期ジョブ種別."""
 
     AUTH_AUDIT_EXPORT = "auth_audit_export"
+    SAMPLE_WAIT_BLOB = "sample_wait_blob"
 
 
 class AsyncJobStatus(StrEnum):
@@ -55,15 +56,7 @@ class AsyncJob(Base):
     id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    job_type: Mapped[AsyncJobType] = mapped_column(
-        Enum(
-            AsyncJobType,
-            name="async_job_type",
-            native_enum=True,
-            values_callable=lambda enum_cls: [member.value for member in enum_cls],
-        ),
-        nullable=False,
-    )
+    job_type: Mapped[str] = mapped_column(String(64), nullable=False)
     requested_by_user_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),

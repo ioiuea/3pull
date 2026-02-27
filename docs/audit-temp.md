@@ -234,7 +234,7 @@
 - backend API 用イメージを 1 つ作成。
 - 同一イメージで以下 2 形態を実行可能にする。
   - API: `gunicorn app.main:app ...`
-  - Job: `python -m app.jobs.auth_cleanup ...`
+  - Job: `python -m app.schedulers.scheduler_cleanup ...`
 
 意図:
 
@@ -285,7 +285,7 @@
   - `app/workers/`（Celery アプリ定義 / タスク登録）
   - `app/repositories/auth/`（Export Job 永続化）
   - `app/services/auth/`（Export ユースケース / 業務別 dispatcher）
-  - `app/jobs/`（retention cleanup CLI）
+  - `app/schedulers/`（retention cleanup CLI）
 - 命名方針:
   - queue: `celery_app.py`, `task_dispatcher.py`（汎用のみ）
   - storage: `azure_blob.py`
@@ -565,7 +565,7 @@
 
 成果物:
 
-- `app/jobs/...` 追加
+- `app/schedulers/...` 追加
 - `app/core/settings/config.py` 更新
 - 認証サービス更新
 
@@ -749,7 +749,7 @@
      - Blob を削除
      - `async_jobs` を `expired` 更新（または削除）
    - cleanup CLI にサブコマンド追加:
-     - `python -m app.jobs.auth_cleanup jobs`
+     - `python -m app.schedulers.scheduler_cleanup jobs`
    - 補足:
      - queue adapter は cleanup から参照しない（DB + storage adapter のみで完結）。
 10. 構造化ログ/監視を追加する（App Insights）。
@@ -862,70 +862,38 @@
 
 ---
 
-## 10.1 進行状況（2026-02-27 時点）
+## 10.1 進行状況（2026-02-28 時点）
 
-本節は、`## 10. 実装ステップ（詳細）` に対する実装進捗の棚卸し。
+本節は、`## 10. 実装ステップ（詳細）` の現在進捗を「完了 / 進行中 / 未着手」で整理したもの。
 
-### Phase 0: 仕様確定
+| ステップ | 状態 | 進捗概要 |
+|---|---|---|
+| Phase 0: 仕様確定 | 完了 | 環境変数、監査イベント、PII境界、metadata制約、cleanup運用、エクスポート要件を確定済み。 |
+| Phase 1: DB スキーマ準備 | 完了 | `auth_audit_logs`（月次パーティション）、`async_jobs`、`async_job_artifacts` を migration 適用済み。 |
+| Phase 2: アプリケーション実装 | 完了 | 監査ログ記録/表示、`SESSION_TTL_HOURS` への一本化、cleanup CLI（sessions/audit/jobs）、構造化ログ出力まで実装済み。 |
+| Step 3: 監査ログエクスポート機能（Redis/Celery + Azure Blob） | 完了（現スコープ） | `/jobs` API 統一、Celery 実行、Blob保存/配信、ジョブ履歴表示、jobs cleanup、汎用ジョブ基盤化を反映済み。 |
+| Step 4: コンテナ化 | 未着手 | Dockerfile/起動構成の正式整備はこれから。 |
+| Step 5: Helm 導入 | 未着手 | chart 化（API/CronJob/worker）はこれから。 |
+| Step 6: 検証 | 進行中 | 手動検証 + CI（lint/typecheck/test）は通過。Staging でのCronJob/監視検証は未実施。 |
+| Step 7: リリース | 未着手 | 段階有効化・Runbook確定はこれから。 |
 
-- 状態: 完了
-- 補足:
-  - 環境変数仕様（`SESSION_TTL_HOURS` / `SESSION_EXPIRED_GRACE_DAYS` / `AUTH_AUDIT_RETENTION_MONTHS` など）確定済み。
-  - `event_type` ENUM 方針、PII 境界、`metadata` allowlist + 4KB 制約、cleanup 運用方針を文書化済み。
+### Step 3 内訳（完了確認）
 
-### Phase 1: DB スキーマ準備
+- `async_jobs` / `async_job_artifacts` モデル・Repository・API を実装。
+- `/backend/jobs` 系 API（作成/一覧/詳細/成果物ダウンロード）へ統一。
+- Celery worker (`jobs.auth_audit_export`) と dispatcher 実装。
+- Azure Blob 連携（アップロード/ダウンロード/削除）実装。
+- cleanup CLI を `app.schedulers.scheduler_cleanup` に統一し、`jobs` サブコマンドを追加。
+- フロント側のジョブ表示をグローバル化し、ページを跨いで状態参照可能にした。
+- `make up` / `make dev` で worker 起動を含む開発導線を整備。
+- backend/frontend の関連テストを追加し、CI 通過を確認済み。
 
-- 状態: 完了
-- 補足:
-  - `auth_audit_logs` テーブル + ENUM + 月次パーティション + 初期パーティション作成 migration を適用済み。
-  - `metadata` 4KB 制約・`ON DELETE SET NULL`・監査用途インデックスを反映済み。
+### 現在の次工程
 
-### Phase 2: アプリケーション実装
-
-- 状態: 完了（現要件範囲）
-- 完了:
-  - 設定クラス追加/バリデーション（`AppSettings`）。
-  - `SESSION_TTL_SECONDS` 廃止、`SESSION_TTL_HOURS` 一本化。
-  - 監査ログ Repository / Service 実装（allowlist + 4KB 制約含む）。
-  - 認証フロー各所の監査ログ記録（success/fail 両系統）。
-  - `client_ip` / `xff_raw` / `connection_ip` 解決実装。
-  - 監査ログ表示 API + 監査ログサンプルUI実装。
-  - cleanup CLI（sessions / audit）実装。
-  - sessions cleanup / audit retention cleanup 実装。
-  - cleanup の構造化ログ出力（App Insights 連携前提フォーマット）実装。
-
-### Step 3: 監査ログエクスポート機能
-
-- 状態: 未着手
-- 補足:
-  - Redis ブローカー + Celery worker の導入未着手。
-  - Export Job テーブル/API/Azure Blob 連携未着手。
-  - export file retention cleanup 未着手。
-
-### Step 4: コンテナ化
-
-- 状態: 未着手
-- 補足:
-  - `apps/backend/Dockerfile` 未作成。
-  - cleanup/worker を含むコンテナ起動方式の定義は未実装。
-
-### Step 5: Helm 導入
-
-- 状態: 未着手
-- 補足:
-  - `charts/backend` 未作成。
-  - CronJob 3種（sessions / audit / exports）+ worker の chart 化未着手。
-
-### Step 6: 検証
-
-- 状態: 一部実施（手動検証中心）
-- 補足:
-  - 手動検証（監査ログ記録、cleanup dry-run、パーティション動作）は実施済み。
-  - 網羅的な Unit/Integration テスト拡充（export 経路含む）は未完了。
-
-### Step 7: リリース
-
-- 状態: 未着手
+1. Step 4: Dockerfile / 実行コマンド標準化
+2. Step 5: Helm（API + CronJob + Worker）実装
+3. Step 6: Staging 検証（CronJob実行・App Insights監視）
+4. Step 7: リリース手順・Runbook 確定
 
 ---
 
