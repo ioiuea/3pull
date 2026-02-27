@@ -1,8 +1,5 @@
 """
 認証系 cleanup バッチの CLI エントリポイント.
-
-Step 7-2 では CLI の受け口のみを実装し、
-削除ロジック本体は Step 7-3 / 7-4 で追加する。
 """
 
 from __future__ import annotations
