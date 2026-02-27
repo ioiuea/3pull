@@ -25,8 +25,7 @@
 ## 実行方法
 
 ```bash
-cd apps/backend
-uv run python scripts/storage/create_blob_container.py
+uv --directory apps/backend run python scripts/storage/create_blob_container.py
 ```
 
 ## 実行結果
