@@ -282,6 +282,16 @@ return <Profile me={data} onReload={() => void mutate()} />;
 - `test` は `vitest run --passWithNoTests` を利用します。
 - テストコードは `apps/frontend/test` 配下に配置し、`unit` / `integration` / `mocks` で管理します。
 
+### テストコード記述ルール
+
+- 各テストケース（`it` / `test`）には、以下3点が分かるコメントを必ず記載します。
+- `目的`: 何の仕様を守るテストか
+- `条件`: どの入力・モック・状態で実行するか
+- `期待値`: 何をもって成功とするか
+- コメントは「処理手順」より「仕様意図」を優先して記述します。
+- 期待値は具体的なレスポンス、状態値、表示、呼び出し先などで明示します。
+- 仕様変更時はテストコードとコメントをセットで更新します。
+
 ### CI 除外ポリシー
 
 - `app/components/ui/**`（shadcn 生成物）は `format` / `lint` / `typecheck:ci` の対象外とします。

@@ -26,7 +26,11 @@ apps/backend
 │   ├── main.py                           # FastAPIブートストラップ（middleware/router登録）
 │   ├── api/                              # APIインタフェース層（HTTP入出力）
 │   │   ├── routers/                      # エンドポイント定義層
+│   │   │   ├── auth.py                   # 認証API
+│   │   │   └── jobs.py                   # 非同期ジョブAPI
 │   │   ├── schemas/                      # Request/Responseスキーマ層
+│   │   │   ├── auth.py                   # 認証APIスキーマ
+│   │   │   └── jobs.py                   # 非同期ジョブAPIスキーマ
 │   │   └── internal/                     # 内部運用API層（probe等）
 │   ├── adapters/                         # 外部接続層（DB/IdP/Network）
 │   │   ├── postgres/                     # PostgreSQL接続管理層
@@ -42,13 +46,18 @@ apps/backend
 │   │   ├── security/password.py          # Argon2idパスワード処理
 │   │   └── security/csrf.py              # CSRFチェックミドルウェア
 │   ├── models/                           # ORMモデル層（テーブル定義）
-│   │   └── auth/                         # 認証機能のモデル群
+│   │   ├── auth/                         # 認証機能のモデル群
+│   │   └── jobs/                         # 非同期ジョブ基盤のモデル群
 │   ├── repositories/                     # 永続化アクセス層（CRUD/クエリ）
-│   │   └── auth/                         # 認証機能のRepository群
+│   │   ├── auth/                         # 認証機能のRepository群
+│   │   └── jobs/                         # 非同期ジョブ基盤のRepository群
 │   ├── jobs/                             # バッチ/定期実行ジョブ層（cleanup等）
-│   │   └── auth_cleanup.py               # 認証データcleanup CLIエントリポイント
+│   │   ├── auth_cleanup.py               # cleanup CLIエントリポイント
+│   │   └── cleanup/                      # 対象別 cleanup 実装（sessions/audit/jobs）
+│   ├── workers/                          # Celery worker / task 実装
 │   └── services/                         # ユースケース層（業務ロジック）
 │       ├── auth/                         # 認証ユースケース
+│       ├── jobs/                         # 非同期ジョブ基盤サービス
 │       └── health.py                     # ヘルスチェックユースケース
 ├── alembic/                              # マイグレーション管理層
 │   └── versions/                         # 生成されたリビジョンファイル
@@ -241,12 +250,17 @@ else:
 - audit retention cleanup:
 - `make cleanup-audit`
 - `make cleanup-audit-dry-run`
+- async jobs artifacts cleanup:
+- `make cleanup-jobs`
+- `make cleanup-jobs-dry-run`
 
 - 直接実行:
 - `uv --directory apps/backend run python -m app.jobs.auth_cleanup sessions`
 - `uv --directory apps/backend run python -m app.jobs.auth_cleanup sessions --dry-run`
 - `uv --directory apps/backend run python -m app.jobs.auth_cleanup audit`
 - `uv --directory apps/backend run python -m app.jobs.auth_cleanup audit --dry-run`
+- `uv --directory apps/backend run python -m app.jobs.auth_cleanup jobs`
+- `uv --directory apps/backend run python -m app.jobs.auth_cleanup jobs --dry-run`
 
 ### sessions cleanup の仕様
 
@@ -266,6 +280,15 @@ else:
 - `--dry-run` は削除せず、対象パーティション数・対象行数のみ計測する。
 - `AUDIT_CLEANUP_ENABLED=false` の場合は `disabled` として終了する。
 
+### jobs artifacts cleanup の仕様
+
+- 目的: `async_job_artifacts` の期限切れ成果物と Blob を削除する。
+- 削除基準: `expires_at < run_at_utc`。
+- 処理順: Blob 削除成功後に DB レコードを削除する（孤立DB参照防止）。
+- 成果物が 0 件になった `async_jobs` は `expired` に更新する。
+- `--dry-run` は削除せず、対象件数のみ計測する。
+- `CELERY_ENABLED=false` の場合は `disabled` として終了する。
+
 ### 環境変数
 
 - `SESSION_TTL_HOURS`（既定: 168）
@@ -274,6 +297,7 @@ else:
 - `SESSION_CLEANUP_ENABLED`（既定: true）
 - `AUDIT_CLEANUP_ENABLED`（既定: true）
 - `CLEANUP_BATCH_SIZE`（既定: 5000）
+- `CELERY_ENABLED`（既定: true）
 
 ### 構造化ログ
 
@@ -283,11 +307,93 @@ else:
 - `cleanup.failed`
 - sessions は `cleanup.sessions.criteria` / `cleanup.sessions.deleted` を出力する。
 - audit は `cleanup.audit.dry_run` / `cleanup.audit.retention` を出力する。
+- jobs は `cleanup.jobs.criteria` / `cleanup.jobs.deleted` / `cleanup.jobs.blob_delete_failed` / `cleanup.jobs.no_progress` を出力する。
 - 主要キー:
 - `job_name`, `run_at`, `dry_run`, `batch_size`
 - `delete_before_expires_at`, `grace_days`, `target_count`（sessions）
 - `current_month`, `keep_from_month`, `drop_before_month`, `drop_partition_count`, `drop_candidate_row_count`, `next_partition`（audit）
+- `deleted_artifact_rows`, `deleted_blob_count`, `failed_blob_count`, `expired_job_count`（jobs）
 - `deleted_count`, `duration_ms`, `status`, `error`
+
+## 非同期ジョブ基盤仕様（正式）
+
+### 汎用基盤仕様
+
+- 非同期ジョブは `async_jobs`（ジョブ本体）と `async_job_artifacts`（成果物）で管理します。
+- API は `/backend/jobs` に集約します。
+- 成果物は Azure Blob に保存し、DB にはメタデータのみ保持します。
+
+#### データモデル
+
+- `async_jobs`
+- 主な列: `job_type`, `status`, `queue_name`, `task_name`, `requested_payload`, `result_payload`, `error_message`, `retry_count`, `started_at`, `finished_at`, `expires_at`
+- `status`: `queued` / `running` / `succeeded` / `failed` / `canceled` / `expired`
+
+- `async_job_artifacts`
+- 主な列: `job_id`, `artifact_type`, `storage_provider`, `container_name`, `blob_path`, `content_type`, `file_size_bytes`, `expires_at`
+- `job_id` は `async_jobs.id` を参照し、`ON DELETE CASCADE` で連動削除されます。
+
+#### Jobs API
+
+- `POST /backend/jobs`
+- ジョブ作成とキュー投入を行い、`202 Accepted` を返します。
+- 同時実行上限:
+- 全体: `CELERY_GLOBAL_CONCURRENCY`
+- ユーザー単位: `CELERY_PER_USER_CONCURRENCY`
+
+- `GET /backend/jobs`
+- 自分のジョブ一覧を返します（`page` / `page_size` / `job_type` 対応）。
+
+- `GET /backend/jobs/{job_id}`
+- 自分のジョブ詳細を返します。
+
+- `GET /backend/jobs/{job_id}/artifacts/{artifact_id}/download`
+- 成果物 Blob を backend 経由でダウンロードします。
+
+#### Celery/Queue 構成
+
+- Celery アプリ初期化: `app.adapters.queue.celery_app`
+- Worker エントリポイント: `app.workers.celery_worker:celery_app`
+- タスクモジュール読み込み: `CELERY_TASK_MODULES`（カンマ区切り）
+- Worker 消費キュー設定: `CELERY_WORKER_QUEUES`（カンマ区切り）
+
+#### 起動コマンド
+
+- 開発同時起動（API/Web/Worker）:
+- `make dev`
+- 本番相当同時起動（API/Web/Worker）:
+- `make up`
+- Worker のみ:
+- `make dev-worker`
+- `make up-worker`
+- 直接実行:
+- `uv --directory apps/backend run celery -A app.workers.celery_worker:celery_app worker -Q $(CELERY_WORKER_QUEUES) -l info`
+
+#### 主要環境変数（基盤共通）
+
+- `CELERY_ENABLED`
+- `CELERY_BROKER_URL`
+- `CELERY_RESULT_BACKEND_URL`
+- `CELERY_MAX_ROWS_PER_JOB`
+- `CELERY_DEFAULT_RETENTION_DAYS`
+- `CELERY_RETENTION_MAX_DAYS`
+- `CELERY_GLOBAL_CONCURRENCY`
+- `CELERY_PER_USER_CONCURRENCY`
+- `CELERY_TASK_TIME_LIMIT_SECONDS`
+- `CELERY_TASK_MODULES`
+- `CELERY_WORKER_QUEUES`
+- `AZURE_BLOB_ACCOUNT_URL`
+- `AZURE_BLOB_CONTAINER`
+- `AZURE_BLOB_CREDENTIAL`
+
+### ジョブ種別仕様: `auth_audit_export`
+
+- 用途: 監査ログの CSV エクスポート。
+- `job_type`: `auth_audit_export`
+- queue 設定: `CELERY_AUTH_AUDIT_EXPORT_QUEUE_NAME`
+- task 設定: `CELERY_AUTH_AUDIT_EXPORT_TASK_NAME`（既定: `jobs.auth_audit_export`）
+- worker 実装: `app.workers.audit_export_tasks`
+- クエリ実装: `app.services.jobs.query.auth_audit_export_query_service`
 
 ## CI 実装方針
 
@@ -326,6 +432,17 @@ else:
 - 実行:
 - `make backend-test`
 - pytest 設定は `apps/backend/pyproject.toml` の `[tool.pytest.ini_options]` を参照します。
+
+### テストコード記述ルール
+
+- 各 `test_*` 関数には「何を検証するテストか」が関数名だけで分かる命名を行います。
+- 各テストには、以下3点が読み取れるコメントを必ず記載します。
+- `目的`: 何の仕様・回帰を守るためのテストか
+- `条件`: どの入力・前提で実行するか
+- `期待値`: 何がどうなれば成功か
+- コメントは実装の説明ではなく、仕様意図の説明を優先します。
+- 期待値は曖昧語を避け、可能な限り具体的な値・ステータス・分岐名を記載します。
+- 仕様変更時は、テスト本体とコメントを同時に更新し、不整合を残しません。
 
 ### Makefile での CI 運用
 

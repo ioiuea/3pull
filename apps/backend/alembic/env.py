@@ -8,6 +8,7 @@ Alembic 実行コンテキスト設定.
 
 from __future__ import annotations
 
+import re
 from logging.config import fileConfig
 
 from alembic import context
@@ -27,6 +28,30 @@ if config.config_file_name is not None:
 # Alembic がモデル定義を認識できるように import 副作用を明示する。
 load_all_models()
 target_metadata = Base.metadata
+
+_AUDIT_CHILD_PARTITION_RE = re.compile(r"^auth_audit_logs_\d{4}_\d{2}$")
+
+
+def _include_object(
+    object_: object,
+    name: str | None,
+    type_: str,
+    reflected: bool,
+    compare_to: object,
+) -> bool:
+    """
+    Alembic autogenerate の比較対象を制御する.
+
+    DB 上で動的に作成/削除される監査ログ月次子パーティションは、
+    モデル定義との差分に含めない。
+    """
+    del object_, compare_to
+
+    if reflected and type_ in {"table", "index"} and name:
+        if _AUDIT_CHILD_PARTITION_RE.match(name):
+            return False
+
+    return True
 
 
 def _resolve_database_url() -> str:
@@ -65,6 +90,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         compare_server_default=True,
+        include_object=_include_object,
     )
 
     with context.begin_transaction():
@@ -92,6 +118,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             compare_type=True,
             compare_server_default=True,
+            include_object=_include_object,
         )
 
         with context.begin_transaction():

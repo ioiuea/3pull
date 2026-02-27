@@ -15,6 +15,31 @@
     "auth": {
       "logoutLabel": "ログアウト",
       "logoutAriaLabel": "サインアウトする"
+    },
+    "jobs": {
+      "label": "ジョブ",
+      "title": "非同期ジョブ",
+      "ariaLabel": "非同期ジョブの状態を表示する",
+      "running": "{{count}} 件のジョブが実行中",
+      "idle": "実行中のジョブはありません",
+      "noHistory": "実行履歴はありません",
+      "lastCompletedAt": "{{source}} 完了: {{time}}",
+      "toastCompleted": "{{source}} 完了 ({{jobId}})",
+      "source": "種別",
+      "startedAt": "開始",
+      "finishedAt": "完了",
+      "status": {
+        "queued": "キュー待ち",
+        "running": "実行中",
+        "succeeded": "成功",
+        "failed": "失敗",
+        "canceled": "キャンセル",
+        "expired": "期限切れ",
+        "unknown": "不明"
+      },
+      "sources": {
+        "auditExport": "監査ログエクスポート"
+      }
     }
   }
 }

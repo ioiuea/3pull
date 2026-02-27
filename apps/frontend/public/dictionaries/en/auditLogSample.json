@@ -51,5 +51,27 @@
       "clientIp": "Client IP",
       "reasonCode": "Reason Code"
     }
+  },
+  "export": {
+    "title": "Export Jobs",
+    "description": "Create export jobs and monitor status (auto refresh every 5 seconds).",
+    "actions": {
+      "create": "Export CSV",
+      "download": "Download"
+    },
+    "states": {
+      "loading": "Loading export jobs...",
+      "empty": "No export jobs yet."
+    },
+    "columns": {
+      "status": "Status",
+      "rowCount": "Rows",
+      "createdAt": "Created At",
+      "actions": "Actions"
+    },
+    "errors": {
+      "createFailed": "Failed to create export job.",
+      "downloadFailed": "Failed to download export file."
+    }
   }
 }

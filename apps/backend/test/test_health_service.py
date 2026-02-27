@@ -4,7 +4,9 @@ from app.services.health import _host_port_from_url
 
 
 def test_host_port_from_url_uses_explicit_port() -> None:
-    # URL にポート番号が明示されている場合は、その値を優先して返すことを確認する。
+    # 目的: URL に明示ポートがある場合の優先ルールを固定する。
+    # 条件: host と明示ポート(6543)を含む URL を渡す。
+    # 期待値: host=localhost, port=6543 が返る。
     assert _host_port_from_url("postgresql://localhost:6543/app", 5432) == (
         "localhost",
         6543,
@@ -12,8 +14,9 @@ def test_host_port_from_url_uses_explicit_port() -> None:
 
 
 def test_host_port_from_url_uses_default_port_when_not_present() -> None:
-    # URL にポート番号がない場合は、
-    # 引数で渡したデフォルトポートが使われることを確認する。
+    # 目的: URL にポートがない場合のデフォルト適用ルールを固定する。
+    # 条件: ポート未指定 URL と default_port=5432 を渡す。
+    # 期待値: host=localhost, port=5432 が返る。
     assert _host_port_from_url("postgresql://localhost/app", 5432) == (
         "localhost",
         5432,
@@ -21,11 +24,14 @@ def test_host_port_from_url_uses_default_port_when_not_present() -> None:
 
 
 def test_host_port_from_url_returns_none_on_missing_host() -> None:
-    # ホストが欠けた URL は接続先として不正なので、
-    # None を返してスキップ判定できることを確認する。
+    # 目的: ホスト欠落 URL を不正入力として扱う挙動を固定する。
+    # 条件: host が空の URL を渡す。
+    # 期待値: None を返す。
     assert _host_port_from_url("postgresql:///app", 5432) is None
 
 
 def test_host_port_from_url_returns_none_on_invalid_port() -> None:
-    # ポート範囲外 (0-65535 以外) の URL は不正値として扱い、None を返すことを確認する。
+    # 目的: 範囲外ポートを不正入力として扱う挙動を固定する。
+    # 条件: 65535 を超えるポート(99999)を含む URL を渡す。
+    # 期待値: None を返す。
     assert _host_port_from_url("postgresql://localhost:99999/app", 5432) is None

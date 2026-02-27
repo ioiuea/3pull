@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -111,6 +111,66 @@ class AppSettings(BaseSettings):
         default=5000,
         validation_alias="CLEANUP_BATCH_SIZE",
     )
+    celery_enabled: bool = Field(
+        default=True,
+        validation_alias="CELERY_ENABLED",
+    )
+    celery_broker_url: str | None = Field(
+        default=None,
+        validation_alias="CELERY_BROKER_URL",
+    )
+    celery_result_backend_url: str | None = Field(
+        default=None,
+        validation_alias="CELERY_RESULT_BACKEND_URL",
+    )
+    celery_max_rows_per_job: int = Field(
+        default=50000,
+        validation_alias="CELERY_MAX_ROWS_PER_JOB",
+    )
+    celery_default_retention_days: int = Field(
+        default=365,
+        validation_alias="CELERY_DEFAULT_RETENTION_DAYS",
+    )
+    celery_retention_max_days: int = Field(
+        default=2555,
+        validation_alias="CELERY_RETENTION_MAX_DAYS",
+    )
+    celery_global_concurrency: int = Field(
+        default=3,
+        validation_alias="CELERY_GLOBAL_CONCURRENCY",
+    )
+    celery_per_user_concurrency: int = Field(
+        default=1,
+        validation_alias="CELERY_PER_USER_CONCURRENCY",
+    )
+    celery_task_time_limit_seconds: int = Field(
+        default=1800,
+        validation_alias="CELERY_TASK_TIME_LIMIT_SECONDS",
+    )
+    celery_task_modules: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["app.workers.audit_export_tasks"],
+        validation_alias="CELERY_TASK_MODULES",
+    )
+    auth_audit_export_queue_name: str = Field(
+        default="auth_audit_exports",
+        validation_alias="CELERY_AUTH_AUDIT_EXPORT_QUEUE_NAME",
+    )
+    auth_audit_export_task_name: str = Field(
+        default="jobs.auth_audit_export",
+        validation_alias="CELERY_AUTH_AUDIT_EXPORT_TASK_NAME",
+    )
+    azure_blob_account_url: str | None = Field(
+        default=None,
+        validation_alias="AZURE_BLOB_ACCOUNT_URL",
+    )
+    azure_blob_container: str = Field(
+        default="async-jobs",
+        validation_alias="AZURE_BLOB_CONTAINER",
+    )
+    azure_blob_credential: str | None = Field(
+        default=None,
+        validation_alias="AZURE_BLOB_CREDENTIAL",
+    )
     session_cookie_name: str = Field(
         default="app_session", validation_alias="SESSION_COOKIE_NAME"
     )
@@ -200,6 +260,18 @@ class AppSettings(BaseSettings):
             return [item.strip().lower() for item in value.split(",") if item.strip()]
         return value
 
+    @field_validator("celery_task_modules", mode="before")
+    @classmethod
+    def _parse_celery_task_modules(cls, value: object) -> object:
+        """
+        CELERY_TASK_MODULES を list[str] に正規化する.
+
+        環境変数ではカンマ区切り文字列の入力を許容する。
+        """
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
     @field_validator("session_ttl_hours")
     @classmethod
     def _validate_session_ttl_hours(cls, value: int) -> int:
@@ -247,6 +319,84 @@ class AppSettings(BaseSettings):
         if not 100 <= value <= 50000:
             raise ValueError("CLEANUP_BATCH_SIZE must be between 100 and 50000")
         return value
+
+    @field_validator("celery_max_rows_per_job")
+    @classmethod
+    def _validate_celery_max_rows_per_job(cls, value: int) -> int:
+        """
+        CELERY_MAX_ROWS_PER_JOB の範囲を検証する.
+
+        許容範囲: 1..50000
+        """
+        if not 1 <= value <= 50000:
+            raise ValueError("CELERY_MAX_ROWS_PER_JOB must be between 1 and 50000")
+        return value
+
+    @field_validator("celery_default_retention_days")
+    @classmethod
+    def _validate_celery_default_retention_days(cls, value: int) -> int:
+        """
+        CELERY_DEFAULT_RETENTION_DAYS の範囲を検証する.
+
+        許容範囲: 1..2555
+        """
+        if not 1 <= value <= 2555:
+            raise ValueError("CELERY_DEFAULT_RETENTION_DAYS must be between 1 and 2555")
+        return value
+
+    @field_validator("celery_retention_max_days")
+    @classmethod
+    def _validate_celery_retention_max_days(cls, value: int) -> int:
+        """
+        CELERY_RETENTION_MAX_DAYS の範囲を検証する.
+
+        許容範囲: 1..2555
+        """
+        if not 1 <= value <= 2555:
+            raise ValueError("CELERY_RETENTION_MAX_DAYS must be between 1 and 2555")
+        return value
+
+    @field_validator("celery_global_concurrency")
+    @classmethod
+    def _validate_celery_global_concurrency(cls, value: int) -> int:
+        """CELERY_GLOBAL_CONCURRENCY の範囲を検証する."""
+        if value < 1:
+            raise ValueError(
+                "CELERY_GLOBAL_CONCURRENCY must be greater than or equal to 1"
+            )
+        return value
+
+    @field_validator("celery_per_user_concurrency")
+    @classmethod
+    def _validate_celery_per_user_concurrency(cls, value: int) -> int:
+        """CELERY_PER_USER_CONCURRENCY の範囲を検証する."""
+        if value < 1:
+            raise ValueError(
+                "CELERY_PER_USER_CONCURRENCY must be greater than or equal to 1"
+            )
+        return value
+
+    @field_validator("celery_task_time_limit_seconds")
+    @classmethod
+    def _validate_celery_task_time_limit_seconds(cls, value: int) -> int:
+        """CELERY_TASK_TIME_LIMIT_SECONDS の範囲を検証する."""
+        if value < 1:
+            raise ValueError(
+                "CELERY_TASK_TIME_LIMIT_SECONDS must be greater than or equal to 1"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_celery_retention_consistency(self) -> AppSettings:
+        """
+        celery retention の相関制約を検証する.
+        """
+        if self.celery_default_retention_days > self.celery_retention_max_days:
+            raise ValueError(
+                "CELERY_DEFAULT_RETENTION_DAYS must be less than or equal to "
+                "CELERY_RETENTION_MAX_DAYS"
+            )
+        return self
 
 
 @lru_cache(maxsize=1)

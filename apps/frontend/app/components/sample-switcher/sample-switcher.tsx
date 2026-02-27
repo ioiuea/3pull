@@ -2,6 +2,7 @@
 
 import LanguageSwitcher from '~/components/sample-switcher/language-switcher';
 import LogoutSwitcher from '~/components/sample-switcher/logout-switcher';
+import AsyncJobSwitcher from '~/components/sample-switcher/async-job-switcher';
 import ThemeSwitcher from '~/components/sample-switcher/theme-switcher';
 
 /**
@@ -10,6 +11,7 @@ import ThemeSwitcher from '~/components/sample-switcher/theme-switcher';
 const SampleSwitcher = () => {
   return (
     <div className="inline-flex items-center gap-2 rounded-xl border bg-background/90 p-2 shadow-sm backdrop-blur">
+      <AsyncJobSwitcher />
       <ThemeSwitcher />
       <LanguageSwitcher />
       <LogoutSwitcher />

@@ -15,6 +15,31 @@
     "auth": {
       "logoutLabel": "Logout",
       "logoutAriaLabel": "Sign out"
+    },
+    "jobs": {
+      "label": "Jobs",
+      "title": "Async Jobs",
+      "ariaLabel": "Show async job status",
+      "running": "{{count}} job(s) running",
+      "idle": "No running jobs",
+      "noHistory": "No job history",
+      "lastCompletedAt": "{{source}} completed: {{time}}",
+      "toastCompleted": "{{source}} completed ({{jobId}})",
+      "source": "Source",
+      "startedAt": "Started",
+      "finishedAt": "Finished",
+      "status": {
+        "queued": "Queued",
+        "running": "Running",
+        "succeeded": "Succeeded",
+        "failed": "Failed",
+        "canceled": "Canceled",
+        "expired": "Expired",
+        "unknown": "Unknown"
+      },
+      "sources": {
+        "auditExport": "Audit Export"
+      }
     }
   }
 }

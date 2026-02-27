@@ -51,5 +51,27 @@
       "clientIp": "クライアントIP",
       "reasonCode": "理由コード"
     }
+  },
+  "export": {
+    "title": "エクスポートジョブ",
+    "description": "エクスポートジョブを作成し、状態を確認します（5秒ごと自動更新）。",
+    "actions": {
+      "create": "CSVエクスポート",
+      "download": "ダウンロード"
+    },
+    "states": {
+      "loading": "エクスポートジョブを読み込み中...",
+      "empty": "エクスポートジョブはまだありません。"
+    },
+    "columns": {
+      "status": "状態",
+      "rowCount": "行数",
+      "createdAt": "作成時刻",
+      "actions": "操作"
+    },
+    "errors": {
+      "createFailed": "エクスポートジョブの作成に失敗しました。",
+      "downloadFailed": "エクスポートファイルの取得に失敗しました。"
+    }
   }
 }

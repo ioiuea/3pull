@@ -1,7 +1,15 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useParams } from 'react-router';
-import { ArrowLeft, ChevronDown, ChevronUp, Filter, Loader2 } from 'lucide-react';
+import {
+  ArrowDownToLine,
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  CircleAlert,
+  Filter,
+  Loader2,
+} from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -17,6 +25,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Input } from '~/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group';
 import { useAuditLogs } from '~/hooks/use-audit-logs';
+import { useGlobalAsyncJobs } from '~/hooks/use-global-async-jobs';
+import { createAuditLogExport, downloadAuditLogExport } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
 
 const PAGE_SIZE = 20;
@@ -58,11 +68,20 @@ const AuditLogSamplePage = () => {
   const [sortKey, setSortKey] = useState<SortKey>('occurred_at');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [timeRange, setTimeRange] = useState<TimeRange>('90d');
+  const [exportTimezone, setExportTimezone] = useState<'UTC' | 'Asia/Tokyo'>('UTC');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null);
 
   const { data, error, isLoading } = useAuditLogs({
     page,
     pageSize: PAGE_SIZE,
   });
+  const {
+    jobs: globalJobs,
+    isLoading: isExportJobsLoading,
+    mutate: mutateGlobalJobs,
+  } = useGlobalAsyncJobs();
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
   const total = data?.total ?? 0;
@@ -247,6 +266,63 @@ const AuditLogSamplePage = () => {
   );
 
   const errorMessage = error instanceof Error ? error.message : null;
+  const exportJobs = useMemo(
+    () =>
+      globalJobs
+        .filter((job) => job.source === 'auditExport')
+        .slice(0, 10)
+        .map((job) => ({
+          id: job.id,
+          status: job.status,
+          row_count: null as number | null,
+          created_at: job.createdAt,
+        })),
+    [globalJobs],
+  );
+
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      setExportError(null);
+
+      const dateFrom = selectedDate !== 'all' ? `${selectedDate}T00:00:00.000Z` : undefined;
+      const dateTo = selectedDate !== 'all' ? `${selectedDate}T23:59:59.999Z` : undefined;
+
+      await createAuditLogExport({
+        event_type: selectedEventType !== 'all' ? selectedEventType : undefined,
+        provider: provider !== 'all' ? provider : undefined,
+        keyword: keyword.trim() || undefined,
+        date_from: dateFrom,
+        date_to: dateTo,
+        timezone: exportTimezone,
+      });
+      await mutateGlobalJobs();
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : t('export.errors.createFailed'));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDownload = async (jobId: string) => {
+    try {
+      setDownloadingJobId(jobId);
+      setExportError(null);
+      const blob = await downloadAuditLogExport(jobId);
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = `${jobId}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : t('export.errors.downloadFailed'));
+    } finally {
+      setDownloadingJobId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -357,6 +433,96 @@ const AuditLogSamplePage = () => {
                   ))}
                 </select>
               </div>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <select
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={exportTimezone}
+                  onChange={(event) =>
+                    setExportTimezone(event.target.value as 'UTC' | 'Asia/Tokyo')
+                  }
+                >
+                  <option value="UTC">UTC</option>
+                  <option value="Asia/Tokyo">Asia/Tokyo</option>
+                </select>
+                <Button onClick={handleExport} disabled={isExporting}>
+                  {isExporting ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <ArrowDownToLine className="size-4" />
+                  )}
+                  {t('export.actions.create')}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section id="exports">
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('export.title')}</CardTitle>
+              <CardDescription>{t('export.description')}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {exportError ? (
+                <div className="flex items-center gap-2 text-sm text-destructive">
+                  <CircleAlert className="size-4" />
+                  {exportError}
+                </div>
+              ) : null}
+              {isExportJobsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  {t('export.states.loading')}
+                </div>
+              ) : null}
+              {!isExportJobsLoading && exportJobs.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('export.states.empty')}</p>
+              ) : null}
+              {exportJobs.length > 0 ? (
+                <div className="overflow-x-auto rounded-md border">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-muted/40 text-muted-foreground">
+                      <tr>
+                        <th className="p-2 text-left">job_id</th>
+                        <th className="p-2 text-left">{t('export.columns.status')}</th>
+                        <th className="p-2 text-left">{t('export.columns.rowCount')}</th>
+                        <th className="p-2 text-left">{t('export.columns.createdAt')}</th>
+                        <th className="p-2 text-left">{t('export.columns.actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {exportJobs.map((job) => (
+                        <tr key={job.id} className="border-t align-top">
+                          <td className="p-2 font-mono text-xs">{job.id}</td>
+                          <td className="p-2">{job.status}</td>
+                          <td className="p-2">{job.row_count ?? '-'}</td>
+                          <td className="p-2 whitespace-nowrap">{toDateLabel(job.created_at)}</td>
+                          <td className="p-2">
+                            {job.status === 'succeeded' ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={downloadingJobId === job.id}
+                                onClick={() => handleDownload(job.id)}
+                              >
+                                {downloadingJobId === job.id ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                  <ArrowDownToLine className="size-4" />
+                                )}
+                                {t('export.actions.download')}
+                              </Button>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
         </section>

@@ -280,17 +280,17 @@
 ### 0-9. エクスポート機能向けフォルダ構成（確定）
 
 - エクスポート関連実装は以下に配置する。
-  - `app/adapters/queue/`（Redis/Celery 接続・enqueue 抽象）
+  - `app/adapters/queue/`（Redis/Celery 接続と汎用 enqueue API）
   - `app/adapters/storage/`（Azure Blob I/O）
   - `app/workers/`（Celery アプリ定義 / タスク登録）
   - `app/repositories/auth/`（Export Job 永続化）
-  - `app/services/auth/`（Export ユースケース）
+  - `app/services/auth/`（Export ユースケース / 業務別 dispatcher）
   - `app/jobs/`（retention cleanup CLI）
 - 命名方針:
-  - queue: `celery_app.py`, `task_dispatcher.py`
+  - queue: `celery_app.py`, `task_dispatcher.py`（汎用のみ）
   - storage: `azure_blob.py`
   - worker task: `audit_export_tasks.py`
-  - service: `auth_audit_export_service.py`
+  - service: `auth_audit_export_service.py`, `auth_audit_export_dispatcher.py`
   - repository: `auth_audit_export_repository.py`
 
 ### 0-10. エクスポート要件（確定 / FIX）
@@ -645,6 +645,20 @@
 
 ## Step 3: 監査ログエクスポート機能（Redis/Celery + Azure Blob）
 
+### 3-0. 確定仕様（2026-02-27 更新）
+
+- データモデルは `async_jobs` + `async_job_artifacts` の2テーブルに分離する。
+- 既存 `auth_audit_export_jobs` は廃止する（データ移行なし、旧migrationは取り下げ）。
+- `job_type` は `Enum` で管理し、初期値は `auth_audit_export` のみ。
+- API は汎用 `/jobs` 系へ統一し、スコープは当面「自分のジョブのみ」。
+- ジョブ作成は `POST /jobs`（`job_type` + `payload`）の1本に統一する。
+- ダウンロードはバックエンド経由配信（SAS 直接配布はしない）。
+- 同時実行制御は全 `job_type` 共通上限を適用する。
+- 状態は `queued/running/succeeded/failed/canceled/expired` を採用する。
+- 成果物は 1ジョブ複数件を許可する。
+- `async_jobs` には `requested_payload` / `result_payload` を JSONB で保持する。
+- 一覧の既定並び順は「status 優先 + created_at DESC」とする。
+
 1. エクスポート要件を固定する。
    - 形式: CSV のみ
    - 対象: 監査ログ一覧APIと同等フィルタ（date/event_type/provider/keyword）
@@ -652,37 +666,52 @@
    - 上限: 1ジョブ50,000件、全体同時3、ユーザー同時1
    - 出力ファイル保持: 既定365日、上限2555日
 2. データモデルを追加する（DB）。
-   - `auth_audit_export_jobs`（例）
+   - `async_jobs`（ジョブ本体）
      - `id`（UUID）
+     - `job_type`（Enum）
      - `requested_by_user_id`
-     - `status`（queued/running/succeeded/failed/expired）
-     - `requested_filters`（JSONB）
-     - `file_path`（Blob key）
-     - `file_size_bytes`
-     - `row_count`
+     - `status`（queued/running/succeeded/failed/canceled/expired）
+     - `requested_payload`（JSONB）
+     - `result_payload`（JSONB, nullable）
      - `error_message`
      - `created_at` / `started_at` / `finished_at` / `expires_at`
+   - `async_job_artifacts`（成果物）
+     - `id`（UUID）
+     - `job_id`（FK -> async_jobs.id）
+     - `artifact_type`（Enum or String）
+     - `storage_provider`（例: azure_blob）
+     - `storage_path`
+     - `mime_type` / `file_size_bytes` / `checksum`（必要時）
+     - `created_at` / `expires_at`
    - インデックス:
-     - `(requested_by_user_id, created_at DESC)`
-     - `(status, created_at DESC)`
+     - `async_jobs`: `(requested_by_user_id, created_at DESC)`, `(status, created_at DESC)`, `(job_type, created_at DESC)`
+     - `async_job_artifacts`: `(job_id, created_at DESC)`, `(expires_at)`
 3. 設定値を追加する（`AppSettings` / `.env.example`）。
-   - `EXPORT_ENABLED`（default: true）
-   - `EXPORT_BROKER_URL`（Redis 接続文字列）
-   - `EXPORT_RESULT_BACKEND_URL`（必要時）
-   - `EXPORT_MAX_ROWS_PER_JOB`
-   - `EXPORT_DEFAULT_RETENTION_DAYS`（default: 365）
-   - `EXPORT_RETENTION_MAX_DAYS`（上限制御）
+   - `CELERY_ENABLED`（default: true）
+   - `CELERY_BROKER_URL`（Redis 接続文字列）
+   - `CELERY_RESULT_BACKEND_URL`（必要時）
+   - `CELERY_TASK_TIME_LIMIT_SECONDS`
+   - `CELERY_AUTH_AUDIT_EXPORT_QUEUE_NAME`
+   - `CELERY_AUTH_AUDIT_EXPORT_TASK_NAME`
+   - `CELERY_MAX_ROWS_PER_JOB`
+   - `CELERY_DEFAULT_RETENTION_DAYS`（default: 365）
+   - `CELERY_RETENTION_MAX_DAYS`（上限制御）
    - `AZURE_BLOB_ACCOUNT_URL`
    - `AZURE_BLOB_CONTAINER`
-   - `AZURE_BLOB_CREDENTIAL`（Managed Identity 前提なら任意）
+   - `AZURE_BLOB_CREDENTIAL`（Storage 接続文字列を必須設定）
 4. Redis/Celery アダプタを実装する。
    - `app/adapters/queue/` に実装
    - 役割:
      - Celery アプリ初期化（broker/result backend）
-     - タスク enqueue の共通関数
+     - Redis 接続の共通化
+     - タスク enqueue の汎用関数（業務依存なし）
      - 接続設定と再試行ポリシーの標準化
+   - 業務別のタスク名/キュー名/引数整形は `app/services/auth/` の dispatcher で実装する。
 5. Celery ワーカーを実装する。
    - タスク: `export_auth_audit_logs(job_id)`
+   - 配置:
+     - `app/workers/audit_export_tasks.py`
+     - `app/workers/celery_worker.py`（Celery app 読み込み/タスク登録）
    - フロー:
      - `queued -> running`
      - フィルタに基づき監査ログをページング取得
@@ -690,37 +719,61 @@
      - Azure Blob へアップロード
      - `succeeded` + メタ情報更新
      - 例外時 `failed` + `error_message`
+   - 補足:
+     - enqueue は `app/services/auth/auth_audit_export_dispatcher.py` 経由で行う。
+     - worker 側は queue adapter の汎用 API に直接業務依存を持たない。
 6. Azure Blob アダプタを実装する。
    - `upload_bytes` / `open_stream` / `delete_blob`
    - Blob パス規約:
      - `audit-exports/{yyyy}/{mm}/{job_id}.csv`
+   - コンテナ規約:
+     - `async-jobs` コンテナ配下に保存する（例: `async-jobs/audit-exports/...`）
 7. バックエンド API を追加する。
-   - `POST /backend/auth/audit-logs/exports`
-     - エクスポートジョブ作成 + Celery enqueue
-   - `GET /backend/auth/audit-logs/exports`
-     - 自分のジョブ一覧（管理者仕様確定後に権限制御を拡張）
-   - `GET /backend/auth/audit-logs/exports/{job_id}`
+   - `POST /backend/jobs`
+     - `job_type` + `payload` でジョブ作成 + dispatcher 経由 enqueue
+     - 同時実行上限（全体3/ユーザー1）を事前検証
+   - `GET /backend/jobs`
+     - 自分のジョブ一覧（status優先 + created_at DESC）
+   - `GET /backend/jobs/{job_id}`
      - ジョブ詳細（進行状態）
-   - `GET /backend/auth/audit-logs/exports/{job_id}/download`
+   - `GET /backend/jobs/{job_id}/artifacts/{artifact_id}/download`
      - バックエンド経由で Blob からストリーム配信（直接SAS公開しない）
 8. フロントエンドを実装する。
-   - 監査ログ画面に「エクスポート」操作を追加
-   - 実行中ジョブのステータス表示（queued/running/succeeded/failed）
+   - 監査ログ画面は `POST /jobs` で `auth_audit_export` を作成する
+   - 実行中ジョブのステータス表示（queued/running/succeeded/failed/canceled/expired）
    - 完了後にダウンロードリンク表示
-9. エクスポートファイル retention cleanup を追加する。
+9. ジョブ成果物 retention cleanup を追加する。
    - 方式: 日次バッチ
    - 処理:
-     - `expires_at` 超過ジョブを抽出
+     - `async_job_artifacts.expires_at` 超過成果物を抽出
      - Blob を削除
-     - ジョブを `expired` 更新（または削除）
-   - 既存 cleanup CLI にサブコマンド追加案:
-     - `python -m app.jobs.auth_cleanup exports`
+     - `async_jobs` を `expired` 更新（または削除）
+   - cleanup CLI にサブコマンド追加:
+     - `python -m app.jobs.auth_cleanup jobs`
+   - 補足:
+     - queue adapter は cleanup から参照しない（DB + storage adapter のみで完結）。
 10. 構造化ログ/監視を追加する（App Insights）。
    - `export.job.created`
    - `export.job.started`
    - `export.job.succeeded`
    - `export.job.failed`
    - `export.cleanup.completed`
+11. タスク登録方式を汎用化する。
+   - `app/workers/celery_worker.py` の手動 import 依存を解消する。
+   - `autodiscover_tasks` または `app/workers/tasks/__init__.py` 集約で、タスク追加時の登録漏れを防ぐ。
+12. キュー/ルーティング設計を汎用化する。
+   - task 名や feature 単位で queue routing を設定化する。
+   - 各 dispatcher は queue 名のハードコードを避け、設定経由で解決する。
+   - worker 起動時の購読キュー方針（単一/複数）を運用手順として固定する。
+13. 実行制御ポリシーを共通化する。
+   - 同時実行制御（global/user）、timeout、retry/backoff の標準ポリシーを定義する。
+   - 各ジョブ（監査エクスポート以外を含む）は共通ポリシーを参照する実装へ寄せる。
+14. ジョブ状態管理モデルを汎用化する。
+   - `async_jobs` + `async_job_artifacts` を正として実装する。
+   - 旧 `auth_audit_export_jobs` は撤去し、二重管理を排除する。
+15. 失敗時運用と再実行導線を標準化する。
+   - 失敗ジョブの再試行手順（手動/API/CLI）を定義する。
+   - リトライ不能エラーの分類と運用オペレーション（調査ログ、通知）を整理する。
 
 成果物:
 
@@ -730,6 +783,7 @@
 - Azure Blob アダプタ
 - エクスポート API + 画面
 - exports retention cleanup 実装
+- 汎用ジョブ基盤化の設計・実装（登録/ルーティング/共通ポリシー/状態管理/運用手順）
 
 ## Step 4: コンテナ化
 
