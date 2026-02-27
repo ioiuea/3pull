@@ -269,11 +269,64 @@
 1. 環境変数名・既定値・上限下限を確定する。
 2. 監査イベント一覧と `event_type` 命名規約を確定する。
 3. 監査ログに保存する PII 境界を確定する。
+4. 実装フォルダ構成（API/Worker/Adapter/Job）を確定する。
 
 成果物:
 
 - 設計メモ更新
 - `.env.example` 追記仕様
+- フォルダ構成（新規ディレクトリ含む）確定メモ
+
+### 0-9. エクスポート機能向けフォルダ構成（確定）
+
+- エクスポート関連実装は以下に配置する。
+  - `app/adapters/queue/`（Redis/Celery 接続・enqueue 抽象）
+  - `app/adapters/storage/`（Azure Blob I/O）
+  - `app/workers/`（Celery アプリ定義 / タスク登録）
+  - `app/repositories/auth/`（Export Job 永続化）
+  - `app/services/auth/`（Export ユースケース）
+  - `app/jobs/`（retention cleanup CLI）
+- 命名方針:
+  - queue: `celery_app.py`, `task_dispatcher.py`
+  - storage: `azure_blob.py`
+  - worker task: `audit_export_tasks.py`
+  - service: `auth_audit_export_service.py`
+  - repository: `auth_audit_export_repository.py`
+
+### 0-10. エクスポート要件（確定 / FIX）
+
+- 対象範囲:
+  - 監査ログ画面と同一フィルタ条件を対象とする（keyword/date/event_type/provider）。
+  - `from` / `to` の未指定を許可する（未指定時は全期間対象）。
+- 形式:
+  - 初期実装は CSV のみ。
+- 件数・実行制御:
+  - 1ジョブ最大件数: `50,000`。
+  - 全体同時実行上限: `3`。
+  - ユーザー同時実行上限: `1`。
+- タイムゾーン:
+  - `UTC` / `Asia/Tokyo` の2択をAPI入力で受け付ける。
+  - CSV出力日時は指定タイムゾーンで整形する。
+- 出力列:
+  - 監査ログ画面表示列 + `xff_raw` / `connection_ip` / `user_agent` / `metadata` を含める。
+  - `metadata` は JSON 文字列を1カラムで出力する。
+- CSV仕様:
+  - 文字コードは `UTF-8 with BOM`。
+  - ファイル名は `{job_id}.csv`。
+- 権限制御:
+  - ジョブ作成APIはログイン済みユーザーが利用可。
+  - ダウンロードはジョブ作成者本人のみ許可。
+- 実行方式:
+  - Redis ブローカー + Celery worker。
+  - 失敗時は新規ジョブ作成で再実行する。
+  - フロントの状態監視は 5 秒間隔ポーリング。
+  - 進捗表示は `status`（queued/running/succeeded/failed）のみ。
+  - タスク再試行は最大3回、1ジョブ実行タイムアウトは30分。
+- エラーハンドリング:
+  - 画面表示は汎用メッセージ、詳細はサーバーログに記録する。
+- 保持/削除:
+  - エクスポートファイル保持期間は既定365日、上限2555日（7年）を環境変数で制御。
+  - 保持期限超過ファイルは日次バッチで削除する。
 
 ### 0-1. 環境変数仕様（確定）
 
@@ -428,6 +481,8 @@
 - PII 境界（保存可/不可）が文書化されている。
 - `metadata` allowlist と 4KB 制約が文書化されている。
 - cleanup 運用方針（DROP 主体、頻度、App Insights 記録）が文書化されている。
+- エクスポート実装向けフォルダ構成が文書化されている。
+- エクスポート要件（範囲/形式/権限/保持/実行制御）が文書化されている。
 - Phase 0 の未確定事項が 0 件である。
 
 ## Phase 1: DB スキーマ準備
@@ -588,29 +643,125 @@
 - そのためローカル検証の期待値は「`client_ip == connection_ip`、`xff_raw is None`」を基本ケースとする。
 - 併せて、明示的に `X-Forwarded-For` を付与した疑似本番ケースもテストし、先頭IP採用ロジックを確認する。
 
-## Phase 3: コンテナ化
+## Step 3: 監査ログエクスポート機能（Redis/Celery + Azure Blob）
+
+1. エクスポート要件を固定する。
+   - 形式: CSV のみ
+   - 対象: 監査ログ一覧APIと同等フィルタ（date/event_type/provider/keyword）
+   - `from` / `to` 未指定可（全期間対象）
+   - 上限: 1ジョブ50,000件、全体同時3、ユーザー同時1
+   - 出力ファイル保持: 既定365日、上限2555日
+2. データモデルを追加する（DB）。
+   - `auth_audit_export_jobs`（例）
+     - `id`（UUID）
+     - `requested_by_user_id`
+     - `status`（queued/running/succeeded/failed/expired）
+     - `requested_filters`（JSONB）
+     - `file_path`（Blob key）
+     - `file_size_bytes`
+     - `row_count`
+     - `error_message`
+     - `created_at` / `started_at` / `finished_at` / `expires_at`
+   - インデックス:
+     - `(requested_by_user_id, created_at DESC)`
+     - `(status, created_at DESC)`
+3. 設定値を追加する（`AppSettings` / `.env.example`）。
+   - `EXPORT_ENABLED`（default: true）
+   - `EXPORT_BROKER_URL`（Redis 接続文字列）
+   - `EXPORT_RESULT_BACKEND_URL`（必要時）
+   - `EXPORT_MAX_ROWS_PER_JOB`
+   - `EXPORT_DEFAULT_RETENTION_DAYS`（default: 365）
+   - `EXPORT_RETENTION_MAX_DAYS`（上限制御）
+   - `AZURE_BLOB_ACCOUNT_URL`
+   - `AZURE_BLOB_CONTAINER`
+   - `AZURE_BLOB_CREDENTIAL`（Managed Identity 前提なら任意）
+4. Redis/Celery アダプタを実装する。
+   - `app/adapters/queue/` に実装
+   - 役割:
+     - Celery アプリ初期化（broker/result backend）
+     - タスク enqueue の共通関数
+     - 接続設定と再試行ポリシーの標準化
+5. Celery ワーカーを実装する。
+   - タスク: `export_auth_audit_logs(job_id)`
+   - フロー:
+     - `queued -> running`
+     - フィルタに基づき監査ログをページング取得
+     - CSV生成（ストリーム書き出し）
+     - Azure Blob へアップロード
+     - `succeeded` + メタ情報更新
+     - 例外時 `failed` + `error_message`
+6. Azure Blob アダプタを実装する。
+   - `upload_bytes` / `open_stream` / `delete_blob`
+   - Blob パス規約:
+     - `audit-exports/{yyyy}/{mm}/{job_id}.csv`
+7. バックエンド API を追加する。
+   - `POST /backend/auth/audit-logs/exports`
+     - エクスポートジョブ作成 + Celery enqueue
+   - `GET /backend/auth/audit-logs/exports`
+     - 自分のジョブ一覧（管理者仕様確定後に権限制御を拡張）
+   - `GET /backend/auth/audit-logs/exports/{job_id}`
+     - ジョブ詳細（進行状態）
+   - `GET /backend/auth/audit-logs/exports/{job_id}/download`
+     - バックエンド経由で Blob からストリーム配信（直接SAS公開しない）
+8. フロントエンドを実装する。
+   - 監査ログ画面に「エクスポート」操作を追加
+   - 実行中ジョブのステータス表示（queued/running/succeeded/failed）
+   - 完了後にダウンロードリンク表示
+9. エクスポートファイル retention cleanup を追加する。
+   - 方式: 日次バッチ
+   - 処理:
+     - `expires_at` 超過ジョブを抽出
+     - Blob を削除
+     - ジョブを `expired` 更新（または削除）
+   - 既存 cleanup CLI にサブコマンド追加案:
+     - `python -m app.jobs.auth_cleanup exports`
+10. 構造化ログ/監視を追加する（App Insights）。
+   - `export.job.created`
+   - `export.job.started`
+   - `export.job.succeeded`
+   - `export.job.failed`
+   - `export.cleanup.completed`
+
+成果物:
+
+- Export Job 用 migration
+- Redis/Celery アダプタ
+- Celery worker / task 実装
+- Azure Blob アダプタ
+- エクスポート API + 画面
+- exports retention cleanup 実装
+
+## Step 4: コンテナ化
 
 1. `apps/backend/Dockerfile` 作成。
 2. API 起動コマンド確認。
-3. cleanup ジョブコマンド確認（2種）。
+3. cleanup ジョブコマンド確認（3種）。
    - `sessions cleanup`
    - `audit retention cleanup`
-4. コンテナ起動時の env 注入とログ出力先（App Insights 連携前提）を確認。
+   - `exports retention cleanup`
+4. Celery worker 起動コマンド確認。
+5. コンテナ起動時の env 注入とログ出力先（App Insights 連携前提）を確認。
 
 成果物:
 
 - Docker build/run 手順
+- API/cleanup/worker の起動コマンド定義
 
-## Phase 4: Helm 導入
+## Step 5: Helm 導入
 
 1. backend chart 初期作成（`charts/backend` など）。
 2. Deployment/Service を chart 化。
-3. CronJob 2 種を chart 化。
-4. `values.yaml` / `values-dev.yaml` へ cleanup/retention パラメータ追加。
-5. 既定スケジュールを values に定義。
+3. CronJob 3 種を chart 化。
+   - sessions cleanup
+   - audit retention cleanup
+   - exports retention cleanup
+4. Celery worker Deployment を chart 化。
+5. `values.yaml` / `values-dev.yaml` へ cleanup/retention/export パラメータ追加。
+6. 既定スケジュールを values に定義。
    - `sessions cleanup`: 1時間毎
    - `audit retention cleanup`: 1日1回
-6. CronJob の運用設定を values に定義。
+   - `exports retention cleanup`: 1日1回
+7. CronJob の運用設定を values に定義。
    - `concurrencyPolicy: Forbid`
    - `backoffLimit`
    - `successfulJobsHistoryLimit` / `failedJobsHistoryLimit`
@@ -620,7 +771,7 @@
 
 - Helm チャート一式
 
-## Phase 5: 検証
+## Step 6: 検証
 
 1. Unit test:
    - env バリデーション
@@ -629,28 +780,98 @@
    - IP 抽出ロジック（`X-Forwarded-For`）
    - retention 判定
    - cleanup 対象抽出
+   - export job 状態遷移
 2. Integration test:
    - セッション期限切れ削除
    - 監査ログ retention 削除
    - 認証イベント記録
    - `ON DELETE SET NULL` の整合性
+   - export enqueue -> worker 実行 -> Blob 保存 -> ダウンロード
 3. Staging 検証:
    - CronJob 手動実行
    - 再実行時の多重起動抑止
-   - App Insights へ cleanup 実行ログが記録されること
+   - App Insights へ cleanup / export 実行ログが記録されること
 
 成果物:
 
 - テストケース追加
 - 検証ログ
 
-## Phase 6: リリース
+## Step 7: リリース
 
 1. 監査ログ保存のみ先行有効化。
 2. cleanup を dry-run 相当で観測（可能なら）。
-3. 本削除有効化。
-4. 運用メトリクス/アラート調整。
-5. Runbook（障害時復旧、手動実行、ロールバック）を確定。
+3. export 機能を段階有効化（internal user 限定など）。
+4. 本削除有効化（sessions/audit/exports）。
+5. 運用メトリクス/アラート調整。
+6. Runbook（障害時復旧、手動実行、ロールバック）を確定。
+
+---
+
+## 10.1 進行状況（2026-02-27 時点）
+
+本節は、`## 10. 実装ステップ（詳細）` に対する実装進捗の棚卸し。
+
+### Phase 0: 仕様確定
+
+- 状態: 完了
+- 補足:
+  - 環境変数仕様（`SESSION_TTL_HOURS` / `SESSION_EXPIRED_GRACE_DAYS` / `AUTH_AUDIT_RETENTION_MONTHS` など）確定済み。
+  - `event_type` ENUM 方針、PII 境界、`metadata` allowlist + 4KB 制約、cleanup 運用方針を文書化済み。
+
+### Phase 1: DB スキーマ準備
+
+- 状態: 完了
+- 補足:
+  - `auth_audit_logs` テーブル + ENUM + 月次パーティション + 初期パーティション作成 migration を適用済み。
+  - `metadata` 4KB 制約・`ON DELETE SET NULL`・監査用途インデックスを反映済み。
+
+### Phase 2: アプリケーション実装
+
+- 状態: 完了（現要件範囲）
+- 完了:
+  - 設定クラス追加/バリデーション（`AppSettings`）。
+  - `SESSION_TTL_SECONDS` 廃止、`SESSION_TTL_HOURS` 一本化。
+  - 監査ログ Repository / Service 実装（allowlist + 4KB 制約含む）。
+  - 認証フロー各所の監査ログ記録（success/fail 両系統）。
+  - `client_ip` / `xff_raw` / `connection_ip` 解決実装。
+  - 監査ログ表示 API + 監査ログサンプルUI実装。
+  - cleanup CLI（sessions / audit）実装。
+  - sessions cleanup / audit retention cleanup 実装。
+  - cleanup の構造化ログ出力（App Insights 連携前提フォーマット）実装。
+
+### Step 3: 監査ログエクスポート機能
+
+- 状態: 未着手
+- 補足:
+  - Redis ブローカー + Celery worker の導入未着手。
+  - Export Job テーブル/API/Azure Blob 連携未着手。
+  - export file retention cleanup 未着手。
+
+### Step 4: コンテナ化
+
+- 状態: 未着手
+- 補足:
+  - `apps/backend/Dockerfile` 未作成。
+  - cleanup/worker を含むコンテナ起動方式の定義は未実装。
+
+### Step 5: Helm 導入
+
+- 状態: 未着手
+- 補足:
+  - `charts/backend` 未作成。
+  - CronJob 3種（sessions / audit / exports）+ worker の chart 化未着手。
+
+### Step 6: 検証
+
+- 状態: 一部実施（手動検証中心）
+- 補足:
+  - 手動検証（監査ログ記録、cleanup dry-run、パーティション動作）は実施済み。
+  - 網羅的な Unit/Integration テスト拡充（export 経路含む）は未完了。
+
+### Step 7: リリース
+
+- 状態: 未着手
 
 ---
 
@@ -693,9 +914,10 @@
 2. `auth_audit_logs` migration
 3. 監査イベント書き込み
 4. cleanup CLI 実装
-5. Dockerfile
-6. Helm chart + CronJob
-7. テスト
-8. README / Runbook 更新
+5. 監査ログエクスポート（Redis/Celery + Blob）
+6. Dockerfile
+7. Helm chart + CronJob + Worker
+8. テスト
+9. README / Runbook 更新
 
 ---
