@@ -135,6 +135,128 @@ apps/backend
 - `email_verification_tokens`: メール検証トークン（ハッシュ保存）
 - `password_reset_tokens`: パスワードリセットトークン（ハッシュ保存）
 
+### データベース ER 図
+
+- 以下は `apps/backend/alembic/versions/` のマイグレーションと `apps/backend/app/models/` の現行定義を元にした、業務テーブルの ER 図です。
+- `auth_audit_logs` は月次パーティション親テーブルです。物理的には子パーティションが作成されますが、論理モデル上は 1 テーブルとして扱います。
+- `auth_audit_logs` の主キーは PostgreSQL パーティション制約に合わせて `(id, occurred_at)` の複合主キーです。
+
+```mermaid
+erDiagram
+    users {
+        UUID id PK
+        VARCHAR email UK
+        VARCHAR display_name
+        VARCHAR user_type
+        BOOLEAN is_active
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    auth_identities {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR provider
+        VARCHAR provider_subject
+        VARCHAR email_normalized
+        VARCHAR password_hash
+        INTEGER failed_login_count
+        TIMESTAMPTZ locked_until
+        TIMESTAMPTZ email_verified_at
+        TIMESTAMPTZ last_login_at
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    sessions {
+        UUID id PK
+        UUID user_id FK
+        VARCHAR session_token_hash UK
+        VARCHAR ip_address
+        VARCHAR user_agent
+        TEXT entra_access_token
+        TEXT entra_refresh_token
+        TIMESTAMPTZ entra_access_token_expires_at
+        TIMESTAMPTZ expires_at
+        TIMESTAMPTZ revoked_at
+        TIMESTAMPTZ created_at
+    }
+
+    email_verification_tokens {
+        UUID id PK
+        UUID identity_id FK
+        VARCHAR token_hash UK
+        TIMESTAMPTZ expires_at
+        TIMESTAMPTZ consumed_at
+        TIMESTAMPTZ created_at
+    }
+
+    password_reset_tokens {
+        UUID id PK
+        UUID identity_id FK
+        VARCHAR token_hash UK
+        TIMESTAMPTZ expires_at
+        TIMESTAMPTZ consumed_at
+        TIMESTAMPTZ created_at
+    }
+
+    auth_audit_logs {
+        BIGINT id PK
+        TIMESTAMPTZ occurred_at PK
+        VARCHAR event_type
+        UUID user_id FK
+        UUID session_id FK
+        VARCHAR provider
+        INET client_ip
+        TEXT xff_raw
+        INET connection_ip
+        VARCHAR user_agent
+        VARCHAR reason_code
+        JSONB metadata
+    }
+
+    async_jobs {
+        UUID id PK
+        VARCHAR job_type
+        UUID requested_by_user_id FK
+        VARCHAR status
+        VARCHAR queue_name
+        VARCHAR task_name
+        JSONB requested_payload
+        JSONB result_payload
+        VARCHAR error_message
+        INTEGER retry_count
+        TIMESTAMPTZ started_at
+        TIMESTAMPTZ finished_at
+        TIMESTAMPTZ expires_at
+        TIMESTAMPTZ created_at
+        TIMESTAMPTZ updated_at
+    }
+
+    async_job_artifacts {
+        UUID id PK
+        UUID job_id FK
+        VARCHAR artifact_type
+        VARCHAR storage_provider
+        VARCHAR container_name
+        VARCHAR blob_path
+        VARCHAR content_type
+        INTEGER file_size_bytes
+        VARCHAR checksum
+        TIMESTAMPTZ expires_at
+        TIMESTAMPTZ created_at
+    }
+
+    users ||--o{ auth_identities : has
+    users ||--o{ sessions : has
+    auth_identities ||--o{ email_verification_tokens : issues
+    auth_identities ||--o{ password_reset_tokens : issues
+    users o|--o{ auth_audit_logs : actor
+    sessions o|--o{ auth_audit_logs : source_session
+    users o|--o{ async_jobs : requested_by
+    async_jobs ||--o{ async_job_artifacts : produces
+```
+
 ### DB/トランザクション方針
 
 - DB 接続は `apps/backend/app/adapters/postgres/session.py` で一元管理します。
