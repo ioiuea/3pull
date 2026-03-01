@@ -1,6 +1,4 @@
-"""
-待機後にテスト成果物を Blob へ出力するサンプル Celery タスク.
-"""
+"""サンプル待機ジョブの Queue 非依存ハンドラ."""
 
 from __future__ import annotations
 
@@ -9,9 +7,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from app.adapters.postgres.session import get_session_factory
-from app.adapters.queue import get_celery_app
 from app.adapters.storage import upload_bytes
-from app.core.logging.config import configure_logging, get_logger
 from app.core.settings import get_settings
 from app.models.jobs.async_job import AsyncJobStatus, AsyncJobType
 from app.models.jobs.async_job_artifact import AsyncJobArtifactType
@@ -19,12 +15,11 @@ from app.repositories.jobs.async_job_artifact_repository import (
     create_async_job_artifact,
 )
 from app.repositories.jobs.async_job_repository import (
+    claim_queued_job_for_run,
     get_async_job_by_id,
     update_async_job_status,
 )
 
-logger = get_logger(__name__)
-celery_app = get_celery_app()
 _SAMPLE_FILENAME_PREFIX = "sample-wait-blob"
 
 
@@ -41,10 +36,13 @@ class JobCanceledSampleError(RuntimeError):
 
 
 def _build_blob_path(*, now_utc: datetime, job_id: str, prefix: str) -> str:
+    # 後から人が見ても追いやすいよう、用途と年月を含むパスに固定する。
     return f"sample-jobs/{now_utc:%Y}/{now_utc:%m}/{prefix}-{job_id}.txt"
 
 
-async def _mark_failed(*, job_id: str, error_message: str) -> None:
+async def mark_sample_wait_blob_failed(*, job_id: str, error_message: str) -> None:
+    # runtime から呼ばれる「恒久失敗の後始末」専用。
+    # ジョブが既に消えていても、ここでは静かに終了する。
     parsed_job_id = UUID(job_id)
     session_factory = get_session_factory()
     async with session_factory() as session:
@@ -61,7 +59,7 @@ async def _mark_failed(*, job_id: str, error_message: str) -> None:
             )
 
 
-async def _run_sample_job(*, job_id: str) -> tuple[str, int]:
+async def execute_sample_wait_blob_job(*, job_id: str) -> tuple[str, int]:
     settings = get_settings()
     parsed_job_id = UUID(job_id)
     session_factory = get_session_factory()
@@ -75,10 +73,38 @@ async def _run_sample_job(*, job_id: str) -> tuple[str, int]:
                 raise PermanentSampleError("Invalid job type for sample task")
             if job.status == AsyncJobStatus.CANCELED:
                 raise JobCanceledSampleError("Sample job was canceled before start")
-            if job.status in {AsyncJobStatus.SUCCEEDED, AsyncJobStatus.EXPIRED}:
-                raise PermanentSampleError("Sample job is already finalized")
+            if job.status in {
+                AsyncJobStatus.SUCCEEDED,
+                AsyncJobStatus.FAILED,
+                AsyncJobStatus.EXPIRED,
+            }:
+                raise JobCanceledSampleError("Sample job is already finalized")
+            if job.status == AsyncJobStatus.RUNNING:
+                raise RetryableSampleError("Sample job is already running")
 
-            wait_seconds_raw = job.requested_payload.get("wait_seconds", 120)
+            started_at = datetime.now(timezone.utc)
+            # queued -> running は条件付き update で claim し、二重起動を防ぐ。
+            claimed_job = await claim_queued_job_for_run(
+                session,
+                job_id=parsed_job_id,
+                started_at=started_at,
+            )
+            if claimed_job is None:
+                current = await get_async_job_by_id(session, job_id=parsed_job_id)
+                if current is None:
+                    raise RetryableSampleError("Sample job not found during claim")
+                if current.status == AsyncJobStatus.CANCELED:
+                    raise JobCanceledSampleError("Sample job was canceled before start")
+                if current.status in {
+                    AsyncJobStatus.SUCCEEDED,
+                    AsyncJobStatus.FAILED,
+                    AsyncJobStatus.EXPIRED,
+                }:
+                    raise JobCanceledSampleError("Sample job is already finalized")
+                raise RetryableSampleError("Sample job could not be claimed for run")
+
+            # requested_payload は API 作成時に保存した入力値の正本。
+            wait_seconds_raw = claimed_job.requested_payload.get("wait_seconds", 120)
             if isinstance(wait_seconds_raw, (int, float)):
                 wait_seconds = int(wait_seconds_raw)
             elif isinstance(wait_seconds_raw, str):
@@ -88,18 +114,12 @@ async def _run_sample_job(*, job_id: str) -> tuple[str, int]:
             if wait_seconds < 1 or wait_seconds > 600:
                 raise PermanentSampleError("wait_seconds must be between 1 and 600")
 
-            content_raw = job.requested_payload.get("content")
+            content_raw = claimed_job.requested_payload.get("content")
             custom_content = (
                 str(content_raw).strip() if isinstance(content_raw, str) else None
             )
 
-            await update_async_job_status(
-                session,
-                job=job,
-                status=AsyncJobStatus.RUNNING,
-                started_at=datetime.now(timezone.utc),
-            )
-
+    # 長時間待機中でもキャンセルを反映できるよう、1 秒ごとに DB 状態を見直す。
     for _ in range(wait_seconds):
         await asyncio.sleep(1)
         async with session_factory() as session:
@@ -143,6 +163,8 @@ async def _run_sample_job(*, job_id: str) -> tuple[str, int]:
             if job.status == AsyncJobStatus.CANCELED:
                 raise JobCanceledSampleError("Sample job was canceled before finalize")
 
+            # まず成果物メタデータを保存し、その後 job 本体を succeeded にする。
+            # こうしておくと、完了ジョブに artifact が無い不整合を減らせる。
             await create_async_job_artifact(
                 session,
                 job_id=job.id,
@@ -167,79 +189,3 @@ async def _run_sample_job(*, job_id: str) -> tuple[str, int]:
             )
 
     return blob_path, file_size
-
-
-@celery_app.task(
-    bind=True,
-    name=get_settings().sample_wait_blob_task_name,
-    max_retries=1,
-)
-def run_sample_wait_blob_job(self, job_id: str) -> None:
-    """120秒待機して Blob へテキスト出力するサンプルジョブ."""
-    settings = get_settings()
-    configure_logging(level=settings.api_log_level)
-
-    logger.info(
-        "sample.job.started",
-        job_id=job_id,
-        retry_count=self.request.retries,
-    )
-
-    try:
-        blob_path, file_size = asyncio.run(_run_sample_job(job_id=job_id))
-    except RetryableSampleError as exc:
-        if self.request.retries >= self.max_retries:
-            asyncio.run(_mark_failed(job_id=job_id, error_message=str(exc)))
-            logger.exception(
-                "sample.job.failed",
-                job_id=job_id,
-                retryable=False,
-                error=str(exc),
-            )
-            return
-        logger.warning(
-            "sample.job.retry",
-            job_id=job_id,
-            retry_count=self.request.retries + 1,
-            error=str(exc),
-        )
-        raise self.retry(exc=exc, countdown=1)
-    except PermanentSampleError as exc:
-        asyncio.run(_mark_failed(job_id=job_id, error_message=str(exc)))
-        logger.exception(
-            "sample.job.failed",
-            job_id=job_id,
-            retryable=False,
-            error=str(exc),
-        )
-        return
-    except JobCanceledSampleError:
-        logger.info(
-            "sample.job.canceled",
-            job_id=job_id,
-        )
-        return
-    except Exception as exc:  # pragma: no cover
-        if self.request.retries >= self.max_retries:
-            asyncio.run(_mark_failed(job_id=job_id, error_message=str(exc)))
-            logger.exception(
-                "sample.job.failed",
-                job_id=job_id,
-                retryable=True,
-                error=str(exc),
-            )
-            return
-        logger.warning(
-            "sample.job.retry",
-            job_id=job_id,
-            retry_count=self.request.retries + 1,
-            error=str(exc),
-        )
-        raise self.retry(exc=exc, countdown=1)
-
-    logger.info(
-        "sample.job.succeeded",
-        job_id=job_id,
-        blob_path=blob_path,
-        file_size_bytes=file_size,
-    )

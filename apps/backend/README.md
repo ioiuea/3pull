@@ -29,19 +29,23 @@ apps/backend
 │   │   │   ├── auth.py                   # 認証API
 │   │   │   └── jobs/                     # 非同期ジョブAPI（機能別分割）
 │   │   │       ├── __init__.py           # jobs ルーター集約
-│   │   │       ├── common.py             # 共通ヘルパー
-│   │   │       ├── read.py               # 参照系（一覧/詳細/成果物DL）
-│   │   │       ├── control.py            # 制御系（キャンセル等）
-│   │   │       ├── auth_audit_export.py  # 監査ログエクスポート作成
-│   │   │       └── sample_wait_blob.py   # サンプル待機ジョブ作成
+│   │   │       ├── helpers.py            # 共通ヘルパー
+│   │   │       ├── query.py              # 参照系（一覧/詳細/成果物DL）
+│   │   │       ├── commands.py           # 制御系（キャンセル等）
+│   │   │       └── create/               # ジョブ作成API群
 │   │   ├── schemas/                      # Request/Responseスキーマ層
 │   │   │   ├── auth.py                   # 認証APIスキーマ
 │   │   │   └── jobs.py                   # 非同期ジョブAPIスキーマ
 │   │   └── internal/                     # 内部運用API層（probe等）
-│   ├── adapters/                         # 外部接続層（DB/IdP/Network）
+│   ├── adapters/                         # 外部接続層（DB/IdP/Queue/Storage/Network）
 │   │   ├── postgres/                     # PostgreSQL接続管理層
 │   │   │   ├── base.py                   # SQLAlchemy Declarative Base/metadata定義
 │   │   │   └── session.py                # AsyncEngine/Session/UoW依存定義
+│   │   ├── queue/                        # Service Bus 接続・送信アダプタ層
+│   │   │   ├── service_bus_client.py     # Service Bus sender / receiver 構築
+│   │   │   └── message_sender.py         # 非同期ジョブメッセージ送信
+│   │   ├── storage/                      # Blob Storage 接続アダプタ層
+│   │   │   └── azure_blob.py             # Blob upload / download / delete
 │   │   ├── idp/                          # IdP連携層
 │   │   │   └── entra.py                  # Entra OIDCクライアント設定/連携
 │   │   └── network/                      # ネットワーク疎通アダプタ層
@@ -58,12 +62,17 @@ apps/backend
 │   │   ├── auth/                         # 認証機能のRepository群
 │   │   └── jobs/                         # 非同期ジョブ基盤のRepository群
 │   ├── schedulers/                       # 定期実行・保守バッチ層（cleanup等）
-│   │   ├── scheduler_cleanup.py               # cleanup CLIエントリポイント
+│   │   ├── scheduler_cleanup.py          # cleanup CLIエントリポイント
 │   │   └── cleanup/                      # 対象別 cleanup 実装（sessions/audit/jobs）
-│   ├── workers/                          # Celery worker / task 実装
+│   ├── workers/                          # Service Bus worker 実装
+│   │   ├── runtime.py                    # worker共通実行部
+│   │   ├── job_registry.py               # job_type と実行関数の対応表
+│   │   ├── entrypoints/                  # ジョブ種別ごとの起動スクリプト
+│   │   ├── jobs/                         # ジョブ本体実装
+│   │   └── messages/                     # queue受信メッセージ定義
 │   └── services/                         # ユースケース層（業務ロジック）
 │       ├── auth/                         # 認証ユースケース
-│       ├── jobs/                         # 非同期ジョブ基盤サービス
+│       ├── jobs/                         # 非同期ジョブ投入サービス
 │       └── health.py                     # ヘルスチェックユースケース
 ├── alembic/                              # マイグレーション管理層
 │   └── versions/                         # 生成されたリビジョンファイル
@@ -78,7 +87,7 @@ apps/backend
 ```
 
 - `api/` は HTTP 入出力、`services/` はユースケース、`repositories/` は DB 操作、`models/` は ORM 定義を担当します。
-- `adapters/` は外部接続（DB・IdP・ネットワーク）を集約し、`core/` は横断関心事（設定/ログ/セキュリティ）を管理します。
+- `adapters/` は外部接続（DB・IdP・Queue・Storage・ネットワーク）を集約し、`core/` は横断関心事（設定/ログ/セキュリティ）を管理します。
 
 ## API インタフェース規約
 
@@ -87,14 +96,6 @@ apps/backend
 - `apps/backend/app/api/schemas/` にはリクエスト・レスポンスのスキーマ（Pydantic モデル）を配置します。
 - 各 API の公開インタフェースは `routers` と `schemas` の組み合わせで定義し、ハンドラ内で直接生の辞書構造を返す実装を避けます。
 - `apps/backend/app/main.py` は FastAPI の API ブートストラップとして扱い、アプリ生成・ミドルウェア設定・ルーター登録を担当します。
-
-## ログ出力方針
-
-- アプリケーションログは `structlog` による構造化ログ（JSON）を標準とします。
-- ログ関連の実装は `apps/backend/app/core/logging/` 配下に集約します。
-- ログ設定（processor / renderer / level）は `apps/backend/app/core/logging/config.py` で一元管理します。
-- アクセスログは `apps/backend/app/core/logging/middleware.py` のミドルウェアで出力し、リクエスト単位のメタ情報を JSON で記録します。
-- `apps/backend/app/main.py`（ブートストラップ）で logging 設定を import して適用し、アプリ起動時に必ず有効化します。
 
 ## 設定管理方針（pydantic-settings）
 
@@ -109,6 +110,35 @@ apps/backend
 - ブートストラップ（`apps/backend/app/main.py`）で `get_settings()` を呼び出し、`FastAPI` の title やポートなど起動設定に利用します。
 - ライフサイクル（`apps/backend/app/core/lifecycle/startup.py`）で `get_settings()` を呼び出し、ログレベルやサービス名など運用情報の出力に利用します。
 - 各モジュールで直接 `os.environ` を読む実装は避け、設定参照は必ず `get_settings()` 経由で統一します。
+
+## ログ出力方針
+
+- アプリケーションログは `structlog` による構造化ログ（JSON）を標準とします。
+- ログ関連の実装は `apps/backend/app/core/logging/` 配下に集約します。
+- ログ設定（processor / renderer / level）は `apps/backend/app/core/logging/config.py` で一元管理します。
+- アクセスログは `apps/backend/app/core/logging/middleware.py` のミドルウェアで出力し、リクエスト単位のメタ情報を JSON で記録します。
+- `apps/backend/app/main.py`（ブートストラップ）で logging 設定を import して適用し、アプリ起動時に必ず有効化します。
+
+## APIプロテクト方針
+
+- API の保護は「セッション Cookie + DB セッション検証」を標準とします。
+- 公開API（フロントが利用）は `/backend/*` 配下に集約し、必要なエンドポイントへ認証依存を適用します。
+- ヘルス系は役割で分離します。
+- フロント向け健全性確認: `GET /backend/health`（認証必須）
+- 運用プローブ: `GET /livez`, `GET /readyz`（認証不要、`/backend` 配下外、`include_in_schema=False`）
+- `/livez` / `/readyz` はコード上は公開ルートですが、実運用では Ingress/ALB 側で外部公開しない前提です。
+- CSRF は `Origin/Referer` 検証ミドルウェアで保護し、許可オリジンは `CSRF_TRUSTED_ORIGINS` で管理します。
+
+### APIプロテクトの利用方法
+
+- フロントから保護APIを呼ぶときは Cookie を必ず送る（`credentials: include`）。
+- 未認証時は `401` を受け取り、ログイン導線へ遷移します。
+- `GET /backend/health` は次を返します。
+- `status`: `ok` または `degraded`
+- `dependencies.postgres`: TCP 到達性（`ok`, `latency_ms`, `error`）
+- `GET /backend/auth/entra/profile` は internal ユーザー専用です。
+- external ユーザーは `403`
+- セッショントークン不備/失効時は `401`
 
 ## 認証実装方針
 
@@ -134,6 +164,8 @@ apps/backend
 - Entra 用トークン管理（`entra_access_token`, `entra_refresh_token`, `entra_access_token_expires_at`）
 - `email_verification_tokens`: メール検証トークン（ハッシュ保存）
 - `password_reset_tokens`: パスワードリセットトークン（ハッシュ保存）
+- `async_jobs`: 非同期ジョブ本体（`job_type`, `status`, `requested_payload`, `expires_at` など）
+- `async_job_artifacts`: 非同期ジョブ成果物メタデータ（`blob_path`, `content_type`, `file_size_bytes` など）
 
 ### データベース ER 図
 
@@ -291,26 +323,210 @@ erDiagram
 - `POST /backend/auth/session/refresh`
 - セッションをローテーションし、新 Cookie を再発行します。
 
-## APIプロテクト方針
+## Graph プロファイル取得実装
 
-- API の保護は「セッション Cookie + DB セッション検証」を標準とします。
-- 公開API（フロントが利用）は `/backend/*` 配下に集約し、必要なエンドポイントへ認証依存を適用します。
-- ヘルス系は役割で分離します。
-- フロント向け健全性確認: `GET /backend/health`（認証必須）
-- 運用プローブ: `GET /livez`, `GET /readyz`（認証不要、`/backend` 配下外、`include_in_schema=False`）
-- `/livez` / `/readyz` はコード上は公開ルートですが、実運用では Ingress/ALB 側で外部公開しない前提です。
-- CSRF は `Origin/Referer` 検証ミドルウェアで保護し、許可オリジンは `CSRF_TRUSTED_ORIGINS` で管理します。
+- Entra 認証ユーザー（`user_type=internal`）向けに、Microsoft Graph の `/me` を backend 経由で取得します。
+- フロントは Graph に直接アクセスせず、`/backend/auth/entra/profile` を呼びます。
 
-### APIプロテクトの利用方法
+### API 仕様
 
-- フロントから保護APIを呼ぶときは Cookie を必ず送る（`credentials: include`）。
-- 未認証時は `401` を受け取り、ログイン導線へ遷移します。
-- `GET /backend/health` は次を返します。
-- `status`: `ok` または `degraded`
-- `dependencies.postgres`: TCP 到達性（`ok`, `latency_ms`, `error`）
-- `GET /backend/auth/entra/profile` は internal ユーザー専用です。
-- external ユーザーは `403`
-- セッショントークン不備/失効時は `401`
+- エンドポイント:
+- `GET /backend/auth/entra/profile`
+- 認証:
+- セッション Cookie 必須（APIプロテクト対象）
+- アクセス制御:
+- internal ユーザーのみ許可（external は `403`）
+- 主なレスポンス項目:
+- `displayName`, `companyName`, `department`, `jobTitle`, `email`
+- `access_token_expires_at`
+
+### 実装フロー
+
+- 1. Entra ログイン（`/backend/auth/entra/callback`）時に token を取得
+- 2. `sessions` テーブルへ以下を保存
+- `entra_access_token`
+- `entra_refresh_token`
+- `entra_access_token_expires_at`
+- 3. `/backend/auth/entra/profile` 呼び出し時に access token の期限を判定
+- 4. 期限切れ/未設定の場合は refresh token grant で再取得
+- 5. 新しい token を `sessions` に更新してから Graph `/me` を呼び出し
+- 6. Graph 結果を API レスポンスとして返却
+
+### セキュリティ方針
+
+- access/refresh token は DB 保存前に暗号化します。
+- 復号鍵は `ENTRA_TOKEN_ENCRYPTION_KEY` を使用します。
+- 鍵未設定時はトークン処理で `503` を返します。
+- 既存平文データとの後方互換として、非暗号化値の読み取りも許容しています。
+
+### 必須設定
+
+- Entra アプリ側 permission:
+- `User.Read`（Graph `/me` 用）
+- `offline_access`（refresh token 用）
+- backend 環境変数:
+- `ENTRA_TENANT_ID`
+- `ENTRA_CLIENT_ID`
+- `ENTRA_CLIENT_SECRET`
+- `ENTRA_REDIRECT_URI`
+- `ENTRA_TOKEN_ENCRYPTION_KEY`
+
+## 非同期ジョブ基盤仕様（正式）
+
+### 汎用基盤仕様
+
+- 非同期ジョブ基盤は `Azure Service Bus + 専用 worker` を標準とします。
+- ジョブ状態の正本は `async_jobs`、成果物メタデータの正本は `async_job_artifacts` とします。
+- API は `/backend/jobs` に集約し、API サーバは「ジョブ作成 + queue への投入」を担当します。
+- worker は `Service Bus` からメッセージを受信し、DB を正本としてジョブ実行・状態更新を行います。
+- 成果物本体は `Azure Blob Storage` に保存し、DB にはメタデータのみ保持します。
+- メッセージは `job_id` 中心の最小構成とし、worker は `job_id` で `async_jobs` を引き直します。
+
+#### データモデル
+
+- `async_jobs`
+- 主な列: `job_type`, `status`, `queue_name`, `task_name`, `requested_payload`, `result_payload`, `error_message`, `retry_count`, `started_at`, `finished_at`, `expires_at`
+- `job_type` は `VARCHAR` で管理し、許可値はアプリケーション層（`AsyncJobType`）で管理します。
+- `status`: `queued` / `running` / `succeeded` / `failed` / `canceled` / `expired`
+
+- `async_job_artifacts`
+- 主な列: `job_id`, `artifact_type`, `storage_provider`, `container_name`, `blob_path`, `content_type`, `file_size_bytes`, `expires_at`
+- `artifact_type` は `VARCHAR` で管理し、許可値はアプリケーション層（`AsyncJobArtifactType`）で管理します。
+- `job_id` は `async_jobs.id` を参照し、`ON DELETE CASCADE` で連動削除されます。
+
+#### Jobs API
+
+- `POST /backend/jobs/auth-audit-export`
+- 監査ログエクスポートジョブを作成し、`202 Accepted` を返します。
+
+- `POST /backend/jobs/sample-wait-blob`
+- サンプル待機ジョブを作成し、`202 Accepted` を返します。
+
+- `POST /backend/jobs/{job_id}/cancel`
+- 自分の `queued` / `running` ジョブを `canceled` へ更新します。
+
+- `GET /backend/jobs`
+- 自分のジョブ一覧を返します（`page` / `page_size` / `job_type` 対応）。
+
+- `GET /backend/jobs/{job_id}`
+- 自分のジョブ詳細を返します。
+
+- `GET /backend/jobs/{job_id}/artifacts/{artifact_id}/download`
+- 成果物 Blob を backend 経由でダウンロードします。
+
+- 共通の同時実行上限:
+- 全体: `ASYNC_JOB_GLOBAL_CONCURRENCY`
+- ユーザー単位: `ASYNC_JOB_PER_USER_CONCURRENCY`
+- いずれも同じ `job_type` の `queued` / `running` だけを対象に判定します。
+
+- 機能フラグ:
+- `ASYNC_JOBS_ENABLED=false` の環境では、ジョブ作成 API は `404` を返します。
+- 参照・キャンセル・成果物ダウンロード API は、現在の実装ではこのフラグで一律に遮断していません。
+
+- 状態遷移の基本:
+- 作成時は `queued`
+- worker 開始時に `queued -> running` を claim
+- 完了時に `succeeded` / `failed`
+- キャンセルは queue 削除ではなく `canceled` を DB に記録
+- 期限切れ成果物 cleanup 後、成果物が 0 件になったジョブは `expired`
+
+#### Queue / Worker 構成
+
+- メッセージ送信: `app.adapters.queue.message_sender`
+- Service Bus client: `app.adapters.queue.service_bus_client`
+- ジョブ投入サービス入口: `app.services.jobs.async_job_dispatcher`
+- worker 共通 runtime: `app.workers.runtime`
+- job_type registry: `app.workers.job_registry`
+- 受信メッセージ定義: `app.workers.messages.async_job`
+- 受信モードは `peek-lock` を前提とします。
+- worker は `1 Pod / 1メッセージ直列処理` を前提とします。
+- retry は Service Bus 標準の再配送を優先し、一時失敗は `abandon`、恒久失敗は `dead-letter` します。
+
+#### 起動コマンド
+
+- 開発同時起動（API/Web/Worker）:
+- `make dev`
+- 本番相当同時起動（API/Web/Worker）:
+- `make up`
+- Worker のみ:
+- `make dev-worker`
+- `make up-worker`
+- ジョブ種別ごとの Worker:
+- `make dev-worker-auth-audit-export`
+- `make dev-worker-sample-wait-blob`
+- `make up-worker-auth-audit-export`
+- `make up-worker-sample-wait-blob`
+- 直接実行:
+- `uv --directory apps/backend run python -m app.workers.entrypoints.auth_audit_export`
+- `uv --directory apps/backend run python -m app.workers.entrypoints.sample_wait_blob`
+
+#### 主要環境変数（基盤共通）
+
+- `ASYNC_JOBS_ENABLED`
+- `ASYNC_JOB_MAX_ROWS_PER_JOB`
+- `ASYNC_JOB_DEFAULT_RETENTION_DAYS`
+- `ASYNC_JOB_RETENTION_MAX_DAYS`
+- `ASYNC_JOB_GLOBAL_CONCURRENCY`
+- `ASYNC_JOB_PER_USER_CONCURRENCY`
+- `ASYNC_JOB_RUNNING_TIMEOUT_SECONDS`
+- `SERVICE_BUS_NAMESPACE_FQDN`
+- `SERVICE_BUS_USE_CONNECTION_STRING`
+- `SERVICE_BUS_CONNECTION_STRING`
+- `SERVICE_BUS_AUTH_AUDIT_EXPORT_QUEUE_NAME`
+- `SERVICE_BUS_SAMPLE_WAIT_BLOB_QUEUE_NAME`
+- `ASYNC_JOB_AUTH_AUDIT_EXPORT_TASK_NAME`
+- `ASYNC_JOB_SAMPLE_WAIT_BLOB_TASK_NAME`
+- `AZURE_BLOB_ACCOUNT_URL`
+- `AZURE_BLOB_CONTAINER`
+- `AZURE_BLOB_USE_CONNECTION_STRING`
+- `AZURE_BLOB_CONNECTION_STRING`
+
+### ジョブ種別仕様: `auth_audit_export`
+
+- 用途: 監査ログの CSV エクスポート。
+- `job_type`: `auth_audit_export`
+- queue 設定: `SERVICE_BUS_AUTH_AUDIT_EXPORT_QUEUE_NAME`
+- task 設定: `ASYNC_JOB_AUTH_AUDIT_EXPORT_TASK_NAME`（既定: `jobs.auth_audit_export`）
+- 作成 API: `app.api.routers.jobs.create.auth_audit_export`
+- worker 実装: `app.workers.jobs.audit_export`
+- worker 起動入口: `app.workers.entrypoints.auth_audit_export`
+
+### ジョブ種別仕様: `sample_wait_blob`
+
+- 用途: 非同期ジョブ基盤の動作確認（待機後にテキスト成果物を生成）。
+- `job_type`: `sample_wait_blob`
+- queue 設定: `SERVICE_BUS_SAMPLE_WAIT_BLOB_QUEUE_NAME`
+- task 設定: `ASYNC_JOB_SAMPLE_WAIT_BLOB_TASK_NAME`（既定: `jobs.sample_wait_blob`）
+- 作成 API: `app.api.routers.jobs.create.sample_wait_blob`
+- worker 実装: `app.workers.jobs.sample_wait_blob`
+- worker 起動入口: `app.workers.entrypoints.sample_wait_blob`
+- ファイル名プレフィクスは固定値 `sample-wait-blob`（API入力で可変にしない）。
+
+### 新規ジョブ追加手順（実装テンプレート）
+
+- 1. ジョブ種別を定義する
+- `app/models/jobs/async_job.py` の `AsyncJobType` に新しい種別を追加する。
+- 成果物がある場合は `app/models/jobs/async_job_artifact.py` の `AsyncJobArtifactType` に追加する。
+
+- 2. 設定値を追加する
+- `app/core/settings/config.py` に queue 名 / task 名（`SERVICE_BUS_<JOB>_QUEUE_NAME`, `ASYNC_JOB_<JOB>_TASK_NAME`）を追加する。
+- `.env.example` に新しい環境変数の説明とサンプル値を追加する。
+- `.env`（実行環境）に同じ環境変数を設定する。
+- 必要なら `Makefile` に個別 worker ターゲットと集約ターゲットへの組み込みを追加する。
+
+- 3. API を追加する
+- `app/api/routers/jobs/create/` 配下に機能別ファイルを追加する。
+- `POST /backend/jobs/<job-name>` で `create_async_job` + `dispatch_async_job` を実装する。
+- 必要に応じてペイロードバリデーション（Pydantic）と同時実行制御を入れる。
+
+- 4. worker を追加する
+- `app/workers/jobs/` に job 本体を追加し、`app/workers/job_registry.py` に登録する。
+- `app/workers/entrypoints/` に起動スクリプトを追加し、対象 queue 名と `expected_job_type` を設定する。
+- 成果物生成時は `create_async_job_artifact` で DB メタ情報を保存する。
+
+- 5. cleanup と UI 連携を追加する
+- 成果物 TTL がある場合は既存 `scheduler_cleanup jobs` フローに乗るよう `expires_at` を設定する。
+- フロントのグローバル表示に載せる場合は `apps/frontend/app/lib/async-job-providers.ts` に provider を追加する。
 
 ## TCP Ping アダプター利用方法
 
@@ -419,8 +635,9 @@ else:
 - 削除基準: `expires_at < run_at_utc`。
 - 処理順: Blob 削除成功後に DB レコードを削除する（孤立DB参照防止）。
 - 成果物が 0 件になった `async_jobs` は `expired` に更新する。
+- `running` のまま `ASYNC_JOB_RUNNING_TIMEOUT_SECONDS` を超えたジョブは `failed` に更新する。
 - `--dry-run` は削除せず、対象件数のみ計測する。
-- `CELERY_ENABLED=false` の場合は `disabled` として終了する。
+- `ASYNC_JOBS_ENABLED=false` の場合は `disabled` として終了する。
 
 ### 環境変数
 
@@ -429,8 +646,9 @@ else:
 - `AUTH_AUDIT_RETENTION_MONTHS`（既定: 12）
 - `SESSION_CLEANUP_ENABLED`（既定: true）
 - `AUDIT_CLEANUP_ENABLED`（既定: true）
+- `ASYNC_JOBS_ENABLED`（既定: true）
+- `ASYNC_JOB_RUNNING_TIMEOUT_SECONDS`（既定: 2700）
 - `CLEANUP_BATCH_SIZE`（既定: 5000）
-- `CELERY_ENABLED`（既定: true）
 
 ### 構造化ログ
 
@@ -445,133 +663,36 @@ else:
 - `job_name`, `run_at`, `dry_run`, `batch_size`
 - `delete_before_expires_at`, `grace_days`, `target_count`（sessions）
 - `current_month`, `keep_from_month`, `drop_before_month`, `drop_partition_count`, `drop_candidate_row_count`, `next_partition`（audit）
-- `deleted_artifact_rows`, `deleted_blob_count`, `failed_blob_count`, `expired_job_count`（jobs）
+- `stale_started_before`, `expired_artifact_target_count`, `stale_running_target_count`, `total_target_count`（jobs criteria）
+- `deleted_artifact_rows`, `deleted_blob_count`, `failed_blob_count`, `expired_job_count`, `failed_stale_running_count`（jobs deleted）
 - `deleted_count`, `duration_ms`, `status`, `error`
 
-## 非同期ジョブ基盤仕様（正式）
+## Alembic（Makefile 利用方法）
 
-### 汎用基盤仕様
+- マイグレーション運用は `Makefile` ターゲット経由を標準とします。
+- 実行前提として `apps/backend/.env` の `DATABASE_URL` が正しく設定されている必要があります。
 
-- 非同期ジョブは `async_jobs`（ジョブ本体）と `async_job_artifacts`（成果物）で管理します。
-- API は `/backend/jobs` に集約します。
-- 成果物は Azure Blob に保存し、DB にはメタデータのみ保持します。
+### マイグレーション生成
 
-#### データモデル
+- 実行:
+- `make alembic-revision "add entra token columns to sessions"`
+- 内部で実行されるコマンド:
+- `uv run alembic revision --autogenerate -m "<message>"`
+- メッセージ未指定時はエラー終了します。
 
-- `async_jobs`
-- 主な列: `job_type`, `status`, `queue_name`, `task_name`, `requested_payload`, `result_payload`, `error_message`, `retry_count`, `started_at`, `finished_at`, `expires_at`
-- `job_type` は `VARCHAR` で管理し、許可値はアプリケーション層（`AsyncJobType`）で管理します。
-- `status`: `queued` / `running` / `succeeded` / `failed` / `canceled` / `expired`
+### マイグレーション適用
 
-- `async_job_artifacts`
-- 主な列: `job_id`, `artifact_type`, `storage_provider`, `container_name`, `blob_path`, `content_type`, `file_size_bytes`, `expires_at`
-- `artifact_type` は `VARCHAR` で管理し、許可値はアプリケーション層（`AsyncJobArtifactType`）で管理します。
-- `job_id` は `async_jobs.id` を参照し、`ON DELETE CASCADE` で連動削除されます。
+- 実行:
+- `make alembic-upgrade`
+- 内部で実行されるコマンド:
+- `uv run alembic upgrade head`
 
-#### Jobs API
+### 注意点
 
-- `POST /backend/jobs/auth-audit-export`
-- 監査ログエクスポートジョブを作成し、`202 Accepted` を返します。
-
-- `POST /backend/jobs/sample-wait-blob`
-- サンプル待機ジョブを作成し、`202 Accepted` を返します。
-
-- `POST /backend/jobs/{job_id}/cancel`
-- 自分の `queued` / `running` ジョブを `canceled` へ更新します。
-
-- 共通の同時実行上限:
-- 全体: `CELERY_GLOBAL_CONCURRENCY`
-- ユーザー単位: `CELERY_PER_USER_CONCURRENCY`
-
-- `GET /backend/jobs`
-- 自分のジョブ一覧を返します（`page` / `page_size` / `job_type` 対応）。
-
-- `GET /backend/jobs/{job_id}`
-- 自分のジョブ詳細を返します。
-
-- `GET /backend/jobs/{job_id}/artifacts/{artifact_id}/download`
-- 成果物 Blob を backend 経由でダウンロードします。
-
-#### Celery/Queue 構成
-
-- Celery アプリ初期化: `app.adapters.queue.celery_app`
-- Worker エントリポイント: `app.workers.celery_worker:celery_app`
-- タスクモジュール読み込み: `CELERY_TASK_MODULES`（カンマ区切り）
-- Worker 消費キュー設定: `CELERY_WORKER_QUEUES`（カンマ区切り）
-
-#### 起動コマンド
-
-- 開発同時起動（API/Web/Worker）:
-- `make dev`
-- 本番相当同時起動（API/Web/Worker）:
-- `make up`
-- Worker のみ:
-- `make dev-worker`
-- `make up-worker`
-- 直接実行:
-- `uv --directory apps/backend run celery -A app.workers.celery_worker:celery_app worker -Q $(CELERY_WORKER_QUEUES) -l info`
-
-#### 主要環境変数（基盤共通）
-
-- `CELERY_ENABLED`
-- `CELERY_BROKER_URL`
-- `CELERY_RESULT_BACKEND_URL`
-- `CELERY_MAX_ROWS_PER_JOB`
-- `CELERY_DEFAULT_RETENTION_DAYS`
-- `CELERY_RETENTION_MAX_DAYS`
-- `CELERY_GLOBAL_CONCURRENCY`
-- `CELERY_PER_USER_CONCURRENCY`
-- `CELERY_TASK_TIME_LIMIT_SECONDS`
-- `CELERY_TASK_MODULES`
-- `CELERY_WORKER_QUEUES`
-- `AZURE_BLOB_ACCOUNT_URL`
-- `AZURE_BLOB_CONTAINER`
-- `AZURE_BLOB_CREDENTIAL`
-
-### ジョブ種別仕様: `auth_audit_export`
-
-- 用途: 監査ログの CSV エクスポート。
-- `job_type`: `auth_audit_export`
-- queue 設定: `CELERY_AUTH_AUDIT_EXPORT_QUEUE_NAME`
-- task 設定: `CELERY_AUTH_AUDIT_EXPORT_TASK_NAME`（既定: `jobs.auth_audit_export`）
-- worker 実装: `app.workers.audit_export_tasks`
-- クエリ実装: `app.services.jobs.query.auth_audit_export_query_service`
-
-### ジョブ種別仕様: `sample_wait_blob`
-
-- 用途: 非同期ジョブ基盤の動作確認（待機後にテキスト成果物を生成）。
-- `job_type`: `sample_wait_blob`
-- queue 設定: `CELERY_SAMPLE_WAIT_BLOB_QUEUE_NAME`
-- task 設定: `CELERY_SAMPLE_WAIT_BLOB_TASK_NAME`（既定: `jobs.sample_wait_blob`）
-- worker 実装: `app.workers.sample_wait_blob_tasks`
-- ファイル名プレフィクスは固定値 `sample-wait-blob`（API入力で可変にしない）。
-
-### 新規ジョブ追加手順（実装テンプレート）
-
-- 1. ジョブ種別を定義する
-- `app/models/jobs/async_job.py` の `AsyncJobType` に新しい種別を追加する。
-- 成果物がある場合は `app/models/jobs/async_job_artifact.py` の `AsyncJobArtifactType` に追加する。
-
-- 2. 設定値を追加する
-- `app/core/settings/config.py` に queue 名 / task 名（`CELERY_<JOB>_QUEUE_NAME`, `CELERY_<JOB>_TASK_NAME`）を追加する。
-- `CELERY_TASK_MODULES` の既定値に新タスクモジュールを追加する。
-- `.env.example` に新しい環境変数の説明とサンプル値を追加する。
-- `.env`（実行環境）に同じ環境変数を設定する。
-- worker が新キューを購読できるよう、`CELERY_WORKER_QUEUES` に新キュー名を追加する。
-- `make dev-worker` / `make up-worker` を使う場合は、`Makefile` の既定値（`CELERY_WORKER_QUEUES ?= ...`）にも新キューが含まれることを確認する。
-
-- 3. API を追加する
-- `app/api/routers/jobs/` 配下に機能別ファイル（例: `foo_job.py`）を追加する。
-- `POST /backend/jobs/<job-name>` で `create_async_job` + `dispatch_async_job` を実装する。
-- 必要に応じてペイロードバリデーション（Pydantic）と同時実行制御を入れる。
-
-- 4. worker を追加する
-- `app/workers/` 配下に Celery タスクを追加し、`queued -> running -> succeeded/failed/canceled` を更新する。
-- 成果物生成時は `create_async_job_artifact` で DB メタ情報を保存する。
-
-- 5. cleanup と UI 連携を追加する
-- 成果物 TTL がある場合は既存 `scheduler_cleanup jobs` フローに乗るよう `expires_at` を設定する。
-- フロントのグローバル表示に載せる場合は `apps/frontend/app/lib/async-job-providers.ts` に provider を追加する。
+- `Target database is not up to date.` が出た場合:
+- 先に `make alembic-upgrade` で最新まで適用してから `make alembic-revision` を実行します。
+- 既に `alembic/versions` に手動追加済みファイルがある場合:
+- 追加で `revision` を切らず、`make alembic-upgrade` のみで適用します。
 
 ## CI 実装方針
 
@@ -630,81 +751,6 @@ else:
 - リポジトリ全体（frontend + backend）の CI 実行:
 - `make ci`
 - 実行順: `install` → `frontend-ci` → `backend-ci`
-
-## Alembic（Makefile 利用方法）
-
-- マイグレーション運用は `Makefile` ターゲット経由を標準とします。
-- 実行前提として `apps/backend/.env` の `DATABASE_URL` が正しく設定されている必要があります。
-
-### マイグレーション生成
-
-- 実行:
-- `make alembic-revision "add entra token columns to sessions"`
-- 内部で実行されるコマンド:
-- `uv run alembic revision --autogenerate -m "<message>"`
-- メッセージ未指定時はエラー終了します。
-
-### マイグレーション適用
-
-- 実行:
-- `make alembic-upgrade`
-- 内部で実行されるコマンド:
-- `uv run alembic upgrade head`
-
-### よくある注意点
-
-- `Target database is not up to date.` が出た場合:
-- 先に `make alembic-upgrade` で最新まで適用してから `make alembic-revision` を実行します。
-- 既に `alembic/versions` に手動追加済みファイルがある場合:
-- 追加で `revision` を切らず、`make alembic-upgrade` のみで適用します。
-
-## Graph プロファイル取得実装
-
-- Entra 認証ユーザー（`user_type=internal`）向けに、Microsoft Graph の `/me` を backend 経由で取得します。
-- フロントは Graph に直接アクセスせず、`/backend/auth/entra/profile` を呼びます。
-
-### API 仕様
-
-- エンドポイント:
-- `GET /backend/auth/entra/profile`
-- 認証:
-- セッション Cookie 必須（APIプロテクト対象）
-- アクセス制御:
-- internal ユーザーのみ許可（external は `403`）
-- 主なレスポンス項目:
-- `displayName`, `companyName`, `department`, `jobTitle`, `email`
-- `access_token_expires_at`
-
-### 実装フロー
-
-- 1. Entra ログイン（`/backend/auth/entra/callback`）時に token を取得
-- 2. `sessions` テーブルへ以下を保存
-- `entra_access_token`
-- `entra_refresh_token`
-- `entra_access_token_expires_at`
-- 3. `/backend/auth/entra/profile` 呼び出し時に access token の期限を判定
-- 4. 期限切れ/未設定の場合は refresh token grant で再取得
-- 5. 新しい token を `sessions` に更新してから Graph `/me` を呼び出し
-- 6. Graph 結果を API レスポンスとして返却
-
-### セキュリティ方針
-
-- access/refresh token は DB 保存前に暗号化します。
-- 復号鍵は `ENTRA_TOKEN_ENCRYPTION_KEY` を使用します。
-- 鍵未設定時はトークン処理で `503` を返します。
-- 既存平文データとの後方互換として、非暗号化値の読み取りも許容しています。
-
-### 必須設定
-
-- Entra アプリ側 permission:
-- `User.Read`（Graph `/me` 用）
-- `offline_access`（refresh token 用）
-- backend 環境変数:
-- `ENTRA_TENANT_ID`
-- `ENTRA_CLIENT_ID`
-- `ENTRA_CLIENT_SECRET`
-- `ENTRA_REDIRECT_URI`
-- `ENTRA_TOKEN_ENCRYPTION_KEY`
 
 ## Python コーディング規約
 

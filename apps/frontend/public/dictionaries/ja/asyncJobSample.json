@@ -18,6 +18,7 @@
   "history": {
     "title": "ジョブ履歴",
     "description": "最新20件のサンプルジョブ（5秒ごと自動更新）。",
+    "pollingNote": "一覧は5秒ごとに更新するため、完了表示には数秒のラグが出る場合があります。",
     "filter": {
       "statusLabel": "ステータス絞り込み",
       "status": {

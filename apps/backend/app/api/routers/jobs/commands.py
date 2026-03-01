@@ -17,7 +17,7 @@ from app.repositories.jobs import (
     update_async_job_status,
 )
 
-from .common import require_session_user, router, to_job_response
+from .helpers import require_session_user, router, to_job_response
 
 
 @router.post("/{job_id}/cancel", response_model=AsyncJobResponse)
@@ -29,6 +29,7 @@ async def cancel_job(
     """自分の queued/running ジョブをキャンセルする."""
     user = await require_session_user(request, session)
     job = await get_async_job_by_id(session, job_id=job_id)
+    # 他人のジョブの存在を見せないため、未存在と他人所有は同じ 404 にする。
     if job is None or job.requested_by_user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -36,6 +37,7 @@ async def cancel_job(
         )
 
     if job.status == AsyncJobStatus.CANCELED:
+        # すでに canceled なら冪等に成功扱いで最新状態を返す。
         artifacts = await list_async_job_artifacts_by_job(session, job_id=job.id)
         return to_job_response(job, artifacts=artifacts)
 
@@ -44,6 +46,7 @@ async def cancel_job(
         AsyncJobStatus.FAILED,
         AsyncJobStatus.EXPIRED,
     }:
+        # 終了済みジョブは後から止められないので 409 を返す。
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -56,6 +59,8 @@ async def cancel_job(
         session,
         job=job,
         status=AsyncJobStatus.CANCELED,
+        # Service Bus のメッセージ自体は残っていても、
+        # worker 側がこの status を見て no-op にする。
         finished_at=datetime.now(timezone.utc),
         error_message=None,
     )

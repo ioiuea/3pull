@@ -18,6 +18,7 @@
   "history": {
     "title": "Job History",
     "description": "Latest 20 sample jobs (auto refresh every 5 seconds).",
+    "pollingNote": "Because the list refreshes every 5 seconds, completed jobs may appear a few seconds late.",
     "filter": {
       "statusLabel": "Status Filter",
       "status": {

@@ -26,6 +26,7 @@ async def create_async_job_artifact(
     checksum: str | None = None,
     expires_at: datetime | None = None,
 ) -> AsyncJobArtifact:
+    # 成果物本体は Blob にあり、DB には参照用メタデータだけを保存する。
     artifact = AsyncJobArtifact(
         job_id=job_id,
         artifact_type=artifact_type,
@@ -48,6 +49,8 @@ async def get_latest_async_job_artifact(
     job_id: UUID,
     artifact_type: AsyncJobArtifactType | None = None,
 ) -> AsyncJobArtifact | None:
+    # ダウンロードや結果表示では「最新の 1 件」だけ見たいことが多いので、
+    # created_at の降順で先頭を返す。
     stmt = select(AsyncJobArtifact).where(AsyncJobArtifact.job_id == job_id)
     if artifact_type is not None:
         stmt = stmt.where(AsyncJobArtifact.artifact_type == artifact_type)
@@ -70,6 +73,7 @@ async def list_async_job_artifacts_by_job(
     *,
     job_id: UUID,
 ) -> list[AsyncJobArtifact]:
+    # 一覧や詳細では新しい成果物から見たいので降順で返す。
     stmt = (
         select(AsyncJobArtifact)
         .where(AsyncJobArtifact.job_id == job_id)
@@ -97,6 +101,7 @@ async def list_expired_async_job_artifacts(
     limit: int,
     offset: int = 0,
 ) -> list[AsyncJobArtifact]:
+    # cleanup は古い期限切れから順に処理したいので expires_at 昇順で返す。
     stmt = (
         select(AsyncJobArtifact)
         .where(
@@ -117,6 +122,7 @@ async def delete_async_job_artifacts_by_ids(
 ) -> int:
     if not artifact_ids:
         return 0
+    # Blob 削除後に DB メタデータをまとめて消すため、ID の配列をそのまま受ける。
     stmt = delete(AsyncJobArtifact).where(AsyncJobArtifact.id.in_(artifact_ids))
     result = cast(CursorResult[object], await session.execute(stmt))
     return int(result.rowcount or 0)

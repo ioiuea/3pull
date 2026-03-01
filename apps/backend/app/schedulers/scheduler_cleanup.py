@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import sys
 
-from app.schedulers.cleanup.runner import _build_parser, main
+from app.schedulers.cleanup.runner_registry import _build_parser, main
 
 __all__ = ["main", "_build_parser"]
 

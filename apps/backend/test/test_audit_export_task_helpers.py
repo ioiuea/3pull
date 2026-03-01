@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import pytest
 
 from app.models.auth.auth_audit_log import AuthAuditEventType
-from app.workers.audit_export_tasks import (
+from app.workers.jobs.audit_export import (
     PermanentExportError,
     _build_blob_path,
     _extract_filters,

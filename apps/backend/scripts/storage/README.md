@@ -11,10 +11,13 @@
 ## 前提
 
 - `apps/backend/.env` または環境変数で以下が設定されていること
+- `AZURE_BLOB_ACCOUNT_URL`
 - `AZURE_BLOB_CONTAINER`
-- `AZURE_BLOB_CREDENTIAL`
+- `AZURE_BLOB_USE_CONNECTION_STRING`
+- 必要時のみ `AZURE_BLOB_CONNECTION_STRING`
 
-`AZURE_BLOB_CREDENTIAL` は Azure Storage の接続文字列（`AccountKey=` を含む形式）を指定してください。
+既定では `AZURE_BLOB_USE_CONNECTION_STRING=false` とし、`az login + DefaultAzureCredential` で接続します。
+ローカルで接続文字列フォールバックを使う場合のみ、`AZURE_BLOB_USE_CONNECTION_STRING=true` にして `AZURE_BLOB_CONNECTION_STRING` を設定してください。
 
 ## ファイル構成
 

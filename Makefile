@@ -9,9 +9,6 @@ GUNICORN_WORKERS ?= 2
 GUNICORN_THREADS ?= 1
 GUNICORN_TIMEOUT ?= 60
 GUNICORN_KEEPALIVE ?= 5
-CELERY_AUTH_AUDIT_EXPORT_QUEUE_NAME ?= auth_audit_exports
-CELERY_SAMPLE_WAIT_BLOB_QUEUE_NAME ?= sample_wait_blob
-CELERY_WORKER_QUEUES ?= $(CELERY_SAMPLE_WAIT_BLOB_QUEUE_NAME),$(CELERY_AUTH_AUDIT_EXPORT_QUEUE_NAME)
 
 # `make alembic-revision "<任意のメッセージ>"` 実行時のみ、
 # メッセージ文字列が未定義ターゲットとして解釈されても無視して続行する。
@@ -105,7 +102,7 @@ cleanup-jobs-dry-run:
 # ------------------------------
 # Combined runtime targets
 # ------------------------------
-.PHONY: install env up up-api up-web up-worker dev dev-api dev-web dev-worker
+.PHONY: install env up up-api up-web up-worker up-worker-auth-audit-export up-worker-sample-wait-blob dev dev-api dev-web dev-worker dev-worker-auth-audit-export dev-worker-sample-wait-blob
 
 install: frontend-install backend-install
 
@@ -137,9 +134,20 @@ up-api: env backend-install
 up-web: env frontend-install
 	cd $(FRONTEND_DIR) && pnpm run build && pnpm run preview
 
-# `up-worker` は本番相当設定で Celery worker を起動する用途。
-up-worker: env backend-install
-	uv --directory $(BACKEND_DIR) run celery -A app.workers.celery_worker:celery_app worker -Q $(CELERY_WORKER_QUEUES) -l info
+# `up-worker-auth-audit-export` は本番相当設定で監査ログ export worker を起動する用途。
+up-worker-auth-audit-export: env backend-install
+	uv --directory $(BACKEND_DIR) run python -m app.workers.entrypoints.auth_audit_export
+
+# `up-worker-sample-wait-blob` は本番相当設定で sample worker を起動する用途。
+up-worker-sample-wait-blob: env backend-install
+	uv --directory $(BACKEND_DIR) run python -m app.workers.entrypoints.sample_wait_blob
+
+# `up-worker` は本番相当設定で各ジョブ種別 worker を同時起動する用途。
+up-worker:
+	@trap 'kill 0' INT TERM EXIT; \
+	( $(MAKE) up-worker-auth-audit-export ) & \
+	( $(MAKE) up-worker-sample-wait-blob ) & \
+	wait
 
 # `up` は `up-api` / `up-web` / `up-worker` を別サブシェルで同時起動する用途。
 up:
@@ -157,9 +165,20 @@ dev-api: env backend-install
 dev-web: env frontend-install
 	cd $(FRONTEND_DIR) && pnpm run dev
 
-# `dev-worker` は開発時に Celery worker を起動する用途。
-dev-worker: env backend-install
-	uv --directory $(BACKEND_DIR) run celery -A app.workers.celery_worker:celery_app worker -Q $(CELERY_WORKER_QUEUES) -l info
+# `dev-worker-auth-audit-export` は開発時に監査ログ export worker を起動する用途。
+dev-worker-auth-audit-export: env backend-install
+	uv --directory $(BACKEND_DIR) run python -m app.workers.entrypoints.auth_audit_export
+
+# `dev-worker-sample-wait-blob` は開発時に sample worker を起動する用途。
+dev-worker-sample-wait-blob: env backend-install
+	uv --directory $(BACKEND_DIR) run python -m app.workers.entrypoints.sample_wait_blob
+
+# `dev-worker` は開発時に各ジョブ種別 worker を同時起動する用途。
+dev-worker:
+	@trap 'kill 0' INT TERM EXIT; \
+	( $(MAKE) dev-worker-auth-audit-export ) & \
+	( $(MAKE) dev-worker-sample-wait-blob ) & \
+	wait
 
 # `dev` は `dev-api` / `dev-web` / `dev-worker` を別サブシェルで同時起動する用途。
 dev:

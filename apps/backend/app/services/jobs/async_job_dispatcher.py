@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from celery.result import AsyncResult
-
-from app.adapters.queue import enqueue_task
+from app.adapters.queue import EnqueueResult, enqueue_async_job_message
 
 
 def dispatch_async_job(
@@ -13,9 +11,12 @@ def dispatch_async_job(
     kwargs: dict[str, object],
     queue_name: str,
     countdown_seconds: int = 0,
-) -> AsyncResult:
-    """Celery キューへジョブ投入する."""
-    return enqueue_task(
+) -> EnqueueResult:
+    """Service Bus キューへジョブ投入する."""
+    # この層は「ジョブサービス側の入口」を揃えるための薄いラッパー。
+    # 実際の Service Bus 送信処理は adapter 側に閉じ込め、API や worker からは
+    # 「ジョブを投入する」という意図だけが見えるようにしている。
+    return enqueue_async_job_message(
         task_name=task_name,
         kwargs=kwargs,
         queue=queue_name,

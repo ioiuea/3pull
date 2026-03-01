@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from azure.identity import DefaultAzureCredential
+
 # `uv run python scripts/storage/create_blob_container.py` で直接実行しても
 # backend ルート配下の `app` パッケージを import できるようにする。
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
@@ -22,19 +24,31 @@ from app.core.settings import get_settings
 
 
 def _create_blob_service_client() -> Any:
-    """Storage 接続文字列から BlobServiceClient を生成する。"""
+    """BlobServiceClient を生成する。"""
     settings = get_settings()
-
-    credential = settings.azure_blob_credential
-    if not isinstance(credential, str) or "AccountKey=" not in credential:
-        raise RuntimeError(
-            "AZURE_BLOB_CREDENTIAL must be a Storage connection string containing "
-            "AccountKey="
-        )
 
     from azure.storage.blob import BlobServiceClient
 
-    return BlobServiceClient.from_connection_string(credential)
+    if settings.azure_blob_use_connection_string:
+        connection_string = settings.azure_blob_connection_string
+        if not isinstance(connection_string, str) or not connection_string.strip():
+            raise RuntimeError(
+                "AZURE_BLOB_CONNECTION_STRING is required when "
+                "AZURE_BLOB_USE_CONNECTION_STRING=true"
+            )
+        return BlobServiceClient.from_connection_string(connection_string)
+
+    account_url = settings.azure_blob_account_url
+    if not isinstance(account_url, str) or not account_url.strip():
+        raise RuntimeError(
+            "AZURE_BLOB_ACCOUNT_URL is required when "
+            "AZURE_BLOB_USE_CONNECTION_STRING=false"
+        )
+
+    return BlobServiceClient(
+        account_url=account_url.rstrip("/"),
+        credential=DefaultAzureCredential(),
+    )
 
 
 def main() -> None:

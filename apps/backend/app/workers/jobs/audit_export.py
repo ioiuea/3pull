@@ -1,10 +1,7 @@
-"""
-監査ログエクスポート Celery タスク.
-"""
+"""監査ログエクスポートの Queue 非依存ハンドラ."""
 
 from __future__ import annotations
 
-import asyncio
 import csv
 import json
 from datetime import datetime, timezone
@@ -13,28 +10,26 @@ from typing import cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import String, and_, func, or_, select
+from sqlalchemy import cast as sql_cast
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
+
 from app.adapters.postgres.session import get_session_factory
-from app.adapters.queue import get_celery_app
 from app.adapters.storage import upload_bytes
-from app.core.logging.config import configure_logging, get_logger
 from app.core.settings import get_settings
 from app.models.auth.auth_audit_log import AuthAuditEventType, AuthAuditLog
+from app.models.auth.user import User
 from app.models.jobs.async_job import AsyncJobStatus, AsyncJobType
 from app.models.jobs.async_job_artifact import AsyncJobArtifactType
 from app.repositories.jobs.async_job_artifact_repository import (
     create_async_job_artifact,
 )
 from app.repositories.jobs.async_job_repository import (
+    claim_queued_job_for_run,
     get_async_job_by_id,
     update_async_job_status,
 )
-from app.services.jobs.query import (
-    count_auth_audit_logs_for_export_job,
-    list_auth_audit_logs_for_export_job,
-)
-
-logger = get_logger(__name__)
-celery_app = get_celery_app()
 
 _ALLOWED_EXPORT_TIMEZONES = {"UTC", "Asia/Tokyo"}
 _EXPORT_CHUNK_SIZE = 1000
@@ -52,7 +47,115 @@ class JobCanceledExportError(RuntimeError):
     """ジョブがキャンセル済みであることを表すエラー."""
 
 
+def _build_filters(
+    *,
+    event_type: AuthAuditEventType | None,
+    provider: str | None,
+    keyword: str | None,
+    occurred_from: datetime | None,
+    occurred_to: datetime | None,
+) -> list[ColumnElement[bool]]:
+    # 件数取得と一覧取得で同じ絞り込み条件を使うため、WHERE 句だけ共通化する。
+    # こうしておくと、事前の件数チェックと実際のエクスポート結果がずれにくい。
+    filters: list[ColumnElement[bool]] = []
+    if event_type is not None:
+        filters.append(AuthAuditLog.event_type == event_type)
+    if provider:
+        filters.append(AuthAuditLog.provider == provider)
+    if occurred_from is not None:
+        filters.append(AuthAuditLog.occurred_at >= occurred_from)
+    if occurred_to is not None:
+        filters.append(AuthAuditLog.occurred_at <= occurred_to)
+    if keyword:
+        escaped = keyword.strip()
+        if escaped:
+            # キーワードは user 情報と監査ログ本文の両方に対して横断検索する。
+            # export 用途では「まず候補を広く拾う」方が使いやすいため、
+            # OR 条件にしている。
+            like = f"%{escaped}%"
+            filters.append(
+                or_(
+                    User.email.ilike(like),
+                    User.display_name.ilike(like),
+                    AuthAuditLog.reason_code.ilike(like),
+                    AuthAuditLog.user_agent.ilike(like),
+                    sql_cast(AuthAuditLog.event_type, String).ilike(like),
+                    sql_cast(AuthAuditLog.audit_metadata, String).ilike(like),
+                )
+            )
+    return filters
+
+
+async def count_auth_audit_logs_for_export_job(
+    session: AsyncSession,
+    *,
+    event_type: AuthAuditEventType | None = None,
+    provider: str | None = None,
+    keyword: str | None = None,
+    occurred_from: datetime | None = None,
+    occurred_to: datetime | None = None,
+) -> int:
+    """エクスポート対象となる監査ログ件数を返す."""
+    filters = _build_filters(
+        event_type=event_type,
+        provider=provider,
+        keyword=keyword,
+        occurred_from=occurred_from,
+        occurred_to=occurred_to,
+    )
+    stmt = (
+        select(func.count(AuthAuditLog.id))
+        .select_from(AuthAuditLog)
+        # user 情報が消えている監査ログも export 対象から落とさないため、
+        # outer join を使う。
+        .outerjoin(User, AuthAuditLog.user_id == User.id)
+    )
+    if filters:
+        stmt = stmt.where(and_(*filters))
+    return int((await session.execute(stmt)).scalar_one())
+
+
+async def list_auth_audit_logs_for_export_job(
+    session: AsyncSession,
+    *,
+    limit: int,
+    offset: int,
+    event_type: AuthAuditEventType | None = None,
+    provider: str | None = None,
+    keyword: str | None = None,
+    occurred_from: datetime | None = None,
+    occurred_to: datetime | None = None,
+) -> list[tuple[AuthAuditLog, str | None, str | None]]:
+    """エクスポート対象となる監査ログを取得する."""
+    filters = _build_filters(
+        event_type=event_type,
+        provider=provider,
+        keyword=keyword,
+        occurred_from=occurred_from,
+        occurred_to=occurred_to,
+    )
+    stmt = (
+        select(AuthAuditLog, User.display_name, User.email)
+        .select_from(AuthAuditLog)
+        # 監査ログだけは残っているケースを拾うため、ここも outer join を維持する。
+        .outerjoin(User, AuthAuditLog.user_id == User.id)
+    )
+    if filters:
+        stmt = stmt.where(and_(*filters))
+
+    stmt = (
+        # 並び順を固定しておくことで、ページングしても同じ条件なら結果がぶれにくい。
+        stmt.order_by(AuthAuditLog.occurred_at.desc(), AuthAuditLog.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    rows = (await session.execute(stmt)).all()
+    # 呼び出し側が ORM Row を意識しなくて済むよう、必要な shape に整えて返す。
+    return [(row[0], row[1], row[2]) for row in rows]
+
+
 def _parse_datetime_value(raw: object) -> datetime | None:
+    # API から来る日時は文字列のことも datetime のこともあるため、ここで正規化する。
     if raw is None:
         return None
     if isinstance(raw, datetime):
@@ -73,6 +176,7 @@ def _extract_filters(
     datetime | None,
     datetime | None,
 ]:
+    # requested_payload から export 用の検索条件だけを抜き出し、型付きに戻す。
     event_type_raw = requested_filters.get("event_type")
     event_type: AuthAuditEventType | None = None
     if event_type_raw is not None:
@@ -102,6 +206,7 @@ def _extract_filters(
 
 
 def _resolve_timezone(timezone_name: str) -> ZoneInfo:
+    # 出力 timezone は制限付きにして、想定外の ZoneInfo 依存を避ける。
     if timezone_name not in _ALLOWED_EXPORT_TIMEZONES:
         raise PermanentExportError(
             f"timezone must be one of: {', '.join(sorted(_ALLOWED_EXPORT_TIMEZONES))}"
@@ -110,6 +215,7 @@ def _resolve_timezone(timezone_name: str) -> ZoneInfo:
 
 
 def _build_blob_path(*, now_utc: datetime, job_id: str) -> str:
+    # 月単位でまとまるようにしておくと、運用時に Blob 一覧を追いやすい。
     return f"audit-exports/{now_utc:%Y}/{now_utc:%m}/{job_id}.csv"
 
 
@@ -118,6 +224,7 @@ def _build_csv_bytes(
     rows: list[tuple[AuthAuditLog, str | None, str | None]],
     timezone_name: str,
 ) -> tuple[bytes, int]:
+    # CSV 文字列生成は DB アクセスから切り離し、純粋な変換処理にしておく。
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(
@@ -143,6 +250,7 @@ def _build_csv_bytes(
     row_count = 0
 
     for log, user_display_name, user_email in rows:
+        # user 情報は join 結果なので欠けうる。CSV では空文字に寄せて欠損を表現する。
         occurred_at = log.occurred_at.astimezone(zone).isoformat()
         writer.writerow(
             [
@@ -166,11 +274,11 @@ def _build_csv_bytes(
         )
         row_count += 1
 
-    # UTF-8 BOM
     return output.getvalue().encode("utf-8-sig"), row_count
 
 
-async def _mark_failed(*, job_id: str, error_message: str) -> None:
+async def mark_auth_audit_export_failed(*, job_id: str, error_message: str) -> None:
+    # 恒久失敗時だけ runtime から呼ばれ、job を failed に確定させる。
     parsed_job_id = UUID(job_id)
     session_factory = get_session_factory()
     async with session_factory() as session:
@@ -187,7 +295,7 @@ async def _mark_failed(*, job_id: str, error_message: str) -> None:
             )
 
 
-async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
+async def execute_auth_audit_export_job(*, job_id: str) -> tuple[str, int, int]:
     settings = get_settings()
     parsed_job_id = UUID(job_id)
     session_factory = get_session_factory()
@@ -196,24 +304,42 @@ async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
         async with session.begin():
             job = await get_async_job_by_id(session, job_id=parsed_job_id)
             if job is None:
-                # enqueue 直後は API 側トランザクション未コミットの可能性があるため
-                # retryable として扱う。
                 raise RetryableExportError("Export job not found yet")
             if job.job_type != AsyncJobType.AUTH_AUDIT_EXPORT:
                 raise PermanentExportError("Invalid job type for audit export task")
-
             if job.status == AsyncJobStatus.CANCELED:
                 raise JobCanceledExportError("Export job was canceled before start")
-            if job.status in {AsyncJobStatus.SUCCEEDED, AsyncJobStatus.EXPIRED}:
-                raise PermanentExportError("Export job is already finalized")
+            if job.status in {
+                AsyncJobStatus.SUCCEEDED,
+                AsyncJobStatus.FAILED,
+                AsyncJobStatus.EXPIRED,
+            }:
+                raise JobCanceledExportError("Export job is already finalized")
+            if job.status == AsyncJobStatus.RUNNING:
+                raise RetryableExportError("Export job is already running")
 
-            await update_async_job_status(
+            started_at = datetime.now(timezone.utc)
+            # 実行開始の claim は 1 回だけ成功する。これで同一 job の並行処理を防ぐ。
+            claimed_job = await claim_queued_job_for_run(
                 session,
-                job=job,
-                status=AsyncJobStatus.RUNNING,
-                started_at=datetime.now(timezone.utc),
+                job_id=parsed_job_id,
+                started_at=started_at,
             )
-            requested_payload: dict[str, object] = dict(job.requested_payload)
+            if claimed_job is None:
+                current = await get_async_job_by_id(session, job_id=parsed_job_id)
+                if current is None:
+                    raise RetryableExportError("Export job not found during claim")
+                if current.status == AsyncJobStatus.CANCELED:
+                    raise JobCanceledExportError("Export job was canceled before start")
+                if current.status in {
+                    AsyncJobStatus.SUCCEEDED,
+                    AsyncJobStatus.FAILED,
+                    AsyncJobStatus.EXPIRED,
+                }:
+                    raise JobCanceledExportError("Export job is already finalized")
+                raise RetryableExportError("Export job could not be claimed for run")
+
+            requested_payload: dict[str, object] = dict(claimed_job.requested_payload)
             requested_filters_raw = requested_payload.get("requested_filters")
             requested_filters: dict[str, object]
             if isinstance(requested_filters_raw, dict):
@@ -229,9 +355,9 @@ async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
     event_type, provider, keyword, occurred_from, occurred_to = _extract_filters(
         requested_filters
     )
-    total_count: int
     async with session_factory() as session:
         async with session.begin():
+            # 先に件数だけ確認し、上限超過なら重い export を始める前に止める。
             total_count = await count_auth_audit_logs_for_export_job(
                 session,
                 event_type=event_type,
@@ -241,10 +367,10 @@ async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
                 occurred_to=occurred_to,
             )
 
-    if total_count > settings.celery_max_rows_per_job:
+    if total_count > settings.async_job_max_rows_per_job:
         raise PermanentExportError(
             "Export row limit exceeded "
-            f"({total_count} > {settings.celery_max_rows_per_job})"
+            f"({total_count} > {settings.async_job_max_rows_per_job})"
         )
 
     offset = 0
@@ -257,9 +383,10 @@ async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
                     raise PermanentExportError("Export job not found during processing")
                 if current.status == AsyncJobStatus.CANCELED:
                     raise JobCanceledExportError("Export job was canceled")
+                # 大量件数でもメモリと DB 負荷を抑えるため、チャンク単位で読む。
                 chunk = await list_auth_audit_logs_for_export_job(
                     session,
-                    limit=min(_EXPORT_CHUNK_SIZE, settings.celery_max_rows_per_job),
+                    limit=min(_EXPORT_CHUNK_SIZE, settings.async_job_max_rows_per_job),
                     offset=offset,
                     event_type=event_type,
                     provider=provider,
@@ -279,14 +406,12 @@ async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
 
     async with session_factory() as session:
         async with session.begin():
-            job = await get_async_job_by_id(
-                session,
-                job_id=parsed_job_id,
-            )
+            job = await get_async_job_by_id(session, job_id=parsed_job_id)
             if job is None:
                 raise PermanentExportError("Export job not found after upload")
             if job.status == AsyncJobStatus.CANCELED:
                 raise JobCanceledExportError("Export job was canceled before finalize")
+            # artifact 作成と succeeded 更新は同一トランザクションで揃えておく。
             await create_async_job_artifact(
                 session,
                 job_id=job.id,
@@ -311,84 +436,3 @@ async def _run_export_job(*, job_id: str) -> tuple[str, int, int]:
             )
 
     return blob_path, file_size_bytes, row_count
-
-
-@celery_app.task(
-    bind=True,
-    name=get_settings().auth_audit_export_task_name,
-    max_retries=3,
-)
-def export_auth_audit_logs(self, job_id: str) -> None:
-    """
-    監査ログエクスポートジョブを実行する.
-    """
-    settings = get_settings()
-    configure_logging(level=settings.api_log_level)
-
-    logger.info(
-        "export.job.started",
-        job_id=job_id,
-        retry_count=self.request.retries,
-    )
-
-    try:
-        blob_path, file_size_bytes, row_count = asyncio.run(
-            _run_export_job(job_id=job_id)
-        )
-    except RetryableExportError as exc:
-        if self.request.retries >= self.max_retries:
-            asyncio.run(_mark_failed(job_id=job_id, error_message=str(exc)))
-            logger.exception(
-                "export.job.failed",
-                job_id=job_id,
-                retryable=False,
-                error=str(exc),
-            )
-            return
-        logger.warning(
-            "export.job.retry",
-            job_id=job_id,
-            retry_count=self.request.retries + 1,
-            error=str(exc),
-        )
-        raise self.retry(exc=exc, countdown=min(10, 2**self.request.retries))
-    except PermanentExportError as exc:
-        asyncio.run(_mark_failed(job_id=job_id, error_message=str(exc)))
-        logger.warning(
-            "export.job.failed",
-            job_id=job_id,
-            retryable=False,
-            error=str(exc),
-        )
-        return
-    except JobCanceledExportError:
-        logger.info(
-            "export.job.canceled",
-            job_id=job_id,
-        )
-        return
-    except Exception as exc:  # pragma: no cover
-        if self.request.retries >= self.max_retries:
-            asyncio.run(_mark_failed(job_id=job_id, error_message=str(exc)))
-            logger.exception(
-                "export.job.failed",
-                job_id=job_id,
-                retryable=False,
-                error=str(exc),
-            )
-            return
-        logger.warning(
-            "export.job.retry",
-            job_id=job_id,
-            retry_count=self.request.retries + 1,
-            error=str(exc),
-        )
-        raise self.retry(exc=exc, countdown=min(60, 2**self.request.retries))
-
-    logger.info(
-        "export.job.succeeded",
-        job_id=job_id,
-        blob_path=blob_path,
-        file_size_bytes=file_size_bytes,
-        row_count=row_count,
-    )

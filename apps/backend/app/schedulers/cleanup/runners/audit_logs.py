@@ -1,3 +1,5 @@
+"""監査ログの古い月次パーティションを整理する cleanup."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -12,18 +14,21 @@ from app.repositories.auth.auth_audit_log_repository import (
     ensure_next_month_audit_partition,
     list_audit_partitions_for_drop,
 )
-from app.schedulers.cleanup.common import CleanupResult, add_months, month_start
+from app.schedulers.cleanup.helpers import CleanupResult, add_months, month_start
 
 logger = get_logger(__name__)
 
 
 async def run_audit_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResult:
+    # 監査ログは行削除ではなくパーティション drop で掃除するため、
+    # batch_size は共通 interface のためだけに受け取る。
     del batch_size  # cleanup interface を揃えるために受け取るが未使用
 
     start = perf_counter()
     settings = get_settings()
 
     if not settings.audit_cleanup_enabled:
+        # 監査ログ retention 運用が無効な環境では何もせず終了する。
         return CleanupResult(
             job_name="audit_retention_cleanup",
             status="disabled",
@@ -33,6 +38,7 @@ async def run_audit_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResult:
 
     run_at = datetime.now(timezone.utc)
     current_month_start = month_start(run_at)
+    # retention は「何か月残すか」で決め、保持開始月より前のパーティションを落とす。
     keep_from_month = add_months(
         current_month_start,
         -(settings.auth_audit_retention_months - 1),
@@ -47,6 +53,7 @@ async def run_audit_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResult:
     if dry_run:
         async with session_factory() as session:
             async with session.begin():
+                # dry-run では drop 候補を調べ、消える行数だけ積み上げる。
                 drop_targets = await list_audit_partitions_for_drop(
                     session,
                     drop_before_month=partition_drop_before_month,
@@ -80,6 +87,7 @@ async def run_audit_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResult:
 
     async with session_factory() as session:
         async with session.begin():
+            # 実削除は「古いパーティションを丸ごと落とす」方式。
             drop_targets = await list_audit_partitions_for_drop(
                 session,
                 drop_before_month=partition_drop_before_month,
@@ -99,6 +107,7 @@ async def run_audit_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResult:
 
     async with session_factory() as session:
         async with session.begin():
+            # 次月分を先に作っておくと、月替わり直後の書き込みで詰まりにくい。
             await ensure_next_month_audit_partition(
                 session,
                 partition_start=next_month_start,

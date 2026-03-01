@@ -170,7 +170,10 @@ const AsyncJobSamplePage = () => {
         <Card>
           <CardHeader>
             <CardTitle>{t('history.title')}</CardTitle>
-            <CardDescription>{t('history.description')}</CardDescription>
+            <CardDescription className="space-y-1">
+              <p>{t('history.description')}</p>
+              <p>{t('history.pollingNote')}</p>
+            </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <div className="mb-4 grid gap-3 md:grid-cols-3">

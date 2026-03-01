@@ -17,7 +17,7 @@ from app.repositories.jobs import (
     list_async_jobs_by_user,
 )
 
-from .common import require_session_user, router, to_job_response
+from .helpers import require_session_user, router, to_job_response
 
 
 @router.get("", response_model=AsyncJobListResponse)
@@ -30,6 +30,7 @@ async def list_jobs(
 ) -> AsyncJobListResponse:
     """自分のジョブ一覧を返す."""
     user = await require_session_user(request, session)
+    # 一覧取得でも必ず本人のジョブだけに絞る。管理者一覧 API は別で作る前提。
     items, total = await list_async_jobs_by_user(
         session,
         requested_by_user_id=user.id,
@@ -39,6 +40,8 @@ async def list_jobs(
     )
     artifacts_map: dict[UUID, list[AsyncJobArtifact]] = {}
     for item in items:
+        # 現状はシンプルさ優先で、各 job ごとに成果物を読み出す。
+        # 件数が増えて問題になったら join / batch 化を検討する。
         artifacts_map[item.id] = await list_async_job_artifacts_by_job(
             session,
             job_id=item.id,
@@ -60,6 +63,7 @@ async def get_job(
     """自分のジョブ詳細を返す."""
     user = await require_session_user(request, session)
     target = await get_async_job_by_id(session, job_id=job_id)
+    # 存在しない場合と他人のジョブの場合を同じ 404 に寄せ、情報漏えいを避ける。
     if target is None or target.requested_by_user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

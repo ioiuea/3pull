@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createAuditLogExport,
+  createSampleWaitBlobJob,
   downloadAuditLogExport,
   getAuditLogExports,
   type AuditLogExportCreateRequest,
@@ -160,5 +161,50 @@ describe('api-helper jobs', () => {
     expect(blob.type).toContain('text/plain');
     const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
     expect(fetchMock.mock.calls[1][0]).toContain('/jobs/job-3/artifacts/artifact-3/download');
+  });
+
+  it('posts /jobs/sample-wait-blob and maps queued job response', async () => {
+    // 目的: sample wait blob 作成のリクエスト契約と応答マッピングが維持されることを保証する。
+    // 条件: createSampleWaitBlobJob を実行し fetch 呼び出しと戻り値を検査する。
+    // 期待値: POST /jobs/sample-wait-blob が呼ばれ、wait_seconds と content が反映される。
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      jsonResponse({
+        id: 'job-4',
+        job_type: 'sample_wait_blob',
+        requested_by_user_id: 'user-1',
+        status: 'queued',
+        requested_payload: { wait_seconds: 45, content: 'hello' },
+        result_payload: null,
+        error_message: null,
+        retry_count: 0,
+        started_at: null,
+        finished_at: null,
+        expires_at: '2026-03-01T00:00:00+00:00',
+        created_at: '2026-02-27T00:00:00+00:00',
+        updated_at: '2026-02-27T00:00:00+00:00',
+        artifacts: [],
+      }),
+    ) as typeof fetch;
+
+    const result = await createSampleWaitBlobJob({
+      wait_seconds: 45,
+      content: 'hello',
+    });
+
+    expect(result).toMatchObject({
+      id: 'job-4',
+      status: 'queued',
+      wait_seconds: 45,
+      content: 'hello',
+      file_path: null,
+      file_size_bytes: null,
+    });
+
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>;
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/jobs/sample-wait-blob');
+    expect(init.method).toBe('POST');
+    expect(String(init.body)).toContain('"wait_seconds":45');
+    expect(String(init.body)).toContain('"content":"hello"');
   });
 });
