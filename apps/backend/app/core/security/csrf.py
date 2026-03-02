@@ -26,7 +26,7 @@ class CsrfProtectionMiddleware(BaseHTTPMiddleware):
 
         Args:
             app: ASGI アプリケーション
-            trusted_origins: 許可するオリジン一覧（例: http://localhost:5173）
+            trusted_origins: 許可するオリジン一覧（例: http://localhost:3000）
         """
         super().__init__(app)
         self._trusted_origins = {origin.rstrip("/") for origin in trusted_origins}

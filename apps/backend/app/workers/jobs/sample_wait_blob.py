@@ -6,6 +6,8 @@ import asyncio
 from datetime import datetime, timezone
 from uuid import UUID
 
+from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
+
 from app.adapters.postgres.session import get_session_factory
 from app.adapters.storage import upload_bytes
 from app.core.settings import get_settings
@@ -149,11 +151,20 @@ async def execute_sample_wait_blob_job(*, job_id: str) -> tuple[str, int]:
         + "\n"
     )
     payload = text_body.encode("utf-8")
-    file_size = upload_bytes(
-        blob_path=blob_path,
-        data=payload,
-        content_type="text/plain; charset=utf-8",
-    )
+    try:
+        file_size = upload_bytes(
+            blob_path=blob_path,
+            data=payload,
+            content_type="text/plain; charset=utf-8",
+        )
+    except (RuntimeError, ValueError) as exc:
+        # 接続文字列不足や必須設定不足のような構成ミスは、
+        # 再試行しても直らないため恒久失敗として扱う。
+        raise PermanentSampleError(str(exc)) from exc
+    except (ClientAuthenticationError, HttpResponseError) as exc:
+        # Storage 側で明示的に拒否されたエラーも、
+        # 構成や権限の問題であることが多く再試行では直りにくい。
+        raise PermanentSampleError(str(exc)) from exc
 
     async with session_factory() as session:
         async with session.begin():

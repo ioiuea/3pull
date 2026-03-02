@@ -414,24 +414,33 @@
 
 ### Step 5. ドキュメント更新
 
-進捗: 進行中
-
-完了:
+進捗: 完了
 
 - `apps/backend/README.md`
 - `apps/frontend/README.md`
 
-未完:
-
-- AKS / Helm / KEDA 実装後の運用手順の最終確定
-- Runbook の独立ドキュメント化
-
 ### Step 6. コンテナ化
 
-進捗: 未着手
+進捗: 完了
 
-- `apps/backend/Dockerfile` は未作成
-- API / cleanup / worker の共通イメージ化も未実装
+完了:
+
+- `docker/api.Dockerfile` を追加
+- `docker/worker.Dockerfile` を追加
+- `docker/cleanup.Dockerfile` を追加
+- `docker/web.Dockerfile` を追加
+- `docker/frontend-nginx.conf` を追加
+- `.dockerignore` を追加
+- `docker/README.md` を作成し、build / run 手順を整理
+- `Makefile` に Docker build / run ターゲットを追加
+- `api / worker / cleanup / web` の build を確認
+- `api / worker / cleanup / web` の最低限の起動確認を実施
+- `api / worker / cleanup` の `CMD` を `exec` 化し、`--init` 前提で停止しやすい形に調整
+
+未完:
+
+- Helm / CI から呼ぶ build 手順の確定
+- CI 上でのコンテナ build 検証の自動化
 
 ### Step 7. Helm / AKS / KEDA
 
@@ -470,20 +479,28 @@
 - Runbook 整備
 - 本番切替手順の確定
 
+### Step 10. ドキュメント仕上げ（後続）
+
+進捗: 未着手
+
+- AKS / Helm / KEDA 実装後の運用手順を最終確定する
+- Runbook を独立ドキュメントとして整備する
+- 必要に応じて `docs/infra/*.md` の正式仕様へ反映する
+- 本番切替手順の確定
+
 ## 7. 今後の作業ステップ（現時点の推奨順）
 
 ### 7.1 先に進めるべきもの
 
-1. backend 用 `Dockerfile` を作成する
-2. API / cleanup / worker の起動コマンドをコンテナ基準で確定する
-3. Helm chart を作成する
-4. API Deployment / Service を chart 化する
-5. cleanup 用 CronJob を chart 化する
-6. worker 用 Deployment を job_type ごとに chart 化する
-7. `KEDA ScaledObject` を worker ごとに追加する
-8. Workload Identity の ServiceAccount / annotation / values を追加する
-9. Staging で cleanup / worker / queue / Blob の疎通を検証する
-10. Runbook と本番リリース手順を確定する
+1. Helm chart を作成する
+2. API Deployment / Service を chart 化する
+3. cleanup 用 CronJob を chart 化する
+4. worker 用 Deployment を job_type ごとに chart 化する
+5. `KEDA ScaledObject` を worker ごとに追加する
+6. Workload Identity の ServiceAccount / annotation / values を追加する
+7. Staging で cleanup / worker / queue / Blob の疎通を検証する
+8. CI から呼ぶコンテナ build 手順を確定する
+9. Runbook と本番リリース手順を確定する
 
 ### 7.2 Docker 実装タスク
 

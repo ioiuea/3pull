@@ -1,0 +1,29 @@
+.git
+.gitignore
+.DS_Store
+
+# Python
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+**/*.pyc
+
+# Node
+**/node_modules/
+**/.pnpm-store/
+
+# Build artifacts
+**/build/
+**/dist/
+**/.next/
+**/.cache/
+
+# Local env files
+apps/frontend/.env
+apps/backend/.env
+
+# Local editor settings
+.vscode/
+.idea/

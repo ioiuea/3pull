@@ -6,9 +6,9 @@
   "scripts": {
     "preinstall": "npx only-allow pnpm",
     "build": "react-router build",
-    "dev": "react-router dev",
+    "dev": "react-router dev --port 3000",
     "start": "react-router-serve ./build/server/index.js",
-    "preview": "vite preview --outDir build/client --port 5173",
+    "preview": "vite preview --outDir build/client --port 3000",
     "lint": "eslint . --ext .ts,.tsx --max-warnings=0",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --check \"**/*.{js,ts,tsx,jsx,json,css,scss,md}\"",

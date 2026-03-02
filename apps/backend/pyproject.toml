@@ -21,6 +21,7 @@ dependencies = [
     "pydantic-settings>=2.13.1",
     "sqlalchemy>=2.0.46",
     "structlog>=25.5.0",
+    "uvicorn>=0.41.0",
 ]
 
 [dependency-groups]
@@ -31,7 +32,6 @@ dev = [
     "pytest-cov>=7.0.0",
     "python-dotenv>=1.2.1",
     "ruff>=0.15.2",
-    "uvicorn>=0.41.0",
 ]
 
 [tool.uv]

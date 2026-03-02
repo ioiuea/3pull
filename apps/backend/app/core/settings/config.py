@@ -202,7 +202,7 @@ class AppSettings(BaseSettings):
         validation_alias="AUTH_DEBUG_RETURN_TOKENS",
     )
     frontend_base_url: str = Field(
-        default="http://localhost:5173",
+        default="http://localhost:3000",
         validation_alias="FRONTEND_BASE_URL",
     )
     auth_post_login_default_path: str = Field(
@@ -230,7 +230,7 @@ class AppSettings(BaseSettings):
         validation_alias="ENTRA_INTERNAL_DOMAINS",
     )
     csrf_trusted_origins: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["http://localhost:5173"],
+        default_factory=lambda: ["http://localhost:3000"],
         validation_alias="CSRF_TRUSTED_ORIGINS",
     )
 

@@ -104,6 +104,61 @@ cleanup-jobs-dry-run:
 # ------------------------------
 .PHONY: install env up up-api up-web up-worker up-worker-auth-audit-export up-worker-sample-wait-blob dev dev-api dev-web dev-worker dev-worker-auth-audit-export dev-worker-sample-wait-blob
 
+# ------------------------------
+# Docker targets
+# ------------------------------
+.PHONY: docker-build docker-build-api docker-build-worker docker-build-cleanup docker-build-web docker-run-api docker-run-worker-auth-audit-export docker-run-worker-sample-wait-blob docker-run-cleanup-sessions docker-run-cleanup-audit docker-run-cleanup-jobs-dry-run docker-run-web
+
+DOCKER_API_IMAGE ?= 3pull-api:local
+DOCKER_WORKER_IMAGE ?= 3pull-worker:local
+DOCKER_CLEANUP_IMAGE ?= 3pull-cleanup:local
+DOCKER_WEB_IMAGE ?= 3pull-web:local
+
+docker-build-api:
+	docker build -f docker/api.Dockerfile -t $(DOCKER_API_IMAGE) .
+
+docker-build-worker:
+	docker build -f docker/worker.Dockerfile -t $(DOCKER_WORKER_IMAGE) .
+
+docker-build-cleanup:
+	docker build -f docker/cleanup.Dockerfile -t $(DOCKER_CLEANUP_IMAGE) .
+
+docker-build-web:
+	docker build -f docker/web.Dockerfile -t $(DOCKER_WEB_IMAGE) .
+
+docker-build: docker-build-api docker-build-worker docker-build-cleanup docker-build-web
+
+docker-run-api:
+	docker run --rm --init -p 8000:8000 --env-file $(BACKEND_DIR)/.env $(DOCKER_API_IMAGE)
+
+docker-run-worker-auth-audit-export:
+	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
+		-e WORKER_MODULE=app.workers.entrypoints.auth_audit_export \
+		$(DOCKER_WORKER_IMAGE)
+
+docker-run-worker-sample-wait-blob:
+	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
+		-e WORKER_MODULE=app.workers.entrypoints.sample_wait_blob \
+		$(DOCKER_WORKER_IMAGE)
+
+docker-run-cleanup-sessions:
+	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
+		-e CLEANUP_COMMAND=sessions \
+		$(DOCKER_CLEANUP_IMAGE)
+
+docker-run-cleanup-audit:
+	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
+		-e CLEANUP_COMMAND=audit \
+		$(DOCKER_CLEANUP_IMAGE)
+
+docker-run-cleanup-jobs-dry-run:
+	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
+		-e CLEANUP_COMMAND="jobs --dry-run" \
+		$(DOCKER_CLEANUP_IMAGE)
+
+docker-run-web:
+	docker run --rm -p 3000:3000 $(DOCKER_WEB_IMAGE)
+
 install: frontend-install backend-install
 
 env:

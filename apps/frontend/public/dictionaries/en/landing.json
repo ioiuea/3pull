@@ -1,7 +1,7 @@
 {
   "badge": "Monorepo Starter",
   "hero": {
-    "titleTop": "Web + API + Infra",
+    "titleTop": "Web + API + Worker + Infra",
     "titleBottom": "Starter Pack",
     "description": "3pull is a practical monorepo foundation that integrates infrastructure definition, frontend, and backend in one workflow.",
     "aboutCta": "See Architecture Sample",

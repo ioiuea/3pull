@@ -1,7 +1,7 @@
 {
   "badge": "Monorepo Starter",
   "hero": {
-    "titleTop": "Web + API + Infra の",
+    "titleTop": "Web + API + Worker + Infra の",
     "titleBottom": "スターターパック",
     "description": "3pull は、インフラ定義からフロントエンド、バックエンドまでを一貫して扱うための、実践向けモノレポ基盤です。",
     "aboutCta": "構成サンプルを見る",

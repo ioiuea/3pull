@@ -10,6 +10,7 @@ from typing import cast
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from azure.core.exceptions import ClientAuthenticationError, HttpResponseError
 from sqlalchemy import String, and_, func, or_, select
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -402,7 +403,15 @@ async def execute_auth_audit_export_job(*, job_id: str) -> tuple[str, int, int]:
     csv_bytes, row_count = _build_csv_bytes(rows=rows, timezone_name=timezone_name)
     now_utc = datetime.now(timezone.utc)
     blob_path = _build_blob_path(now_utc=now_utc, job_id=job_id)
-    file_size_bytes = upload_bytes(blob_path=blob_path, data=csv_bytes)
+    try:
+        file_size_bytes = upload_bytes(blob_path=blob_path, data=csv_bytes)
+    except (RuntimeError, ValueError) as exc:
+        # Storage の必須設定不足は構成ミスなので恒久失敗に寄せる。
+        raise PermanentExportError(str(exc)) from exc
+    except (ClientAuthenticationError, HttpResponseError) as exc:
+        # 認証拒否や権限不足など、Storage 側の明示的な失敗は
+        # 再試行では解消しにくいため恒久失敗として扱う。
+        raise PermanentExportError(str(exc)) from exc
 
     async with session_factory() as session:
         async with session.begin():
