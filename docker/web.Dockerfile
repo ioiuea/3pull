@@ -28,6 +28,9 @@ FROM node:22-bookworm-slim AS builder
 ENV PNPM_HOME=/pnpm
 ENV PATH=${PNPM_HOME}:${PATH}
 
+ARG VITE_BACKEND_BASE_URL
+ARG VITE_PRODUCT_NAME
+
 WORKDIR /workspace/apps/frontend
 
 RUN corepack enable && corepack prepare pnpm@10.30.1 --activate
@@ -36,7 +39,11 @@ COPY --from=deps /workspace/apps/frontend/node_modules ./node_modules
 COPY apps/frontend ./
 
 # `react-router.config.ts` は `ssr: false` のため、静的出力は `build/client` が正本。
-RUN pnpm run build
+RUN VITE_BACKEND_BASE_URL="${VITE_BACKEND_BASE_URL}" \
+    VITE_PRODUCT_NAME="${VITE_PRODUCT_NAME}" \
+    test -n "${VITE_BACKEND_BASE_URL}" && \
+    test -n "${VITE_PRODUCT_NAME}" && \
+    pnpm run build
 
 # -------------------------
 # runtime: nginx で静的配信

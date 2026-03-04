@@ -29,8 +29,10 @@ make docker-build
 docker build -f docker/api.Dockerfile -t 3pull-api:local .
 docker build -f docker/worker.Dockerfile -t 3pull-worker:local .
 docker build -f docker/cleanup.Dockerfile -t 3pull-cleanup:local .
-docker build -f docker/web.Dockerfile -t 3pull-web:local .
+docker build --build-arg VITE_BACKEND_BASE_URL=http://localhost:8000 --build-arg VITE_PRODUCT_NAME=3pull-web -f docker/web.Dockerfile -t 3pull-web:local .
 ```
+
+frontend の `docker/web.Dockerfile` は `VITE_BACKEND_BASE_URL` と `VITE_PRODUCT_NAME` の build arg が必須です。未指定のまま build すると失敗します。
 
 ## Run
 

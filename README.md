@@ -29,6 +29,15 @@
 - 設定管理 / バリデーション: Pydantic（pydantic-settings）
 - ASGI プロセスマネージャ: Gunicorn
 
+## 前提要件
+
+- Node.js / pnpm
+- Python 3.12+ / uv
+- PostgreSQL クライアント（`psql`）
+- OpenSSL（JWT 鍵生成で使用）
+- `kubectl`（AKS / Kubernetes 操作で使用）
+- `helm`（Helm chart の render / deploy で使用）
+
 ## セットアップ手順
 
 1. インフラを構築する
