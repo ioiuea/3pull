@@ -2,11 +2,31 @@
 
 - ※[]内は`infra/common.parameter.json`の設定値に従って設定されます。
 
+## 低遅延オプション
+
+- `network.enableLowLatencyApplicationGatewaySubnet=false`（デフォルト）
+  - 通常系 App Gateway のみ作成
+- `network.enableLowLatencyApplicationGatewaySubnet=true`
+  - 通常系 App Gateway に加えて、低遅延系 App Gateway を追加作成
+  - 低遅延系は `ApplicationGatewayLowLatencySubnet` に配置
+  - 命名規則:
+    - App Gateway: `agw-ll-[common.environmentName]-[common.systemName]`
+    - Public IP: `pip-agw-ll-[common.environmentName]-[common.systemName]`
+    - WAF Policy: `waf-ll-[common.environmentName]-[common.systemName]`
+
 ## 基本
 
 | 項目         | 設定値                             | Bicepプロパティ名 |
 | ------------ | ---------------------------------- | ----------------- |
 | 名前         | agw-[common.environmentName]-[common.systemName] | name              |
+| 場所         | [common.location]                  | location          |
+| マネージドID | -                                  | identity          |
+
+低遅延オプション有効時は、以下も追加作成します。
+
+| 項目         | 設定値                             | Bicepプロパティ名 |
+| ------------ | ---------------------------------- | ----------------- |
+| 名前         | agw-ll-[common.environmentName]-[common.systemName] | name              |
 | 場所         | [common.location]                  | location          |
 | マネージドID | -                                  | identity          |
 
@@ -37,6 +57,13 @@
 | ------------ | ------------------------------------------------------------ | -------------------- |
 | 名前         | appGatewayIpConfig                                           | name                 |
 | サブネットID | vnet-[common.environmentName]-[common.systemName]/ApplicationGatewaySubnet | properties.subnet.id |
+
+低遅延オプション有効時（追加作成分）:
+
+| 項目         | 設定値                                                       | Bicepプロパティ名    |
+| ------------ | ------------------------------------------------------------ | -------------------- |
+| 名前         | appGatewayIpConfig                                           | name                 |
+| サブネットID | vnet-[common.environmentName]-[common.systemName]/ApplicationGatewayLowLatencySubnet | properties.subnet.id |
 
 ## フロントエンドIP構成
 
@@ -123,11 +150,18 @@
 | ---- | ---------------------------------- | ----------------- |
 | ID   | waf-[common.environmentName]-[common.systemName] | id                |
 
+低遅延オプション有効時（追加作成分）:
+
+| 項目 | 設定値                             | Bicepプロパティ名 |
+| ---- | ---------------------------------- | ----------------- |
+| ID   | waf-ll-[common.environmentName]-[common.systemName] | id                |
+
 # パブリックIPアドレス
 
 | IPアドレス名                           | 概要  |
 | -------------------------------------- | ----- |
 | pip-agw-[common.environmentName]-[common.systemName] | AGW用 |
+| pip-agw-ll-[common.environmentName]-[common.systemName] | 低遅延系AGW用（オプション有効時） |
 
 ##　基本
 | 項目 | 設定値 | Bicepプロパティ名 |
@@ -146,6 +180,13 @@
 | 項目 | 設定値                             | Bicepプロパティ名 |
 | ---- | ---------------------------------- | ----------------- |
 | 名前 | waf-[common.environmentName]-[common.systemName] | name              |
+| 場所 | [common.location]                  | location          |
+
+低遅延オプション有効時（追加作成分）:
+
+| 項目 | 設定値                             | Bicepプロパティ名 |
+| ---- | ---------------------------------- | ----------------- |
+| 名前 | waf-ll-[common.environmentName]-[common.systemName] | name              |
 | 場所 | [common.location]                  | location          |
 
 ## カスタムルール

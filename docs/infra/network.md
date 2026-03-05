@@ -14,6 +14,9 @@
 - ※最低限、以下のいずれかのアドレスレンジが必要です。
   - `/24` が 3 つ分
   - 連続するサブネットレンジを確保できる場合は `/23` が 1 つ分 + `/24` が 1 つ分、もしくは `/22` が 1 つ分（`/24` 3 つ分相当）
+- ※ `network.enableLowLatencyApplicationGatewaySubnet=true` の場合は、低遅延用サブネットを追加するため以下が必要です。
+  - `/24` が 4 つ分
+  - もしくは `/22` が 1 つ分（`/24` 4 つ分相当）
 
 ## 診断設定
 
@@ -37,6 +40,7 @@
 | -------------------------- | ------------ | ---------------------- | -------------------------------------------- | ------------------------------------------ | -------------------------------------- |
 | `UserNodeSubnet`           | `/24`        |                        | nsg-[common.environmentName]-[common.systemName]-usernode  | rt-[common.environmentName]-[common.systemName]-outbound-aks | アプリデプロイ領域                     |
 | `ApplicationGatewaySubnet` | `/25`        |                        |                                              | rt-[common.environmentName]-[common.systemName]-firewall | AGIC用サブネット                       |
+| `ApplicationGatewayLowLatencySubnet` | `/25` |                        |                                              |                                            | 低遅延系 App Gateway 用サブネット（`network.enableLowLatencyApplicationGatewaySubnet=true` 時のみ） |
 | `AgentNodeSubnet`          | `/26`        |                        | nsg-[common.environmentName]-[common.systemName]-agentnode | rt-[common.environmentName]-[common.systemName]-outbound-aks | AKSのエージェントノード用サブネット    |
 | `PrivateEndpointSubnet`    | `/26`        |                        | nsg-[common.environmentName]-[common.systemName]-pep       |                                            | プライベートエンドポイント用サブネット |
 | `AzureFirewallSubnet`      | `/26`        |                        |                                              |                                            | ファイヤーウォール用サブネット         |
@@ -52,6 +56,7 @@
 
 - `AzureFirewallSubnet`
 - `ApplicationGatewaySubnet`
+- `ApplicationGatewayLowLatencySubnet`
 - `AzureBastionSubnet`
 
 # ルートテーブル
@@ -78,6 +83,9 @@ TLS検査を有効化するためApplication GatewayからAzure Firewallを経�
 また、FW を前面に置くと **NAT で送信元が変わり**、AppGW + WAF が **クライアント情報を正しく識別できなくなる**ためです。  
 そのため、AppGW + WAF を前面に配置し、FW を経由して AKS に到達する構成にしています。
 
+※ `network.enableLowLatencyApplicationGatewaySubnet=true` の場合、低遅延系は `ApplicationGatewayLowLatencySubnet` を利用します。  
+低遅延系サブネットは UDR 非適用（Firewall 非経由）で、通常系のみ Firewall 経由を維持します。
+
 ## rt-[common.environmentName]-[common.systemName]-firewall
 
 Application Gateway Subnet から AKS 宛て通信（UserNodeSubnet / AgentNodeSubnet）を Firewall 経由にするためのルート
@@ -101,6 +109,7 @@ AKSからアウトバウンドへの通信
 | udr-internet-outbound | 0.0.0.0/0               | 仮想アプライアンス   | [network.egressNextHopIp] or [設置したFirewallのプライベートIP] |
 
 - `udr-appgw-return` は `UserNodeSubnet` と `AgentNodeSubnet` に適用し、AppGW 宛て戻り通信を本環境 Firewall 経由に固定します。
+- `ApplicationGatewayLowLatencySubnet` は `udr-appgw-return` の対象に含めません（低遅延系は Firewall 非経由）。
 - `network.egressNextHopIp` が指定されると `udr-internet-outbound` の next hop は集約 FW 側になりますが、`ApplicationGatewaySubnet` 宛てはより長いプレフィックス（ロンゲストマッチ）で `udr-appgw-return` が優先されます。
 
 ## rt-[common.environmentName]-[common.systemName]-outbound-maint
@@ -161,7 +170,7 @@ MaintenanceSubnet からアウトバウンドへの通信
 | ソース       | ソースIPアドレス/CIDR範囲,ソースサービスタグ | ソースポート範囲 | 宛先 | 宛先IPアドレス/CIDR範囲,宛先サービスタグ | サービス | 宛先ポート範囲 | プロトコル | アクション | 優先度 | 名前                          | 説明                             |
 | ------------ | -------------------------------------------- | ---------------- | ---- | ---------------------------------------- | -------- | -------------- | ---------- | ---------- | ------ | ----------------------------- | -------------------------------- |
 | IPアドレス　 | `UserNodeSubnet`, `AgentNodeSubnet`          | \*               | Any  | -                                        | Custom   | 443,4443       | TCP        | 許可       | 200    | Allow-HTTPS-From-K8SAPIServer | K8SAPIサーバーからの通信許可     |
-| IPアドレス　 | `ApplicationGatewaySubnet`                   | \*               | Any  | -                                        | Custom   | 8080,3000,3080 | TCP        | 許可       | 201    | Allow-HTTP-From-AgwSubnet     | ApplicationGatewayからの通信許可 |
+| IPアドレス　 | `ApplicationGatewaySubnet`, `ApplicationGatewayLowLatencySubnet`（低遅延オプション有効時） | \* | Any  | - | Custom   | 8080,3000,3080 | TCP        | 許可       | 201    | Allow-HTTP-From-AgwSubnet     | ApplicationGatewayからの通信許可 |
 | IPアドレス　 | `MaintenanceSubnet`                          | \*               | Any  | -                                        | Custom   | \*             | Any        | 許可       | 202    | Allow-Any-From-MaintVmSubnet  | メンテナンス用VMからの通信許可   |
 | Service Tag  | ActionGroup                                  | \*               | Any  | -                                        | Custom   | 8080           | TCP        | 許可       | 203    | Allow-HTTP-From-ActionGroup   | ログ収集のための通信許可         |
 | Any          | -                                            | \*               | Any  | -                                        | Custom   | \*             | Any        | 拒否       | 4096   | DenyAll                       | その他全ての通信拒否             |
@@ -177,7 +186,7 @@ MaintenanceSubnet からアウトバウンドへの通信
 | ソース       | ソースIPアドレス/CIDR範囲,ソースサービスタグ | ソースポート範囲 | 宛先 | 宛先IPアドレス/CIDR範囲,宛先サービスタグ | サービス | 宛先ポート範囲 | プロトコル | アクション | 優先度 | 名前                          | 説明                             |
 | ------------ | -------------------------------------------- | ---------------- | ---- | ---------------------------------------- | -------- | -------------- | ---------- | ---------- | ------ | ----------------------------- | -------------------------------- |
 | IPアドレス　 | `UserNodeSubnet`, `AgentNodeSubnet`          | \*               | Any  | -                                        | Custom   | 443,4443       | TCP        | 許可       | 200    | Allow-HTTPS-From-K8SAPIServer | K8SAPIサーバーからの通信許可     |
-| IPアドレス　 | `ApplicationGatewaySubnet`                   | \*               | Any  | -                                        | Custom   | 8080,3000,3080 | TCP        | 許可       | 201    | Allow-HTTP-From-AgwSubnet     | ApplicationGatewayからの通信許可 |
+| IPアドレス　 | `ApplicationGatewaySubnet`, `ApplicationGatewayLowLatencySubnet`（低遅延オプション有効時） | \* | Any  | - | Custom   | 8080,3000,3080 | TCP        | 許可       | 201    | Allow-HTTP-From-AgwSubnet     | ApplicationGatewayからの通信許可 |
 | IPアドレス　 | `MaintenanceSubnet`                          | \*               | Any  | -                                        | Custom   | \*             | Any        | 許可       | 202    | Allow-Any-From-MaintVmSubnet  | メンテナンス用VMからの通信許可   |
 | Service Tag  | ActionGroup                                  | \*               | Any  | -                                        | Custom   | 8080           | TCP        | 許可       | 203    | Allow-HTTP-From-ActionGroup   | ログ収集のための通信許可         |
 | Any          | -                                            | \*               | Any  | -                                        | Custom   | \*             | Any        | 拒否       | 4096   | DenyAll                       | その他全ての通信拒否             |
