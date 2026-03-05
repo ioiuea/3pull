@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+if [[ -z "${BASH_VERSION:-}" ]]; then
+  echo "This script must be run with bash. Use: bash ./main.sh" >&2
+  exit 1
+fi
+
 set -euo pipefail
 
 # -----------------------------------------------------------------------------
@@ -89,6 +94,10 @@ federated_credential_meta_file="$params_dir/federated-credential-meta.json"
 backend_values_template_file="$repo_root/k8s/charts/backend/values.yaml"
 backend_values_generated_file="$repo_root/k8s/charts/backend/values.generate.yaml"
 backend_values_sync_script="$infra_root/scripts/sync-backend-values.py"
+
+frontend_values_template_file="$repo_root/k8s/charts/frontend/values.yaml"
+frontend_values_generated_file="$repo_root/k8s/charts/frontend/values.generate.yaml"
+frontend_values_sync_script="$infra_root/scripts/sync-frontend-values.py"
 
 # -----------------------------------------------------------------------------
 # CLI option parsing
@@ -230,6 +239,16 @@ fi
 
 if [[ ! -f "$backend_values_template_file" ]]; then
   echo "backend Helm values template file が見つかりません: $backend_values_template_file" >&2
+  exit 1
+fi
+
+if [[ ! -f "$frontend_values_sync_script" ]]; then
+  echo "frontend values sync script が見つかりません: $frontend_values_sync_script" >&2
+  exit 1
+fi
+
+if [[ ! -f "$frontend_values_template_file" ]]; then
+  echo "frontend Helm values template file が見つかりません: $frontend_values_template_file" >&2
   exit 1
 fi
 
@@ -968,6 +987,22 @@ EOF
       --parameters "$vnet_params_file" \
       ${what_if:+$what_if}
     vnet_created_in_this_run=true
+
+    cat <<'EOF'
+------------------------------------------------------------
+NOTICE: Initial VNET Provisioning
+[EN] A new VNET has been created for the initial run.
+     If you specify egressNextHopIp individually, implement VNET peering first so that
+     outbound communication to external networks is available before deployment.
+     After VNET peering is completed, run this script again.
+
+[JA] 初回実行のため新規VNETを作成しました。
+     egressNextHopIpを個別指定している場合は、デプロイ前に外部への通信が可能になるように
+     VNETピアリングを先に実装してください。
+     VNETピアリング完了後に再度このスクリプトを実行してください。
+------------------------------------------------------------
+EOF
+    exit 0
   fi
 else
   echo "==> Skip Virtual Network (resourceToggles.virtualNetwork=false)"
@@ -1738,18 +1773,95 @@ NOTICE: Firewall Outbound Rule (Initial Provisioning)
 EOF
 fi
 
-if [[ -n "$what_if" ]]; then
-  echo "==> Skip Federated Credential (--what-if)"
-else
-  COMMON_FILE="$common_file" \
-  RESOURCE_CONFIG_FILE="$federated_credential_config_file" \
-  AKS_META_FILE="$aks_meta_file" \
-  PARAMS_DIR="$params_dir" \
-  OUT_META_FILE="$federated_credential_meta_file" \
-  TIMESTAMP="$timestamp" \
-  "$federated_credential_script"
+aks_name_for_post="$(META_FILE="$aks_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
 
-  federated_credential_deploy="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("aksName", ""))
+PY
+)"
+
+if [[ -z "$aks_name_for_post" ]]; then
+  echo "aksName が取得できませんでした。config を確認してください。" >&2
+  exit 1
+fi
+
+echo "==> Check existing AKS: $aks_name_for_post"
+existing_aks_name="$(AKS_RG_NAME="$aks_resource_group_name" AKS_NAME="$aks_name_for_post" python - <<'PY'
+import os
+import subprocess
+import sys
+
+cmd = [
+    "az",
+    "aks",
+    "show",
+    "--resource-group",
+    os.environ["AKS_RG_NAME"],
+    "--name",
+    os.environ["AKS_NAME"],
+    "--query",
+    "name",
+    "-o",
+    "tsv",
+    "--only-show-errors",
+]
+
+for _ in range(3):
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
+    except subprocess.TimeoutExpired:
+        continue
+
+    if result.returncode == 0:
+        print(result.stdout.strip())
+        sys.exit(0)
+    if result.returncode != 0 and "was not found" in (result.stderr or ""):
+        print("")
+        sys.exit(0)
+
+print("__CHECK_FAILED__")
+PY
+)"
+
+if [[ "$existing_aks_name" == "__CHECK_FAILED__" ]]; then
+  echo "==> エラー: AKS の存在確認に失敗しました（タイムアウト/リトライ上限）。" >&2
+  echo "==> Error: Failed to check AKS state (timeout/retry exhausted)." >&2
+  echo "==> Azure CLI のログイン状態・セッション・ネットワークを確認して再実行してください。" >&2
+  echo "==> Please verify Azure CLI login/session/network and retry." >&2
+  exit 1
+fi
+
+if [[ -z "$existing_aks_name" ]]; then
+  cat <<'EOF'
+------------------------------------------------------------
+NOTICE: Skip Federated / Helm Values Export
+[EN] AKS is not found in the target resource group.
+     Federated Credential deployment and backend Helm values export are skipped.
+     Create/deploy AKS first, then run this script again.
+
+[JA] 対象リソースグループに AKS が存在しないため、
+     Federated Credential デプロイと backend Helm values エクスポートをスキップします。
+     先に AKS を作成/デプロイしてから、このスクリプトを再実行してください。
+------------------------------------------------------------
+EOF
+else
+  if [[ -n "$what_if" ]]; then
+    echo "==> Skip Federated Credential (--what-if)"
+    echo "==> Skip Generate backend Helm values file (--what-if)"
+    echo "==> Skip Generate frontend Helm values file (--what-if)"
+  else
+    COMMON_FILE="$common_file" \
+    RESOURCE_CONFIG_FILE="$federated_credential_config_file" \
+    AKS_META_FILE="$aks_meta_file" \
+    PARAMS_DIR="$params_dir" \
+    OUT_META_FILE="$federated_credential_meta_file" \
+    TIMESTAMP="$timestamp" \
+    "$federated_credential_script"
+
+    federated_credential_deploy="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -1759,7 +1871,7 @@ print(str(bool(meta.get("deploy", True))).lower())
 PY
 )"
 
-  federated_credential_params_file="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
+    federated_credential_params_file="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -1769,21 +1881,28 @@ print(meta.get("paramsFile", ""))
 PY
 )"
 
-  if [[ "$federated_credential_deploy" == "true" ]]; then
-    echo "==> Deploy Federated Credential"
-    az deployment group create \
-      --name "main-service-federated-credential-${timestamp}" \
-      --resource-group "$aks_resource_group_name" \
-      --parameters "$federated_credential_params_file"
-  else
-    echo "==> Skip Federated Credential (config.enabled=false)"
+    if [[ "$federated_credential_deploy" == "true" ]]; then
+      echo "==> Deploy Federated Credential"
+      az deployment group create \
+        --name "main-service-federated-credential-${timestamp}" \
+        --resource-group "$aks_resource_group_name" \
+        --parameters "$federated_credential_params_file"
+    else
+      echo "==> Skip Federated Credential (resourceToggles.federatedCredential=false or config.enabled=false)"
+    fi
+
+    echo "==> Generate backend Helm values file"
+    COMMON_FILE="$common_file" \
+    AKS_META_FILE="$aks_meta_file" \
+    STORAGE_CONFIG_FILE="$storage_config_file" \
+    TEMPLATE_FILE="$backend_values_template_file" \
+    OUTPUT_FILE="$backend_values_generated_file" \
+    "$backend_values_sync_script"
+
+    echo "==> Generate frontend Helm values file"
+    COMMON_FILE="$common_file" \
+    TEMPLATE_FILE="$frontend_values_template_file" \
+    OUTPUT_FILE="$frontend_values_generated_file" \
+    "$frontend_values_sync_script"
   fi
 fi
-
-echo "==> Generate backend Helm values file"
-COMMON_FILE="$common_file" \
-AKS_META_FILE="$aks_meta_file" \
-STORAGE_CONFIG_FILE="$storage_config_file" \
-TEMPLATE_FILE="$backend_values_template_file" \
-OUTPUT_FILE="$backend_values_generated_file" \
-"$backend_values_sync_script"

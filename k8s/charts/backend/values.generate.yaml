@@ -23,7 +23,7 @@ api:
   enabled: true
   replicaCount: 1
   image:
-    repository: 'crdev3pull.azurecr.io/3pull-api'
+    repository: 'crdev23pull.azurecr.io/3pull-api'
     tag: '__IMAGE_TAG__'
     pullPolicy: IfNotPresent
   service:
@@ -41,7 +41,7 @@ workers:
     enabled: true
     replicaCount: 1
     image:
-      repository: 'crdev3pull.azurecr.io/3pull-worker'
+      repository: 'crdev23pull.azurecr.io/3pull-worker'
       tag: '__IMAGE_TAG__'
       pullPolicy: IfNotPresent
     queueName: auth-audit-export
@@ -59,7 +59,7 @@ workers:
     enabled: true
     replicaCount: 1
     image:
-      repository: 'crdev3pull.azurecr.io/3pull-worker'
+      repository: 'crdev23pull.azurecr.io/3pull-worker'
       tag: '__IMAGE_TAG__'
       pullPolicy: IfNotPresent
     queueName: sample-wait-blob
@@ -80,13 +80,13 @@ keda:
   enabled: true
   triggerAuthenticationName: r-3pull-worker-trigger-auth
   workloadIdentity:
-    clientId: '0759f92d-24a5-441e-8f7b-48f87a657e51'
+    clientId: '797fe36e-518b-4a93-9112-5b401eea364f'
 
 # Cleanup CronJob 設定
 # image.tag は CI で毎回置き換えてください。
 cleanup:
   image:
-    repository: 'crdev3pull.azurecr.io/3pull-cleanup'
+    repository: 'crdev23pull.azurecr.io/3pull-cleanup'
     tag: '__IMAGE_TAG__'
     pullPolicy: IfNotPresent
   successfulJobsHistoryLimit: 1
@@ -123,7 +123,7 @@ keyVault:
   enabled: true
   secretProviderClassName: backend-secrets
   secretName: backend-secrets
-  vaultName: 'kv-dev-3pull'
+  vaultName: 'kv-dev2-3pull'
   tenantId: 'f3b16e80-cf34-4e90-860e-cef1ac25d9dd'
   objects:
     databaseUrl:
@@ -145,18 +145,18 @@ keyVault:
 serviceAccounts:
   api:
     create: true
-    name: 'sa-dev-3pull-api'
-    clientId: 'e01b1b52-5ba3-424c-8e62-0c9538c185a6'
+    name: 'sa-dev2-3pull-api'
+    clientId: '9c75ba02-efa1-4898-9eb7-8b76f5e243d1'
     annotations: {}
   worker:
     create: true
-    name: 'sa-dev-3pull-worker'
-    clientId: '0759f92d-24a5-441e-8f7b-48f87a657e51'
+    name: 'sa-dev2-3pull-worker'
+    clientId: '797fe36e-518b-4a93-9112-5b401eea364f'
     annotations: {}
   cleanup:
     create: true
-    name: 'sa-dev-3pull-cleanup'
-    clientId: '00e3c511-37ed-444c-b826-64dfd5cc0753'
+    name: 'sa-dev2-3pull-cleanup'
+    clientId: '71eafe22-9ac0-4bed-8459-435a7f71dc40'
     annotations: {}
 
 # アプリケーション設定（環境変数）
@@ -174,10 +174,10 @@ config:
     SESSION_COOKIE_SECURE: "false"
     SESSION_COOKIE_SAMESITE: lax
     ASYNC_JOBS_ENABLED: "true"
-    SERVICE_BUS_NAMESPACE_FQDN: 'sb-dev-3pull.servicebus.windows.net'
+    SERVICE_BUS_NAMESPACE_FQDN: 'sb-dev2-3pull.servicebus.windows.net'
     SERVICE_BUS_AUTH_AUDIT_EXPORT_QUEUE_NAME: auth-audit-export
     SERVICE_BUS_SAMPLE_WAIT_BLOB_QUEUE_NAME: sample-wait-blob
-    AZURE_BLOB_ACCOUNT_URL: 'https://stdev3pull.blob.core.windows.net/'
+    AZURE_BLOB_ACCOUNT_URL: 'https://stdev23pull.blob.core.windows.net/'
     AZURE_BLOB_CONTAINER: 'async-jobs'
     # 必須: Entra テナント ID（本番値に置き換えてください）
     ENTRA_TENANT_ID: '00000000-0000-0000-0000-000000000000'

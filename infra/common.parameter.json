@@ -1,9 +1,9 @@
 {
   "common": {
     "location": "japaneast",
-    "environmentName": "dev",
+    "environmentName": "dev2",
     "systemName": "3pull",
-    "enableResourceLock": true
+    "enableResourceLock": false
   },
   "resourceToggles": {
     "logAnalytics": true,
@@ -13,14 +13,14 @@
     "firewall": true,
     "applicationGateway": true,
     "aks": true,
-    "acr": true,
-    "keyVault": true,
-    "serviceBus": true,
-    "storage": true,
-    "redis": true,
-    "postgresDatabase": true,
-    "cosmosDatabase": true,
-    "maintenanceVm": true,
+    "acr": false,
+    "keyVault": false,
+    "serviceBus": false,
+    "storage": false,
+    "redis": false,
+    "postgresDatabase": false,
+    "cosmosDatabase": false,
+    "maintenanceVm": false,
     "federatedCredential": true
   },
   "network": {

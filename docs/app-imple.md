@@ -21,12 +21,13 @@
 | Managed Identity 作成（api/worker/cleanup） | Bicep | 実装済み | AKS 構築タイミングで同時作成 |
 | OIDC / Workload Identity / Key Vault CSI 有効化 | Bicep | 実装済み | AKS プロパティで固定化 |
 | Key Vault / Service Bus / Storage の RBAC 付与 | Bicep | 実装済み | `roleAssignments` で冪等化可能 |
-| Storage Account コンテナ作成 | Bicep 推奨 | 実装済み | `blobServices/containers` で作成可能 |
-| Service Bus キュー作成 | Bicep 推奨 | 実装済み | `queues` で作成可能 |
-| federated credential 作成 | Bicep 推奨 | 未実装 | `federatedIdentityCredentials` で作成可能 |
-| Key Vault への Secret 値投入 | Script + CI Secret 管理 | 未実装 | 値は IaC に入れない |
-| KEDA デプロイ | Helm（Makefile + CI） | 一部実装 | chart は実装済み。CI/Makefile 導線は未整備 |
-| KEDA annotation（keda-operator） | Helm values 管理推奨 | 一部実装 | backend ServiceAccount 側は実装済み。keda-operator 側の運用固定化は残あり |
+| Storage Account コンテナ作成 | Bicep | 実装済み | `blobServices/containers` で作成可能 |
+| Service Bus キュー作成 | Bicep | 実装済み | `queues` で作成可能 |
+| federated credential 作成 | Bicep | 実装済み | `main.federated-credential.bicep` で作成 |
+| Helm values 生成（backend/frontend） | Script | 実装済み | `main.sh` 末尾で `values.generate.yaml` を自動生成 |
+| Key Vault への Secret 値投入 | Script + CI Secret | 未実装 | bootstrap script で `az keyvault secret set`。GitHub Actions の `Secrets`（例: `DATABASE_URL`, `SESSION_SECRET_KEY`, `ENTRA_CLIENT_SECRET`, `ENTRA_TOKEN_ENCRYPTION_KEY`）から値を渡す。固定値は `Variables` を使用。値は IaC に入れない |
+| KEDA デプロイ | Helm + Makefile + GitHub Actions | 一部実装 | chart は実装済み。deploy 導線（Makefile/CI）は未整備 |
+| KEDA annotation（keda-operator） | Helm values 管理 | 一部実装 | 手動 annotation は廃止し、values/CI 注入に統一する |
 
 ## 3. 項目別の判断
 
@@ -78,24 +79,9 @@
    - backend/frontend デプロイ
    - values 切替（stg/prod）
 
-## 5. 今回の具体回答（質問への直接回答）
+## 次アクション（未完了タスク）
 
-- `aks構築` -> Bicep でやる
-- `マネージドid` -> Bicep で AKS と同じデプロイ単位で作る
-- `Key VaultのRBAC` -> Bicep でできる（推奨）
-- `Service BusのRBAC` -> Bicep でできる（推奨）
-- `StorageのRBAC` -> Bicep でできる（推奨）
-- `Storage Accountのコンテナ作成` -> Bicep でできる。初期構築のみなら Script でも可だが、冪等運用は Bicep 推奨
-- `Service Busのキュー作成` -> Bicep でできる。初期構築のみでも Bicep 管理推奨
-- `federated credential 作成` -> Bicep でできる（推奨）
-- `Key Vault に Secret を投入` -> Script + Makefile + CI Secret 管理で実施（Bicepに生値は載せない）
-- `KEDAデプロイ` -> Helm（Makefile/CI）で実施
-- `KEDAのannotation` -> Helm values で管理（暫定は手動可だが恒久は Helm）
-
-## 6. 次アクション（未完了タスク）
-
-1. `infra/bicep` に federated credential 作成を追加
-2. `scripts/` に Key Vault secret 投入スクリプトを追加
-3. `Makefile` に `infra`, `bootstrap-secrets`, `deploy-keda`, `deploy-app` を分離追加
-4. CI を `infra -> bootstrap -> app` の 3 ジョブ構成に分割
-5. keda-operator 側の Workload Identity 設定を Helm values 管理へ固定化
+1. `scripts/` に Key Vault secret 投入スクリプトを追加
+2. `Makefile` に `infra`, `bootstrap-secrets`, `deploy-keda`, `deploy-app` を分離追加
+3. CI を `infra -> bootstrap -> app` の 3 ジョブ構成に分割
+4. keda-operator 側の Workload Identity 設定を Helm values 管理へ固定化

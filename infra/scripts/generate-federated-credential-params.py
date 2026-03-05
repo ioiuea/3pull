@@ -42,6 +42,16 @@ if not environment_name or not system_name:
         "common.parameter.json の common.environmentName / common.systemName を設定してください"
     )
 
+deploy = bool(toggles.get("federatedCredential", True)) and bool(config.get("enabled", True))
+if not deploy:
+    meta = {
+        "resourceGroupName": str(aks_meta.get("resourceGroupName", "")).strip(),
+        "deploy": False,
+        "paramsFile": "",
+    }
+    out_meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    raise SystemExit(0)
+
 resource_group_name = str(aks_meta.get("resourceGroupName", "")).strip()
 aks_name = str(aks_meta.get("aksName", "")).strip()
 if not resource_group_name or not aks_name:
@@ -86,8 +96,6 @@ api_federated_credential_name = f"fic-{environment_name}-{system_name}-api"
 worker_federated_credential_name = f"fic-{environment_name}-{system_name}-worker"
 cleanup_federated_credential_name = f"fic-{environment_name}-{system_name}-cleanup"
 keda_operator_federated_credential_name = f"fic-{environment_name}-{system_name}-keda-operator"
-
-deploy = bool(toggles.get("federatedCredential", True)) and bool(config.get("enabled", True))
 
 params_dir.mkdir(parents=True, exist_ok=True)
 params_file = params_dir / "federated-credential.bicepparam"
