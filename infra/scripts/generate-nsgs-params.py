@@ -87,6 +87,13 @@ if not subnet_defs:
 shared_bastion_ip = network_values.get("sharedBastionIp", "")
 if shared_bastion_ip:
     subnet_defs = [s for s in subnet_defs if s.get("alias", s.get("name")) != "bastion"]
+if not bool(network_values.get("enableLowLatencyApplicationGatewaySubnet", False)):
+    subnet_defs = [
+        s
+        for s in subnet_defs
+        if s.get("name") != "ApplicationGatewayLowLatencySubnet"
+        and s.get("alias", s.get("name")) != "agicll"
+    ]
 
 base_prefixes = [ipaddress.ip_network(p) for p in vnet_address_prefixes]
 range_index = 0
@@ -144,14 +151,30 @@ def resolve_prefix(value):
 
 def resolve_prefixes(values):
     """複数 alias/CIDR をまとめて解決する。"""
-    return [resolve_prefix(v) for v in values]
+    resolved = []
+    for value in values:
+        resolved_value = resolve_prefix(value)
+        # サブネット alias が無効化されている場合は除外する（例: agicll）
+        if isinstance(value, str) and value not in subnet_prefix_map and resolved_value == value:
+            try:
+                ipaddress.ip_network(value, strict=False)
+                resolved.append(value)
+                continue
+            except ValueError:
+                pass
+            if value in {"*", "ActionGroup", "Internet", "VirtualNetwork", "AzureLoadBalancer"}:
+                resolved.append(value)
+                continue
+            continue
+        resolved.append(resolved_value)
+    return resolved
 
 
 # 各サブネット用テンプレートから NSG ルールを展開する。
 nsgs = []
 for subnet in resolved_subnets:
     subnet_alias = subnet["alias"]
-    if subnet_alias in {"agic", "firewall", "bastion"}:
+    if subnet_alias in {"agic", "agicll", "firewall", "bastion"}:
         continue
 
     rules = []

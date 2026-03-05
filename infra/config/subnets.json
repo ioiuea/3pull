@@ -27,6 +27,11 @@
       "prefixLength": 25
     },
     {
+      "name": "ApplicationGatewayLowLatencySubnet",
+      "alias": "agicll",
+      "prefixLength": 25
+    },
+    {
       "name": "AgentNodeSubnet",
       "alias": "agentnode",
       "prefixLength": 26

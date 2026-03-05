@@ -24,6 +24,9 @@ param logAnalyticsResourceGroupName string
 @description('VNETの名称')
 param vnetName string
 
+@description('Application Gateway 用サブネット名')
+param applicationGatewaySubnetName string = 'ApplicationGatewaySubnet'
+
 @description('Application Gateway 名')
 param applicationGatewayName string
 
@@ -153,7 +156,7 @@ var modulesTags = {
 }
 
 resource applicationGatewaySubnet 'Microsoft.Network/virtualNetworks/subnets@2024-07-01' existing = {
-  name: '${vnetName}/ApplicationGatewaySubnet'
+  name: '${vnetName}/${applicationGatewaySubnetName}'
 }
 
 resource publicIP 'Microsoft.Network/publicIPAddresses@2022-07-01' = {

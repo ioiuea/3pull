@@ -83,6 +83,13 @@ if not subnet_defs:
 
 if network_values.get("sharedBastionIp", ""):
     subnet_defs = [s for s in subnet_defs if s.get("alias", s.get("name")) != "bastion"]
+if not bool(network_values.get("enableLowLatencyApplicationGatewaySubnet", False)):
+    subnet_defs = [
+        s
+        for s in subnet_defs
+        if s.get("name") != "ApplicationGatewayLowLatencySubnet"
+        and s.get("alias", s.get("name")) != "agicll"
+    ]
 
 base_prefixes = [ipaddress.ip_network(p) for p in vnet_address_prefixes]
 range_index = 0

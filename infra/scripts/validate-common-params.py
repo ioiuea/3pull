@@ -176,6 +176,11 @@ def main() -> int:
         "network.enableCentralizedPrivateDns",
         errors,
     )
+    as_bool(
+        network_values.get("enableLowLatencyApplicationGatewaySubnet"),
+        "network.enableLowLatencyApplicationGatewaySubnet",
+        errors,
+    )
 
     ddos_plan_id = network_values.get("ddosProtectionPlanId")
     if not isinstance(ddos_plan_id, str):

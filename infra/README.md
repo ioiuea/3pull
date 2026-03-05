@@ -7,7 +7,7 @@
 
 ### 構成図（基本構成）
 
-![基本構成図](../docs/assets/basic-pattern.png)
+![基本構成図](../docs/assets/Basic.png)
 
 ### 通信経路フロー（UDR）
 
@@ -66,7 +66,7 @@ flowchart LR
 
 ### 構成図（ハブ&スポーク構成）
 
-![ハブ&スポーク構成図](../docs/assets/habspo-pattern.png)
+![ハブ&スポーク構成図](../docs/assets/Hubspo.png)
 
 ### 通信経路フロー（UDR）
 
@@ -108,6 +108,71 @@ flowchart LR
 
   AG -->|"TCP 8080,3000,3080 許可"| U
   AG -->|"TCP 8080,3000,3080 許可"| N
+  U -->|"TCP 443,4443 許可"| U
+  U -->|"TCP 443,4443 許可"| N
+  N -->|"TCP 443,4443 許可"| U
+  N -->|"TCP 443,4443 許可"| N
+  M -->|"Any 許可"| U
+  M -->|"Any 許可"| N
+  U -->|"Any 許可"| P
+  N -->|"Any 許可"| P
+  M -->|"Any 許可"| P
+  ACT -->|"TCP 8080 許可"| U
+  ACT -->|"TCP 8080 許可"| N
+  B -->|"TCP 22,3389 許可"| M
+```
+
+### 構成図（低遅延用 AppGW オプション構成）
+
+![低遅延用 AppGW オプション構成図](../docs/assets/LowLatencyOption.png)
+
+### 通信経路フロー（UDR）
+
+```mermaid
+flowchart LR
+  AG["ApplicationGatewaySubnet<br/>10.189.129.0/25"]
+  AGLL["ApplicationGatewayLowLatencySubnet<br/>10.189.129.128/25"]
+  U["UserNodeSubnet<br/>10.189.128.0/24"]
+  N["AgentNodeSubnet<br/>10.189.130.192/26"]
+  M["MaintenanceSubnet<br/>10.189.131.0/29"]
+  FW["Azure Firewall<br/>10.189.130.65"]
+  NET["0.0.0.0/0 (Internet)"]
+
+  RTFW["rt-stg-sun3pull-firewall<br/>udr-usernode-inbound<br/>udr-agentnode-inbound"]
+  RTAKS["rt-stg-sun3pull-outbound-aks<br/>udr-appgw-return<br/>udr-internet-outbound"]
+  RTM["rt-stg-sun3pull-outbound-maint<br/>udr-internet-outbound"]
+  RTNONE["Route Table<br/>Not Attached"]
+
+  AG ---|"紐づけ"| RTFW
+  AGLL -.->|"UDR 未紐づけ"| RTNONE
+  U ---|"紐づけ"| RTAKS
+  N ---|"紐づけ"| RTAKS
+  M ---|"紐づけ"| RTM
+
+  RTFW -->|"UserNodeSubnet / AgentNodeSubnet 宛<br/>next hop: 10.189.130.65"| FW
+  RTAKS -->|"ApplicationGatewaySubnet 宛 (udr-appgw-return)<br/>next hop: 10.189.130.65"| FW
+  RTAKS -->|"0.0.0.0/0 (udr-internet-outbound)<br/>next hop: 10.189.130.65"| FW
+  RTM -->|"0.0.0.0/0 (udr-internet-outbound)<br/>next hop: 10.189.130.65"| FW
+  FW --> NET
+```
+
+### 通信制御フロー（NSG）
+
+```mermaid
+flowchart LR
+  AG["ApplicationGatewaySubnet<br/>10.189.129.0/25"]
+  AGLL["ApplicationGatewayLowLatencySubnet<br/>10.189.129.128/25"]
+  U["UserNodeSubnet<br/>10.189.128.0/24<br/>NSG: nsg-stg-sun3pull-usernode"]
+  N["AgentNodeSubnet<br/>10.189.130.192/26<br/>NSG: nsg-stg-sun3pull-agentnode"]
+  P["PrivateEndpointSubnet<br/>10.189.130.128/26<br/>NSG: nsg-stg-sun3pull-pep"]
+  M["MaintenanceSubnet<br/>10.189.131.0/29<br/>NSG: nsg-stg-sun3pull-maint"]
+  B["AzureBastionSubnet<br/>10.189.130.0/26"]
+  ACT["ActionGroup"]
+
+  AG -->|"TCP 8080,3000,3080 許可"| U
+  AG -->|"TCP 8080,3000,3080 許可"| N
+  AGLL -->|"TCP 8080,3000,3080 許可"| U
+  AGLL -->|"TCP 8080,3000,3080 許可"| N
   U -->|"TCP 443,4443 許可"| U
   U -->|"TCP 443,4443 許可"| N
   N -->|"TCP 443,4443 許可"| U
@@ -207,6 +272,20 @@ Private DNS ゾーンをハブ側（共通基盤側）に集約して一元管�
 - `false`（デフォルト）: 集約 DNS なし。各環境側で Private DNS ゾーンを作成して利用
 - `true`: 集約 DNS あり。各環境側でのゾーン作成をスキップし、ハブ側などの集約 DNS で管理されたゾーンを利用
 
+### network.enableLowLatencyApplicationGatewaySubnet
+
+低遅延系エンドポイント用に、通常系とは別の `ApplicationGatewayLowLatencySubnet` を作成するかどうかを指定します。  
+このサブネットは通常の `ApplicationGatewaySubnet` と同じサイズ（`/25`）で作成されます。
+
+- `false`（デフォルト）: 低遅延用サブネットを作成しない
+- `true`: `ApplicationGatewayLowLatencySubnet` を作成し、低遅延用 AppGW 構成を有効化
+
+注意:
+
+- 音声データ配信やリアルタイム処理など、同時接続数が増えるワークロードで Firewall 経由がボトルネックになり得る場合に有効です。
+- 通常系は Firewall 経由（検査・集中制御）、低遅延系は AppGW 直通（遅延最小化）という用途分離を前提に運用してください。
+- 低遅延用サブネットは UDR/NSG を紐づけない設計です。そのため、入口側は WAF/AppGW で制御し、公開 API を限定する前提です。
+
 ### network.enableDdosProtection
 
 DDoS Protection の有効/無効を指定します。  
@@ -229,6 +308,11 @@ VNET のアドレス空間です。サブネットを動的計算するため、
 
 - `/24` が 3 つ分
 - 連続するレンジを確保できる場合は、`/23` が 1 つ分 + `/24` が 1 つ分、または `/22` が 1 つ分（`/24` 3 つ分相当）
+
+`network.enableLowLatencyApplicationGatewaySubnet=true` の場合は、`ApplicationGatewayLowLatencySubnet`（`/25`）を追加で確保するため、以下が必要です。
+
+- `/24` が 4 つ分
+- または `/22` が 1 つ分（`/24` 4 つ分相当）
 
 ### network.vnetDnsServers
 

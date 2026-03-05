@@ -1,9 +1,9 @@
 {
   "common": {
     "location": "japaneast",
-    "environmentName": "dev2",
+    "environmentName": "dev",
     "systemName": "3pull",
-    "enableResourceLock": false
+    "enableResourceLock": true
   },
   "resourceToggles": {
     "logAnalytics": true,
@@ -13,26 +13,28 @@
     "firewall": true,
     "applicationGateway": true,
     "aks": true,
-    "acr": false,
-    "keyVault": false,
-    "serviceBus": false,
-    "storage": false,
+    "acr": true,
+    "keyVault": true,
+    "serviceBus": true,
+    "storage": true,
     "redis": false,
-    "postgresDatabase": false,
+    "postgresDatabase": true,
     "cosmosDatabase": false,
-    "maintenanceVm": false,
+    "maintenanceVm": true,
     "federatedCredential": true
   },
   "network": {
     "enableFirewallIdps": false,
     "enableGatewayRoutePropagation": false,
     "enableCentralizedPrivateDns": false,
+    "enableLowLatencyApplicationGatewaySubnet": false,
     "enableDdosProtection": false,
     "ddosProtectionPlanId": "",
     "vnetAddressPrefixes": [
       "10.189.128.0/24",
       "10.189.129.0/24",
-      "10.189.130.0/24"
+      "10.189.130.0/24",
+      "10.189.131.0/24"
     ],
     "vnetDnsServers": [],
     "sharedBastionIp": "",

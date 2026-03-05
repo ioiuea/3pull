@@ -67,6 +67,7 @@ environment_name = common_values.get("environmentName", "")
 system_name = common_values.get("systemName", "")
 vnet_address_prefixes = network_values.get("vnetAddressPrefixes", [])
 shared_bastion_ip = network_values.get("sharedBastionIp", "")
+enable_low_latency_agw_subnet = bool(network_values.get("enableLowLatencyApplicationGatewaySubnet", False))
 
 if not environment_name or not system_name:
     raise SystemExit("common.parameter.json の common.environmentName / common.systemName を設定してください")
@@ -82,6 +83,13 @@ vnet_name = f"vnet-{environment_name}-{system_name}"
 # sharedBastionIp が設定される場合は AzureBastionSubnet を作成しない。
 if shared_bastion_ip:
     subnet_defs = [s for s in subnet_defs if s.get("alias", s.get("name")) != "bastion"]
+if not enable_low_latency_agw_subnet:
+    subnet_defs = [
+        s
+        for s in subnet_defs
+        if s.get("name") != "ApplicationGatewayLowLatencySubnet"
+        and s.get("alias", s.get("name")) != "agicll"
+    ]
 
 base_prefixes = [ipaddress.ip_network(p) for p in vnet_address_prefixes]
 range_index = 0

@@ -40,6 +40,8 @@ firewall_meta_file="$params_dir/firewall-meta.json"
 application_gateway_config_file="$infra_root/config/application-gateway.json"
 application_gateway_script="$infra_root/scripts/generate-application-gateway-params.py"
 application_gateway_meta_file="$params_dir/application-gateway-meta.json"
+application_gateway_low_latency_script="$infra_root/scripts/generate-application-gateway-low-latency-params.py"
+application_gateway_low_latency_meta_file="$params_dir/application-gateway-low-latency-meta.json"
 
 key_vault_config_file="$infra_root/config/key-vault.json"
 key_vault_script="$infra_root/scripts/generate-key-vault-params.py"
@@ -164,6 +166,11 @@ fi
 
 if [[ ! -f "$application_gateway_config_file" ]]; then
   echo "application gateway config file が見つかりません: $application_gateway_config_file" >&2
+  exit 1
+fi
+
+if [[ ! -f "$application_gateway_low_latency_script" ]]; then
+  echo "application gateway low latency script が見つかりません: $application_gateway_low_latency_script" >&2
   exit 1
 fi
 
@@ -309,6 +316,14 @@ PARAMS_DIR="$params_dir" \
 OUT_META_FILE="$application_gateway_meta_file" \
 TIMESTAMP="$timestamp" \
 "$application_gateway_script"
+
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$application_gateway_config_file" \
+SUBNETS_CONFIG_FILE="$subnets_config_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$application_gateway_low_latency_meta_file" \
+TIMESTAMP="$timestamp" \
+"$application_gateway_low_latency_script"
 
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$redis_config_file" \
@@ -1204,6 +1219,26 @@ print(meta.get("paramsFile", ""))
 PY
 )"
 
+application_gateway_low_latency_deploy="$(META_FILE="$application_gateway_low_latency_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+application_gateway_low_latency_params_file="$(META_FILE="$application_gateway_low_latency_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
 route_tables_deploy="$(META_FILE="$route_tables_meta_file" python - <<'PY'
 import json
 import os
@@ -1434,6 +1469,17 @@ if [[ "$application_gateway_deploy" == "true" ]]; then
     ${what_if:+$what_if}
 else
   echo "==> Skip Application Gateway (resourceToggles.applicationGateway=false)"
+fi
+
+if [[ "$application_gateway_low_latency_deploy" == "true" ]]; then
+  echo "==> Deploy Application Gateway (Low Latency)"
+  az deployment group create \
+    --name "main-network-application-gateway-low-latency-${timestamp}" \
+    --resource-group "$application_gateway_resource_group_name" \
+    --parameters "$application_gateway_low_latency_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip Application Gateway (Low Latency)"
 fi
 
 aks_deploy="$(META_FILE="$aks_meta_file" python - <<'PY'
