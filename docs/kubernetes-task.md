@@ -1,345 +1,280 @@
-# Kubernetes タスク整理
+# Kubernetes タスク整理（現行）
 
-## 1. このドキュメントの位置づけ
+## 1. 仕様整理
 
-- 本ドキュメントは、AKS / Helm / KEDA / Workload Identity / リリースに関する作業を整理するためのものです。
-- backend / frontend のアプリ実装タスクから切り離し、Kubernetes 配備全体の観点で管理します。
-- 未確定の内容は「判断メモ」や「参考メモ」として残し、実装が進んだ時点で要件へ昇格させます。
+### 1.1 このドキュメントの目的
 
-## 2. 対象範囲
+- AKS / Helm / KEDA / Workload Identity / リリース準備の進捗を、実装実態ベースで管理する。
+- backend / frontend のアプリ実装詳細ではなく、Kubernetes 配備作業に限定して扱う。
 
-- AKS へのデプロイ
-- Helm chart
-- KEDA
+### 1.2 現在の前提（2026-03-04 時点）
+
+- `infra/` 配下の Bicep は最終的なプライベートネットワーク構成向け。
+- 現在は検証フェーズとして、AKS を含む主要 Azure リソースは手動で作成済み。
+- まずはパブリック通信ベースで、アプリ間通信と Helm の成立性確認を優先する。
+- Ingress / App Gateway / private endpoint / UDR は後続フェーズで段階導入する。
+
+### 1.3 対象範囲
+
+- AKS への配備
+- Helm chart（backend / frontend）
+- KEDA（worker オートスケール）
 - Workload Identity
-- Staging / 本番検証
-- Runbook / リリース
+- Staging 運用検証
+- リリース準備（Runbook 含む）
 
 対象外:
 
-- backend アプリ実装そのもの
-- frontend アプリ実装そのもの
-- インフラ全体の長期検討（VNet / App Gateway / private 化の詳細）
-  - これらは `docs/infra-task.md` も参照する
+- backend / frontend の機能実装そのもの
+- 最終ネットワーク設計の確定作業（`docs/infra-task.md` 管轄）
 
-## 3. Step 7. Helm / AKS / KEDA
+### 1.4 実装方針（確定）
 
-進捗: 未着手
+- Helm chart を正本とし、`k8s/manifests` は作らない。
+- backend と frontend は別 chart で管理する。
+- 初期段階は backend / frontend とも Service を `ClusterIP` で運用する。
+- worker は job_type ごとに Deployment を分ける。
+- cleanup は `sessions / audit / jobs` の 3 CronJob に分ける。
+- Secret の正本は Key Vault とし、Helm に平文 Secret は持たない。
+- Service Bus / Blob は本番想定ではキーレス（Workload Identity + `DefaultAzureCredential`）を前提とする。
 
-### 3.1 着手前の前提整理
+### 1.5 ステータス定義
 
-- Step 7 の目的は、まず AKS 上にアプリを載せるための manifest / Helm / 動作確認を成立させること
-- この段階では、事前準備はできるだけ小さくし、原則として「パブリック通信前提」で進める
-  - まずは AKS
-  - ACR
-  - Key Vault（必要なら Secret 管理）
-  程度のシンプル構成を優先する
-- 最終的にはプライベート構成へ寄せる前提だが、
-  - VNet
-  - private endpoint
-  - App Gateway / AGIC
-  - UDR
-  などは後続フェーズで追加・再設計する
-- `docs/infra-task.md` にあるネットワーク / App Gateway の検討は、
-  Step 7 の Helm 初期実装を阻害しない範囲で、後続タスクとして分離して扱う
-- `AGIC` / App Gateway は、AKS にアプリを載せるための「絶対条件」ではない
-  - 先に Helm chart を作り、ClusterIP / internal Service 前提でアプリを載せることはできる
-  - Ingress / 外部公開をどうするかは、その後に App Gateway / AGIC / 別 ingress controller の判断でよい
-- Helm の前に「values 相当の設定整理」は必須
-  - `values.yaml` というファイル名に限らず、少なくとも
-    - デフォルト値
-    - 環境差分
-    - Secret ではない設定
-    を整理しないと chart は作れない
-- Step 7 では frontend も AKS に載せる対象に含める
-  - ただし backend と同じ chart にはまとめず、
-  - `k8s/charts/backend` と `k8s/charts/frontend` を別 chart として並行に整備する
-  - 初期段階では `k8s/manifests` は作らず、Helm chart を正とする
-  - 初期段階の障害切り分けをしやすくするため、まずは分離を優先する
-  - 将来必要なら、後から統合する余地は残す
-  - frontend も初期実装では `ClusterIP` 固定で進め、
-    Ingress / App Gateway 連携は後続タスクとして追加する
+- `完了`: 実装と最低限の動作確認が完了
+- `進行中`: 実装はあるが、検証中または不具合対応中
+- `未着手`: まだ実装していない
+- `保留`: 後続フェーズで実施予定
 
-### 3.2 未実装
+## 2. 作業ステップサマリ
 
-- API / cleanup / worker の Helm chart
-- frontend の Helm chart
-- API 用 `Deployment` / `Service`
-- cleanup 用 `CronJob`
-- worker 用 `Deployment`
-- `ScaledObject`
-- Workload Identity 用 `ServiceAccount` / annotation / values
-- Service Bus / Blob / DB などの本番 values 整備
-- Ingress / App Gateway 連携方針の確定
+| Step | 作業 | ステータス | 現状サマリ |
+|---|---|---|---|
+| 1 | 検証前提の確定（手動作成 + パブリック通信） | 完了 | 方針を確定し、手動作成リソースで検証中 |
+| 2 | backend Helm 基盤（helper/config/sa/secret連携） | 完了 | `k8s/charts/backend` で成立 |
+| 3 | API 配備（Deployment/Service） | 完了 | Pod 起動・アクセス確認済み |
+| 4 | cleanup 配備（CronJob 3本） | 完了 | CronJob テンプレート実装済み |
+| 5 | worker 配備（job_type別 Deployment） | 完了 | worker Pod 起動確認済み |
+| 6 | frontend 配備（Deployment/Service） | 完了 | web Pod 起動・アクセス確認済み |
+| 7 | KEDA 実装（ScaledObject/TriggerAuthentication） | 進行中 | テンプレート実装済み、認証でエラー発生 |
+| 8 | Workload Identity 検証（API/worker/cleanup） | 進行中 | API/worker/cleanup SA 注釈は実装済み、KEDA連携の詰めが必要 |
+| 9 | Ingress / App Gateway 連携 | 保留 | フェーズ分離済み |
+| 10 | Staging 運用検証（queue/blob/cron/DLQ） | 未着手 | KEDA解消後に本格着手 |
+| 11 | Runbook / 本番切替手順 | 未着手 | 運用検証完了後に整備 |
+| 12 | ドキュメント最終同期 | 進行中 | 本ドキュメントを再編中 |
 
-## 4. Step 8. Staging / 運用検証
+## 3. 作業ステップ詳細
 
-進捗: 一部完了
+### 3.1 Step 1: 検証前提の確定（完了）
 
-完了:
+目的:
 
-- ローカル実装は存在
-- CI / lint / typecheck / test の一部は通過済み前提で進行
+- private 化前に、最小構成で Kubernetes 配備の成立性を検証する。
 
-未完:
+完了内容:
 
-- Staging 上での CronJob 実行検証
-- worker / queue / Blob の AKS 上検証
-- App Insights / 実運用監視導線の確認
-- DLQ 運用手順の確認
+- Azure リソースは手動作成で検証を進める方針を確定。
+- パブリック通信前提で Helm / Pod 起動 / 疎通確認を先行。
 
-## 5. Step 9. リリース
+残課題:
 
-進捗: 未着手
+- なし（この方針は現フェーズで固定）。
 
-- 段階有効化
-- Runbook 整備
-- 本番切替手順の確定
+### 3.2 Step 2: backend Helm 基盤（完了）
 
-## 6. Step 10. ドキュメント仕上げ（後続）
+目的:
 
-進捗: 未着手
+- backend の共通テンプレートと values 構造を確立する。
 
-- AKS / Helm / KEDA 実装後の運用手順を最終確定する
-- Runbook を独立ドキュメントとして整備する
-- 必要に応じて `docs/infra/*.md` の正式仕様へ反映する
-- 本番切替手順の確定
+完了内容:
 
-## 7. 今後の作業ステップ（現時点の推奨順）
+- chart 生成: `k8s/charts/backend`
+- 実装済みテンプレート:
+  - `_helpers.tpl`
+  - `configmap.yaml`
+  - `serviceaccounts.yaml`
+  - `secretproviderclass.yaml`
+- values の base + 環境差分構成を採用。
 
-### 7.1 先に進めるべきもの
+確認対象ファイル:
 
-1. Azure 側で「先に必要なもの」を確定する
-2. Helm に載せる values 項目を先に棚卸しする
-3. Helm chart の骨組みを作る
-4. API を先に chart 化して AKS 上で起動できるようにする
-5. cleanup を `CronJob` として chart 化する
-6. worker を job_type ごとに `Deployment` 化する
-7. `KEDA ScaledObject` を worker ごとに追加する
-8. Workload Identity の `ServiceAccount` / annotation / values を追加する
-9. frontend を別 chart として整備する
-10. Ingress / App Gateway 連携方針を確定する
-11. Staging で cleanup / worker / queue / Blob の疎通を検証する
-12. CI から呼ぶコンテナ build / deploy 手順を確定する
-13. Runbook と本番リリース手順を確定する
+- `k8s/charts/backend/values.yaml`
+- `k8s/charts/backend/templates/*`
 
-### 7.2 Helm 実装タスク
+### 3.3 Step 3: API 配備（完了）
 
-1. values の棚卸しを先に行う
-   - まず `values.yaml` と `values.staging.yaml` / `values.prod.yaml` のどちらで分けるかを決める
-   - 少なくとも以下を values 化する
-     - backend / frontend の image repository / tag / pullPolicy
-     - `SERVICE_NAME`
-     - `API_LOG_LEVEL`
-     - `FRONTEND_BASE_URL`
-     - `CSRF_TRUSTED_ORIGINS`
-     - `ASYNC_JOB_*`
-     - `SERVICE_BUS_*`
-     - `AZURE_BLOB_*`
-     - `DATABASE_*`（Secret へ逃がすものを除く）
-     - worker replica / KEDA scale 設定
-     - cleanup schedule
-     - frontend の最小 env（例: backend API の base URL）
-2. `k8s/charts/backend` を新設する
-3. backend 共通テンプレートを先に作る
-   - `ServiceAccount`
-   - `ConfigMap`
-   - `Secret` 参照
-   - 共通 label / name helper
-4. API 用 `Deployment` / `Service` を追加する
-   - まずは Ingress を持たず、`ClusterIP` 前提で起動確認できる状態にする
-5. cleanup 用 `CronJob` を追加する
-   - `sessions cleanup`
-   - `audit retention cleanup`
-   - `jobs cleanup`
-     - 非同期ジョブが生成した期限切れ Blob 成果物の定期削除
-     - stale `running` ジョブの `failed` 化
-6. worker 用 `Deployment` を追加する
-   - `auth-audit-export`
-   - `sample-wait-blob`
-   - それぞれ `WORKER_MODULE` を変える
-7. `KEDA ScaledObject` を追加する
-   - queue ごとに 1 つずつ持つ
-   - `messageCount` / `minReplicaCount` / `maxReplicaCount` を values 化する
-8. Workload Identity を追加する
-   - API 用 `ServiceAccount`
-   - worker 用 `ServiceAccount`
-   - 必要なら cleanup 用 `ServiceAccount`
-   - annotation / client ID 参照を values 化する
-9. `k8s/charts/frontend` を新設する
-10. frontend の最小 chart を作る
-   - `Deployment`
-   - `Service`
-   - `ClusterIP`
-11. Ingress の扱いを決める
-   - Step 7 の chart 初期実装では「Ingress なし」でもよい
-   - App Gateway / AGIC を使う場合は、その後に別テンプレートで追加する
-12. Secret 取り込み方式を決める
-   - `Secret` を Helm 管理するか
-   - 既存 Secret を参照するだけにするか
-   - Key Vault CSI / External Secrets を使うか
-   - Key Vault の Secret を CSI volume として Pod にマウントする方式を採るかも、この段階で判断する
+目的:
 
-現時点で確定している values / Secret 方針:
+- FastAPI を AKS 上で Deployment/Service として起動する。
 
-- Secret の正本は Key Vault を前提とする
-- Pod へは Kubernetes `Secret` 経由で env var として渡す
-- Helm では平文の秘密値は持たない
-- Secret は用途ごとに分ける
-  - 例: DB / auth / Azure 接続
-- `DATABASE_URL` は 1 つの Secret 値として扱う
-- 認証系では、秘密値だけを Secret として扱う
-  - `SESSION_SECRET_KEY`
-  - `ENTRA_CLIENT_SECRET`
-  - `ENTRA_TOKEN_ENCRYPTION_KEY`
-- `ENTRA_TENANT_ID` / `ENTRA_CLIENT_ID` は ConfigMap / values 側で扱う
-- Service Bus / Blob は本番でキーレス前提とする
-  - `SERVICE_BUS_CONNECTION_STRING` は本番 Helm では扱わない
-  - `AZURE_BLOB_CONNECTION_STRING` は本番 Helm では扱わない
-  - `SERVICE_BUS_USE_CONNECTION_STRING` は本番 Helm では持たず、常に `false` 前提
-  - `AZURE_BLOB_USE_CONNECTION_STRING` は本番 Helm では持たず、常に `false` 前提
-- `SERVICE_BUS_NAMESPACE_FQDN`
-- queue 名
-- `AZURE_BLOB_ACCOUNT_URL`
-- `AZURE_BLOB_CONTAINER`
-  は ConfigMap / values 側で扱う
-- `FRONTEND_BASE_URL` と `CSRF_TRUSTED_ORIGINS` は values で明示的に持つ
-- API の `Service` は最終構成に合わせて `ClusterIP` 固定で持つ
-- worker のスケール設定は job_type ごとに個別に持つ
-  - `minReplicaCount`
-  - `maxReplicaCount`
-  - `queueLengthThreshold`
-- cleanup の schedule は `sessions` / `audit` / `jobs` ごとに個別に持つ
-  - `schedule`
-  - `suspend`
-  - `concurrencyPolicy`
-- cleanup の `CronJob` は
-  - `sessions`
-  - `audit`
-  - `jobs`
-  の 3 本に分けて持つ
-- `ServiceAccount` / `Managed Identity` は
-  - API 用
-  - worker 用
-  - cleanup 用
-  で分ける
-- worker は job_type ごとには分けず、worker 用 `ServiceAccount` / `Managed Identity` を 1 つにまとめる
-- Helm values は
-  - `values.yaml`
-  - `values.staging.yaml`
-  - `values.prod.yaml`
-  の `base + 環境別オーバーライド` 構成で持つ
-- backend は `k8s/charts/backend`、frontend は `k8s/charts/frontend` の別 chart で管理する
-- 初期段階では `k8s/manifests` は作らず、Helm chart の template を manifest の正本として扱う
-- frontend の image 設定は
-  - `frontend.image.repository`
-  - `frontend.image.tag`
-  - `frontend.image.pullPolicy`
-  の基本 3 点で持つ
-- frontend の env は広く一般化せず、backend API の base URL など必要最小限だけを values で持つ
-- frontend が参照する backend API の接続先は、`https://.../backend` のような完全な base URL を
-  1 つの values として持つ
+完了内容:
 
-backend chart で ConfigMap / values に載せる非 Secret 環境変数（現時点の具体名）:
+- `api-deployment.yaml` / `api-service.yaml` 実装済み。
+- `readyz` / `livez` / API アクセス確認は完了済み（報告ベース）。
 
-- 基本設定
-  - `SERVICE_NAME`
-  - `API_LOG_LEVEL`
-  - `API_PORT`
-- DB 周辺（Secret を除く）
-  - `DATABASE_ECHO`
-  - `DATABASE_POOL_SIZE`
-  - `DATABASE_MAX_OVERFLOW`
-  - `DATABASE_POOL_TIMEOUT`
-- 認証・セッション周辺（Secret を除く）
-  - `EMAIL_VERIFICATION_TTL_MINUTES`
-  - `PASSWORD_RESET_TTL_MINUTES`
-  - `EMAIL_LOGIN_MAX_FAILURES`
-  - `EMAIL_LOGIN_LOCK_MINUTES`
-  - `ARGON2_TIME_COST`
-  - `ARGON2_MEMORY_COST`
-  - `ARGON2_PARALLELISM`
-  - `ARGON2_HASH_LEN`
-  - `ARGON2_SALT_LEN`
-  - `SESSION_TTL_HOURS`
-  - `SESSION_EXPIRED_GRACE_DAYS`
-  - `SESSION_CLEANUP_ENABLED`
-  - `AUTH_AUDIT_RETENTION_MONTHS`
-  - `AUDIT_CLEANUP_ENABLED`
-  - `CLEANUP_BATCH_SIZE`
-  - `SESSION_COOKIE_NAME`
-  - `SESSION_COOKIE_SECURE`
-  - `SESSION_COOKIE_SAMESITE`
-  - `AUTH_DEBUG_RETURN_TOKENS`
-- 非同期ジョブ
-  - `ASYNC_JOBS_ENABLED`
-  - `ASYNC_JOB_MAX_ROWS_PER_JOB`
-  - `ASYNC_JOB_DEFAULT_RETENTION_DAYS`
-  - `ASYNC_JOB_RETENTION_MAX_DAYS`
-  - `ASYNC_JOB_GLOBAL_CONCURRENCY`
-  - `ASYNC_JOB_PER_USER_CONCURRENCY`
-  - `ASYNC_JOB_RUNNING_TIMEOUT_SECONDS`
-  - `ASYNC_JOB_AUTH_AUDIT_EXPORT_TASK_NAME`
-  - `ASYNC_JOB_SAMPLE_WAIT_BLOB_TASK_NAME`
-- Service Bus（本番キーレス）
-  - `SERVICE_BUS_NAMESPACE_FQDN`
-  - `SERVICE_BUS_AUTH_AUDIT_EXPORT_QUEUE_NAME`
-  - `SERVICE_BUS_SAMPLE_WAIT_BLOB_QUEUE_NAME`
-- Blob Storage（本番キーレス）
-  - `AZURE_BLOB_ACCOUNT_URL`
-  - `AZURE_BLOB_CONTAINER`
-- frontend / Entra 連携（Secret を除く）
-  - `FRONTEND_BASE_URL`
-  - `AUTH_POST_LOGIN_DEFAULT_PATH`
-  - `ENTRA_TENANT_ID`
-  - `ENTRA_CLIENT_ID`
-  - `ENTRA_REDIRECT_URI`
-  - `ENTRA_INTERNAL_DOMAINS`
-  - `CSRF_TRUSTED_ORIGINS`
+残課題:
 
-backend chart で Secret として参照する環境変数（現時点の具体名）:
+- Ingress 配備は後続フェーズ。
 
-- `DATABASE_URL`
-- `SESSION_SECRET_KEY`
-- `ENTRA_CLIENT_SECRET`
-- `ENTRA_TOKEN_ENCRYPTION_KEY`
+### 3.4 Step 4: cleanup 配備（完了）
 
-frontend chart で values に載せる最小構成（現時点の具体名）:
+目的:
 
-- image
-  - `frontend.image.repository`
-  - `frontend.image.tag`
-  - `frontend.image.pullPolicy`
-- runtime
-  - `frontend.replicaCount`
-  - `frontend.service.port`
-  - `frontend.resources`
-- env
-  - `VITE_BACKEND_BASE_URL`
-  - `VITE_PRODUCT_NAME`
+- `sessions / audit / jobs` の定期 cleanup を CronJob 化する。
 
-frontend chart は、現時点では Kubernetes `Secret` を使わず、非 Secret 値だけで構成する
+完了内容:
 
-後続タスク（未確定のため Step 7 内で別途実施）:
+- `cleanup-cronjobs.yaml` 実装済み。
+- schedule / suspend / concurrencyPolicy の values 化済み。
 
-- Key Vault 連携の具体方式を確定する
-  - `SecretProviderClass`（CSI Driver）を使うか
-  - `ExternalSecret` を使うか
-  - 既存 Kubernetes `Secret` への同期を別レイヤーで行うか
-- Key Vault の Secret を CSI volume として Pod にマウントする方式を採る場合は、
-  `Step 7.2` の Secret 取り込み方式の決定と合わせて設計する
-- 上記が固まるまでは、Helm には「Secret 名 / key 名を参照する箱」だけを持たせる
-- 具体的な Key Vault 連携 manifest のテンプレート化は、Step 7 の後半タスクとして追加する
+残課題:
 
-参考メモ（未確定）:
+- Staging での実行検証（dry-run / 本実行ログ確認）。
 
-- 現時点では、cleanup の Cron スケジュールはコード / Helm values に未反映で、要件確定前の参考値としてのみ扱う。
-- 参考値の例:
-  - `sessions cleanup`: 1時間ごと
-  - `audit retention cleanup`: 1日1回
-- これらは Helm / CronJob 実装時に正式決定し、確定後に要件へ昇格させる。
-- cleanup 用 CronJob の最低限の運用要件として、`concurrencyPolicy: Forbid` を優先候補とする。
-- これも Helm / CronJob 実装時に正式決定し、確定後に要件へ昇格させる。
+### 3.5 Step 5: worker 配備（完了）
+
+目的:
+
+- job_type ごとに worker Deployment を配備する。
+
+完了内容:
+
+- `worker-deployments.yaml` 実装済み。
+- `auth-audit-export` / `sample-wait-blob` を個別 Deployment 化済み。
+- worker Pod 起動確認は完了済み（報告ベース）。
+
+残課題:
+
+- KEDA スケール連携の正常化。
+
+### 3.6 Step 6: frontend 配備（完了）
+
+目的:
+
+- frontend を AKS 上で最小構成で配備する。
+
+完了内容:
+
+- chart 生成: `k8s/charts/frontend`
+- `deployment.yaml` / `service.yaml` 実装済み。
+- web Pod 起動・アクセス確認は完了済み（報告ベース）。
+
+残課題:
+
+- Ingress / 外部公開は後続フェーズ。
+
+### 3.7 Step 7: KEDA 実装（進行中）
+
+目的:
+
+- queue 長に応じて worker を自動スケールさせる。
+
+完了内容:
+
+- `keda-triggerauthentication.yaml` 実装済み。
+- `keda-scaledobjects.yaml` 実装済み。
+- worker ごとの KEDA values（min/max/polling/cooldown/threshold）追加済み。
+
+発生中の問題（ブロッカー）:
+
+- `docs/kedo.log` で以下エラーを確認。
+  - `no client ID specified. Check pod configuration or set ClientID in the options`
+  - `sources must contain at least one TokenCredential`
+- 状態: KEDA が Azure Service Bus メトリクス取得時に認証情報を解決できていない。
+
+次アクション:
+
+1. KEDA の `TriggerAuthentication` 側に client ID を明示的に渡す方式へ修正。
+2. Helm render で `TriggerAuthentication` / `ScaledObject` の最終 manifest を再確認。
+3. 再デプロイ後、queue 空時 `minReplicaCount: 0` への収束を確認。
+
+### 3.8 Step 8: Workload Identity 検証（進行中）
+
+目的:
+
+- API / worker / cleanup が Managed Identity で必要リソースへアクセスできることを担保する。
+
+完了内容:
+
+- ServiceAccount テンプレートで各 workload の clientId annotation を values 化済み。
+- Pod 側の `azure.workload.identity/use: "true"` 付与済み。
+
+未完了:
+
+- KEDA 連携を含む end-to-end 認証確認。
+- Staging での Service Bus / Blob / Key Vault の実運用相当検証。
+
+### 3.9 Step 9: Ingress / App Gateway（保留）
+
+目的:
+
+- 外部公開導線を整備する。
+
+現状:
+
+- Step 分離済み。現フェーズでは未着手。
+- 実施タイミングは KEDA と Workload Identity 検証完了後。
+
+### 3.10 Step 10: Staging 運用検証（未着手）
+
+実施項目:
+
+- worker の queue 受信確認
+- worker の Blob upload/download/delete 確認
+- cleanup CronJob の定刻実行確認
+- `jobs cleanup` の成果物削除確認
+- DLQ 運用確認
+- stuck job の `failed` 化確認
+
+着手条件:
+
+- Step 7（KEDA）ブロッカー解消。
+
+### 3.11 Step 11: Runbook / 本番切替（未着手）
+
+実施項目:
+
+- 段階有効化手順
+- 障害時ロールバック
+- 定常運用手順
+- 本番切替チェックリスト
+
+着手条件:
+
+- Staging 検証完了。
+
+### 3.12 Step 12: ドキュメント同期（進行中）
+
+目的:
+
+- 実装との差分をなくし、判断しやすい状態を維持する。
+
+今回反映した内容:
+
+- 仕様整理・ステップサマリ・詳細の 3 層構成へ再編。
+- 進捗ステータスを明示。
+- 現在の主要ブロッカー（KEDA 認証）を明記。
+
+## 4. 直近優先タスク
+
+1. KEDA の clientId 連携修正（最優先）
+2. KEDA 正常化後の worker スケール検証（0→N→0）
+3. Staging 運用検証（queue / blob / cleanup / DLQ）
+4. Ingress / App Gateway 方針確定と実装
+5. Runbook / 本番切替手順の整備
+
+## 5. 完了条件（Definition of Done）
+
+1. cleanup（sessions / audit / jobs）が AKS 上で定期実行できる。
+2. async jobs（API / queue / worker / Blob）が AKS 上で成立する。
+3. frontend が AKS 上で配信できる。
+4. Workload Identity で Service Bus / Blob / Key Vault に接続できる。
+5. KEDA により worker が queue 長に応じてスケールする。
+6. Docker / Helm / values / Runbook が揃う。
+7. 本ドキュメントと実装状態が一致している。
+
+## 6. 詳細作業手順（復元）
+
+以下は、過去版 `docs/kubernetes-task.md` に記載していた詳細手順を抄訳せず復元したものです。
 
 ### 7.3 Azure 側の先行作業
 
@@ -480,56 +415,56 @@ frontend chart は、現時点では Kubernetes `Secret` を使わず、非 Secr
      - env var: `ENTRA_TOKEN_ENCRYPTION_KEY`
      - secret 値は `openssl rand -hex 32` で生成したランダム文字列を使う
      - 例: `az keyvault secret set --vault-name <KEY_VAULT_NAME> --name entra-token-encryption-key --value "$(openssl rand -hex 32)"`
-11. Kubernetes 側で使う ServiceAccount 名を確定する
-   - このステップの目的は、Workload Identity の federated credential で使う `subject` を固定すること
-   - 先に名前を固定しないと、`12` の federated credential 作成時に Azure 側の紐付け先を決められない
-   - 初期導入でも namespace は専用のものを 1 つに固定して進める
+11. Helm で作成する ServiceAccount 名を確定する
+   - このステップの目的は、Helm values を正本として `ServiceAccount` 名を固定し、federated credential の `subject` を確定すること
+   - `ServiceAccount` は手動作成せず、backend chart の `serviceAccounts.*` 設定から作成する
+   - namespace も Helm デプロイ時の namespace を正とする
      - 推奨: `3pull`
-     - `default` は検証では簡単だが、本番運用では境界が曖昧になるため採用しない
      - namespace を変更すると、federated credential 側の `subject` も更新が必要
-   - ServiceAccount 名は役割単位で固定する
-     - API 用: `sa-3pull-api`
-     - worker 用: `sa-3pull-worker`
-     - cleanup 用: `sa-3pull-cleanup`
-   - この段階で決めて控える値
-     - namespace: `3pull`
-     - API 用 ServiceAccount 名: `sa-3pull-api`
-     - worker 用 ServiceAccount 名: `sa-3pull-worker`
-     - cleanup 用 ServiceAccount 名: `sa-3pull-cleanup`
-   - federated credential 作成時に使う subject は以下で固定する
-     - API: `system:serviceaccount:3pull:sa-3pull-api`
-     - worker: `system:serviceaccount:3pull:sa-3pull-worker`
-     - cleanup: `system:serviceaccount:3pull:sa-3pull-cleanup`
-   - 本番運用では、`ServiceAccount` は Helm 管理を正とする
-     - backend chart の `ServiceAccount` template と values に同じ名前をそのまま反映する
-     - `kubectl create serviceaccount` での手動作成は、初期検証や federated credential の切り分け用に限定する
-     - 手動作成した `ServiceAccount` を残したまま Helm でも同名作成すると競合するため、Helm 導入前に削除して切り替える
-   - 初期導入では、worker は job_type ごとに分けず、1 つの ServiceAccount を共用する
+   - ServiceAccount 名は values で役割単位に固定する
+     - API 用: `serviceAccounts.api.name`（例: `sa-3pull-api`）
+     - worker 用: `serviceAccounts.worker.name`（例: `sa-3pull-worker`）
+     - cleanup 用: `serviceAccounts.cleanup.name`（例: `sa-3pull-cleanup`）
+     - KEDA operator 用: `keda` namespace の `keda-operator`（KEDA chart 側で作成）
+   - この段階で確定・記録する値
+     - Helm release namespace（例: `3pull`）
+     - API 用 ServiceAccount 名
+     - worker 用 ServiceAccount 名
+     - cleanup 用 ServiceAccount 名
+   - federated credential で使う subject は上記 values から組み立てる
+     - API: `system:serviceaccount:<namespace>:<serviceAccounts.api.name>`
+     - worker: `system:serviceaccount:<namespace>:<serviceAccounts.worker.name>`
+     - cleanup: `system:serviceaccount:<namespace>:<serviceAccounts.cleanup.name>`
+     - KEDA operator: `system:serviceaccount:keda:keda-operator`
    - このステップでの具体作業
-     - namespace を `3pull` で確定する
-     - 上記 3 つの ServiceAccount 名を確定する
-     - 各 Managed Identity と 1 対 1 で対応付ける
-       - `mi-3pull-api` ↔ `sa-3pull-api`
-       - `mi-3pull-worker` ↔ `sa-3pull-worker`
-       - `mi-3pull-cleanup` ↔ `sa-3pull-cleanup`
-     - `12` の federated credential 作成に使う subject をメモしておく
-     - Helm chart 作成時に同じ名前を使う前提で values 設計へ反映する
-12. 各 User Assigned Managed Identity に federated credential を作成する
-   - AKS の OIDC issuer URL と Kubernetes `ServiceAccount` を結びつける
+     - `k8s/charts/backend/values.yaml` の `serviceAccounts.*.name` を最終確定する
+     - `serviceAccounts.*.create: true` を維持する
+     - `helm template` で `ServiceAccount` 名と namespace が想定どおりに render されることを確認する
+     - render 結果を基に `subject` 文字列を確定して `12` へ渡す
+12. 各 User Assigned Managed Identity に federated credential を作成する（Helm 管理の ServiceAccount を対象）
+   - AKS の OIDC issuer URL と、Helm で作成される `ServiceAccount` の `subject` を結びつける
    - これは AKS 作成後でないと進められない
    - 先に AKS の OIDC issuer URL を確認する
      - `az aks show --resource-group 3pull-app --name <AKS_CLUSTER_NAME> --query "oidcIssuerProfile.issuerUrl" -o tsv`
+   - `11` で確定した namespace / ServiceAccount 名を使って federated credential を作成する
    - federated credential の作成例
      - API:
-       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-api --name fic-3pull-api --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:3pull:sa-3pull-api" --audience "api://AzureADTokenExchange"`
+       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-api --name fic-3pull-api --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:<namespace>:<serviceAccounts.api.name>" --audience "api://AzureADTokenExchange"`
      - worker:
-       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-worker --name fic-3pull-worker --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:3pull:sa-3pull-worker" --audience "api://AzureADTokenExchange"`
+       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-worker --name fic-3pull-worker --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:<namespace>:<serviceAccounts.worker.name>" --audience "api://AzureADTokenExchange"`
      - cleanup:
-       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-cleanup --name fic-3pull-cleanup --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:3pull:sa-3pull-cleanup" --audience "api://AzureADTokenExchange"`
+       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-cleanup --name fic-3pull-cleanup --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:<namespace>:<serviceAccounts.cleanup.name>" --audience "api://AzureADTokenExchange"`
+     - KEDA operator（例: worker 用 Managed Identity を流用する場合）:
+       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-worker --name fic-keda-operator --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:keda:keda-operator" --audience "api://AzureADTokenExchange"`
+   - KEDA の Azure scaler が動くためには、上記に加えて `keda-operator` ServiceAccount に利用する clientId を annotation 設定する
+     - 例: `kubectl annotate serviceaccount -n keda keda-operator azure.workload.identity/client-id=<KEDA_OR_WORKER_MI_CLIENT_ID> --overwrite`
+   - `keda-operator` Pod 側にも Workload Identity の利用ラベルを付与する
+     - 例: `kubectl patch deployment -n keda keda-operator --type='merge' -p '{"spec":{"template":{"metadata":{"labels":{"azure.workload.identity/use":"true"}}}}}'`
    - 作成後は各 Managed Identity ごとに一覧確認する
      - `az identity federated-credential list --resource-group 3pull-app --identity-name mi-3pull-api`
      - `az identity federated-credential list --resource-group 3pull-app --identity-name mi-3pull-worker`
      - `az identity federated-credential list --resource-group 3pull-app --identity-name mi-3pull-cleanup`
+     - KEDA operator 用を別 Managed Identity で運用する場合は、その identity でも同様に確認する
 13. Helm デプロイ前提の最終確認を行う
    - 目的は、Helm chart を作り始める前に Azure / Kubernetes 側の前提が揃っていることを確認すること
    - Key Vault を Kubernetes `Secret` に同期して使う場合は、AKS の `azure-keyvault-secrets-provider` add-on を有効にする
@@ -737,38 +672,3 @@ frontend chart は、現時点では Kubernetes `Secret` を使わず、非 Secr
 6. `jobs cleanup` により、期限切れの非同期ジョブ Blob 成果物が削除されることを確認する
 7. DLQ 運用手順を確認する
 8. stuck job が cleanup で `failed` 化されることを確認する
-
-## 8. 現時点の判断メモ
-
-### 8.1 すでに確定しているもの
-
-- backend / frontend は別 chart で管理する
-- API / frontend の `Service` は最終構成に合わせて `ClusterIP` 固定で進める
-- Ingress / App Gateway は後続フェーズで追加する
-- queue は job ごとに分ける
-- worker は job ごとに Deployment を分ける
-- worker 実装は共通 runtime を使う
-- キャンセルは DB ステータスで扱う
-- retry は Service Bus 標準を優先する
-- 遅延実行は初期スコープ外
-- queue 名はシステム名なし
-- Blob / Service Bus ともに `DefaultAzureCredential` を標準とする
-
-### 8.2 今後の実装で変えない前提
-
-- `/backend/jobs` API 契約は大きく崩さない
-- `async_jobs` / `async_job_artifacts` を正本として維持する
-- backend 経由の成果物ダウンロードを維持する
-- ポーリング UI を前提にしつつ、frontend の契約は維持する
-
-## 9. 完了条件
-
-Kubernetes 配備作業が完了といえる条件は、次のとおりです。
-
-1. cleanup（sessions / audit / jobs）がコンテナ・Helm・AKS まで一貫して動く
-2. async jobs（API / queue / worker / Blob）が AKS 上で動く
-3. frontend が AKS 上で配信できる
-4. Workload Identity で Service Bus / Blob に接続できる
-5. `KEDA` により worker が queue 長に応じてスケールする
-6. Docker / Helm / values / Runbook が揃う
-7. README / docs が現行実装と一致している

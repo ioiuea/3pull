@@ -40,14 +40,17 @@ def normalize_container_name(system_name: str) -> str:
 
 common_path = Path(os.environ["COMMON_FILE"])
 config_path = Path(os.environ["RESOURCE_CONFIG_FILE"])
+aks_meta_path = Path(os.environ["AKS_META_FILE"])
 params_dir = Path(os.environ["PARAMS_DIR"])
 out_meta_path = Path(os.environ["OUT_META_FILE"])
 
 common = json.loads(common_path.read_text(encoding="utf-8"))
 config = json.loads(config_path.read_text(encoding="utf-8"))
+aks_meta = json.loads(aks_meta_path.read_text(encoding="utf-8"))
 
 common_values = common.get("common", {})
 network_values = common.get("network", {})
+storage_values = common.get("storage", {})
 
 environment_name = common_values.get("environmentName", "")
 system_name = common_values.get("systemName", "")
@@ -66,7 +69,14 @@ resource_group_name = f"rg-{environment_name}-{system_name}-{modules_name}"
 vnet_resource_group_name = f"rg-{environment_name}-{system_name}-nw"
 
 storage_account_name = normalize_storage_account_name(environment_name, system_name)
-blob_container_name = normalize_container_name(system_name)
+blob_container_name = normalize_container_name(config.get("blobContainerName", "async-jobs"))
+managed_identity_resource_group_name = aks_meta.get("resourceGroupName", "")
+if not managed_identity_resource_group_name:
+    raise SystemExit("AKS meta の resourceGroupName が取得できません")
+api_managed_identity_name = f"mi-{environment_name}-{system_name}-api"
+worker_managed_identity_name = f"mi-{environment_name}-{system_name}-worker"
+cleanup_managed_identity_name = f"mi-{environment_name}-{system_name}-cleanup"
+enable_workload_identity_rbac = bool(storage_values.get("enableWorkloadIdentityRbac", True))
 
 private_endpoint_blob_name = f"pep-st-blob-{environment_name}-{system_name}"
 private_endpoint_file_name = f"pep-st-file-{environment_name}-{system_name}"
@@ -103,6 +113,11 @@ lines = [
     f"param logAnalyticsResourceGroupName = {quote(log_analytics_resource_group_name)}",
     f"param vnetName = {quote(vnet_name)}",
     f"param vnetResourceGroupName = {quote(vnet_resource_group_name)}",
+    f"param managedIdentityResourceGroupName = {quote(managed_identity_resource_group_name)}",
+    f"param apiManagedIdentityName = {quote(api_managed_identity_name)}",
+    f"param workerManagedIdentityName = {quote(worker_managed_identity_name)}",
+    f"param cleanupManagedIdentityName = {quote(cleanup_managed_identity_name)}",
+    f"param enableWorkloadIdentityRbac = {'true' if enable_workload_identity_rbac else 'false'}",
     f"param storageAccountName = {quote(storage_account_name)}",
     f"param blobContainerName = {quote(blob_container_name)}",
     f"param privateEndpointBlobName = {quote(private_endpoint_blob_name)}",

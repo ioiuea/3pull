@@ -36,20 +36,44 @@ param apiManagedIdentityName string
 @description('worker 用 Managed Identity 名')
 param workerManagedIdentityName string
 
-@description('cleanup 用 Managed Identity 名')
-param cleanupManagedIdentityName string
-
 @description('Workload Identity 用 RBAC 付与を有効化')
 param enableWorkloadIdentityRbac bool = true
 
-@description('Key Vault 名')
-param keyVaultName string
+@description('Service Bus Namespace 名')
+param serviceBusNamespaceName string
+
+@description('Service Bus SKU')
+param serviceBusSkuName string = 'Standard'
+
+@description('Service Bus SKU capacity')
+param serviceBusSkuCapacity int = 1
+
+@description('Service Bus の public network access')
+param publicNetworkAccess string = 'Disabled'
+
+@description('Service Bus 最小 TLS バージョン')
+param minimumTlsVersion string = '1.2'
+
+@description('Service Bus ローカル認証（SAS）を無効化するか')
+param disableLocalAuth bool = true
+
+@description('Service Bus ゾーン冗長化')
+param zoneRedundant bool = false
+
+@description('作成する Service Bus Queue 名一覧')
+param queueNames array = []
+
+@description('API 用 MI に付与する Service Bus Data Sender の roleDefinitionId')
+param serviceBusDataSenderRoleDefinitionId string
+
+@description('worker 用 MI に付与する Service Bus Data Receiver の roleDefinitionId')
+param serviceBusDataReceiverRoleDefinitionId string
 
 @description('Private Endpoint 名')
 param privateEndpointName string
 
 @description('Private DNS ゾーン名')
-param privateDnsZoneName string = 'privatelink.vaultcore.azure.net'
+param privateDnsZoneName string = 'privatelink.servicebus.windows.net'
 
 @description('Private DNS ゾーングループ名')
 param privateDnsZoneGroupName string
@@ -57,32 +81,8 @@ param privateDnsZoneGroupName string
 @description('Private DNS 仮想ネットワークリンク名')
 param privateDnsVnetLinkName string
 
-@description('Key Vault SKU family')
-param keyVaultSkuFamily string = 'A'
-
-@description('Key Vault SKU name')
-param keyVaultSkuName string = 'standard'
-
-@description('Key Vault の public network access')
-param publicNetworkAccess string = 'Disabled'
-
-@description('RBAC 有効化')
-param enableRbacAuthorization bool = true
-
-@description('Soft Delete 有効化')
-param enableSoftDelete bool = true
-
-@description('Purge Protection 有効化')
-param enablePurgeProtection bool = true
-
-@description('Soft Delete の保持日数')
-param softDeleteRetentionInDays int = 90
-
 @description('集約 Private DNS を利用する場合は true')
 param enableCentralizedPrivateDns bool = false
-
-@description('Key Vault Secrets Officer を付与する principal object ID（未設定時はスキップ）')
-param keyVaultOfficerObjectId string = ''
 
 var modulesTags = {
   environmentName: environmentName
@@ -91,16 +91,6 @@ var modulesTags = {
   createdBy: 'bicep'
   billing: 'infra'
 }
-
-var keyVaultSecretsUserRoleDefinitionId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  '4633458b-17de-408a-b874-0445c86b69e6'
-)
-
-var keyVaultSecretsOfficerRoleDefinitionId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
-)
 
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-07-01' existing = {
   scope: resourceGroup(vnetResourceGroupName)
@@ -122,44 +112,42 @@ resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities
   name: workerManagedIdentityName
 }
 
-resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
-  scope: resourceGroup(managedIdentityResourceGroupName)
-  name: cleanupManagedIdentityName
-}
-
-resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
-  name: keyVaultName
+resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2023-01-01-preview' = {
+  name: serviceBusNamespaceName
   location: location
   tags: modulesTags
+  sku: {
+    name: serviceBusSkuName
+    tier: serviceBusSkuName
+    capacity: serviceBusSkuCapacity
+  }
   properties: {
-    tenantId: tenant().tenantId
-    sku: {
-      family: keyVaultSkuFamily
-      name: keyVaultSkuName
-    }
-    enableRbacAuthorization: enableRbacAuthorization
     publicNetworkAccess: publicNetworkAccess
-    enableSoftDelete: enableSoftDelete
-    enablePurgeProtection: enablePurgeProtection
-    softDeleteRetentionInDays: softDeleteRetentionInDays
-    networkAcls: {
-      bypass: 'None'
-      defaultAction: 'Deny'
-    }
+    minimumTlsVersion: minimumTlsVersion
+    disableLocalAuth: disableLocalAuth
+    zoneRedundant: zoneRedundant
   }
 }
 
-resource keyVaultDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (lockKind != '') {
-  name: 'del-lock-${keyVaultName}'
-  scope: keyVault
+resource serviceBusQueues 'Microsoft.ServiceBus/namespaces/queues@2023-01-01-preview' = [
+  for queueName in queueNames: {
+    parent: serviceBusNamespace
+    name: string(queueName)
+    properties: {}
+  }
+]
+
+resource serviceBusDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = if (lockKind != '') {
+  name: 'del-lock-${serviceBusNamespaceName}'
+  scope: serviceBusNamespace
   properties: {
     level: lockKind
   }
 }
 
-resource keyVaultDiagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+resource serviceBusDiagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
   name: 'diagnostic-to-${logAnalyticsName}'
-  scope: keyVault
+  scope: serviceBusNamespace
   properties: {
     workspaceId: resourceId(logAnalyticsResourceGroupName, 'Microsoft.OperationalInsights/workspaces', logAnalyticsName)
     logAnalyticsDestinationType: 'Dedicated'
@@ -194,42 +182,22 @@ resource keyVaultDiagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-
   }
 }
 
-resource keyVaultSecretsUserForApi 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
-  name: guid(keyVault.id, apiManagedIdentity.id, 'KeyVaultSecretsUser')
-  scope: keyVault
+resource serviceBusSenderForApi 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(serviceBusNamespace.id, apiManagedIdentity.id, serviceBusDataSenderRoleDefinitionId)
+  scope: serviceBusNamespace
   properties: {
-    roleDefinitionId: keyVaultSecretsUserRoleDefinitionId
+    roleDefinitionId: serviceBusDataSenderRoleDefinitionId
     principalId: apiManagedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
-resource keyVaultSecretsUserForWorker 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
-  name: guid(keyVault.id, workerManagedIdentity.id, 'KeyVaultSecretsUser')
-  scope: keyVault
+resource serviceBusReceiverForWorker 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(serviceBusNamespace.id, workerManagedIdentity.id, serviceBusDataReceiverRoleDefinitionId)
+  scope: serviceBusNamespace
   properties: {
-    roleDefinitionId: keyVaultSecretsUserRoleDefinitionId
+    roleDefinitionId: serviceBusDataReceiverRoleDefinitionId
     principalId: workerManagedIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource keyVaultSecretsUserForCleanup 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
-  name: guid(keyVault.id, cleanupManagedIdentity.id, 'KeyVaultSecretsUser')
-  scope: keyVault
-  properties: {
-    roleDefinitionId: keyVaultSecretsUserRoleDefinitionId
-    principalId: cleanupManagedIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource keyVaultSecretsOfficerRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (keyVaultOfficerObjectId != '') {
-  name: guid(keyVault.id, keyVaultOfficerObjectId, 'KeyVaultSecretsOfficer')
-  scope: keyVault
-  properties: {
-    roleDefinitionId: keyVaultSecretsOfficerRoleDefinitionId
-    principalId: keyVaultOfficerObjectId
     principalType: 'ServicePrincipal'
   }
 }
@@ -246,9 +214,9 @@ resource privateEndpoint 'Microsoft.Network/privateEndpoints@2024-07-01' = {
       {
         name: privateEndpointName
         properties: {
-          privateLinkServiceId: keyVault.id
+          privateLinkServiceId: serviceBusNamespace.id
           groupIds: [
-            'vault'
+            'namespace'
           ]
         }
       }
@@ -296,7 +264,7 @@ resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneG
   properties: {
     privateDnsZoneConfigs: [
       {
-        name: 'privatelink-vaultcore-azure-net'
+        name: 'privatelink-servicebus-windows-net'
         properties: {
           privateDnsZoneId: privateDnsZone.id
         }
@@ -305,5 +273,5 @@ resource privateDnsZoneGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneG
   }
 }
 
-output keyVaultNameOutput string = keyVault.name
-output keyVaultIdOutput string = keyVault.id
+output serviceBusNamespaceNameOutput string = serviceBusNamespace.name
+output serviceBusNamespaceIdOutput string = serviceBusNamespace.id

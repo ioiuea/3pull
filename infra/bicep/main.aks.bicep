@@ -42,6 +42,7 @@ param applicationGatewayName string
 @description('Application Gateway を配置したリソースグループ名')
 param applicationGatewayResourceGroupName string
 
+
 @description('System node pool 名')
 param agentPoolName string = 'agentpool'
 
@@ -143,6 +144,15 @@ param enableAzurePolicyAddon bool = true
 @description('Ingress Application Gateway addon 有効化')
 param enableIngressApplicationGatewayAddon bool = true
 
+@description('OIDC issuer 有効化')
+param enableOidcIssuer bool = true
+
+@description('Workload Identity 有効化')
+param enableWorkloadIdentity bool = true
+
+@description('Key Vault Secrets Provider addon 有効化')
+param enableAzureKeyvaultSecretsProviderAddon bool = true
+
 @description('AAD Azure RBAC 有効化')
 param enableAzureRbac bool = true
 
@@ -166,6 +176,24 @@ var modulesTags = {
 var agentSubnetId = resourceId(vnetResourceGroupName, 'Microsoft.Network/virtualNetworks/subnets', vnetName, 'AgentNodeSubnet')
 var userSubnetId = resourceId(vnetResourceGroupName, 'Microsoft.Network/virtualNetworks/subnets', vnetName, 'UserNodeSubnet')
 var applicationGatewayId = resourceId(applicationGatewayResourceGroupName, 'Microsoft.Network/applicationGateways', applicationGatewayName)
+
+resource apiManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-api'
+  location: location
+  tags: modulesTags
+}
+
+resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-worker'
+  location: location
+  tags: modulesTags
+}
+
+resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-cleanup'
+  location: location
+  tags: modulesTags
+}
 
 resource aks 'Microsoft.ContainerService/managedClusters@2024-05-01' = {
   name: aksName
@@ -214,6 +242,9 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-05-01' = {
       azurepolicy: {
         enabled: enableAzurePolicyAddon
       }
+      azureKeyvaultSecretsProvider: {
+        enabled: enableAzureKeyvaultSecretsProviderAddon
+      }
       ingressApplicationGateway: enableIngressApplicationGatewayAddon ? {
         enabled: true
         config: {
@@ -238,6 +269,14 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-05-01' = {
     }
     autoUpgradeProfile: {
       upgradeChannel: autoUpgradeChannel
+    }
+    oidcIssuerProfile: {
+      enabled: enableOidcIssuer
+    }
+    securityProfile: {
+      workloadIdentity: {
+        enabled: enableWorkloadIdentity
+      }
     }
     apiServerAccessProfile: {
       enablePrivateCluster: enablePrivateCluster
@@ -329,3 +368,12 @@ resource aksDiagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01
 
 output aksNameOutput string = aks.name
 output aksIdOutput string = aks.id
+output apiManagedIdentityName string = apiManagedIdentity.name
+output apiManagedIdentityClientId string = apiManagedIdentity.properties.clientId
+output apiManagedIdentityPrincipalId string = apiManagedIdentity.properties.principalId
+output workerManagedIdentityName string = workerManagedIdentity.name
+output workerManagedIdentityClientId string = workerManagedIdentity.properties.clientId
+output workerManagedIdentityPrincipalId string = workerManagedIdentity.properties.principalId
+output cleanupManagedIdentityName string = cleanupManagedIdentity.name
+output cleanupManagedIdentityClientId string = cleanupManagedIdentity.properties.clientId
+output cleanupManagedIdentityPrincipalId string = cleanupManagedIdentity.properties.principalId

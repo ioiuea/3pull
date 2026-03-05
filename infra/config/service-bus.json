@@ -1,0 +1,15 @@
+{
+  "modulesName": "svc",
+  "lockKind": "CanNotDelete",
+  "skuName": "Premium",
+  "skuCapacity": 1,
+  "publicNetworkAccess": "Disabled",
+  "minimumTlsVersion": "1.2",
+  "disableLocalAuth": true,
+  "zoneRedundant": false,
+  "privateDnsZoneName": "privatelink.servicebus.windows.net",
+  "queues": [
+    "auth-audit-export",
+    "sample-wait-blob"
+  ]
+}

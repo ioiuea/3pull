@@ -119,10 +119,13 @@ Kubernetes manifest のテンプレートです。
   - worker 用 `Deployment` を生成
 - `templates/cleanup-cronjobs.yaml`
   - cleanup 用 `CronJob` を生成
+- `templates/keda-triggerauthentication.yaml`
+  - KEDA が Azure Service Bus を読むための `TriggerAuthentication` を生成
+- `templates/keda-scaledobjects.yaml`
+  - worker 用 `ScaledObject` を生成
 
 未実装の主な対象:
 
-- KEDA 用 `ScaledObject`
 - worker / cleanup 用の個別スケール調整値の詳細化
 
 ## frontend chart の各ファイル
@@ -270,8 +273,7 @@ helm upgrade --install 3pull-frontend ./k8s/charts/frontend \
 
 ## このプロジェクトでの注意点
 
-- backend chart は API / worker / cleanup までは実装済み
-  - 未実装なのは KEDA `ScaledObject`
+- backend chart は API / worker / cleanup / KEDA `ScaledObject` までは実装済み
 - `serviceAccounts.*.create=true` を既定とし、`ServiceAccount` も Helm 管理を正とする
   - すでに手動作成済みの同名 `ServiceAccount` がある場合は、Helm 再適用前に削除して切り替える
 - `keyVault.enabled=true` の場合は、AKS 側で `azure-keyvault-secrets-provider` add-on が有効であることが前提

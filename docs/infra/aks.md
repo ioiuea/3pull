@@ -16,6 +16,16 @@
 | DNSプレフィクス | aks-dns-[common.environmentName]-[common.systemName] | properties.dnsPrefix  |
 | RBACの有効化    | true                                   | properties.enableRBAC |
 
+## コンテナレジストリアタッチ
+
+| 項目 | 設定値 | Bicepプロパティ名 |
+| --- | --- | --- |
+| ACR アタッチ | `cr[common.environmentName][common.systemName]` を `AcrPull` で付与 | `Microsoft.Authorization/roleAssignments`（scope: ACR） |
+
+## マネージドID設計
+
+Managed Identity の設計は [docs/infra/managed-id.md](./managed-id.md) を参照してください。
+
 ## 診断設定
 
 - 対象: AKS クラスター（`Microsoft.ContainerService/managedClusters`）
@@ -80,6 +90,12 @@
 | ------ | ------ | -------------------------------------------- |
 | 有効化 | true   | properties.addonProfiles.azurepolicy.enabled |
 
+## アドオン：Key Vault Secrets Provider
+
+| 項目   | 設定値 | Bicepプロパティ名                                             |
+| ------ | ------ | ------------------------------------------------------------- |
+| 有効化 | true   | properties.addonProfiles.azureKeyvaultSecretsProvider.enabled |
+
 ## アドオン：イングレスコントローラー
 
 | 項目   | 設定値                                      | Bicepプロパティ名                                                              |
@@ -93,6 +109,13 @@
 | --------------------- | ------ | ------------------------------------- |
 | RBACの有効化          | true   | properties.aadProfile.enableAzureRBAC |
 | マネージドAADの有効化 | true   | properties.aadProfile.managed         |
+
+## OIDC / Workload Identity
+
+| 項目                     | 設定値 | Bicepプロパティ名                                   |
+| ------------------------ | ------ | --------------------------------------------------- |
+| OIDC issuer 有効化       | true   | properties.oidcIssuerProfile.enabled                |
+| Workload Identity 有効化 | true   | properties.securityProfile.workloadIdentity.enabled |
 
 ## ネットワーク情報
 

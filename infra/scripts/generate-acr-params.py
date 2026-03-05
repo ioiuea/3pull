@@ -30,9 +30,11 @@ common_path = Path(os.environ["COMMON_FILE"])
 config_path = Path(os.environ["RESOURCE_CONFIG_FILE"])
 params_dir = Path(os.environ["PARAMS_DIR"])
 out_meta_path = Path(os.environ["OUT_META_FILE"])
+aks_meta_path = Path(os.environ["AKS_META_FILE"])
 
 common = json.loads(common_path.read_text(encoding="utf-8"))
 config = json.loads(config_path.read_text(encoding="utf-8"))
+aks_meta = json.loads(aks_meta_path.read_text(encoding="utf-8"))
 
 common_values = common.get("common", {})
 network_values = common.get("network", {})
@@ -52,6 +54,11 @@ enable_resource_lock = bool(common_values.get("enableResourceLock", True))
 lock_kind = config.get("lockKind", "CanNotDelete") if enable_resource_lock else ""
 resource_group_name = f"rg-{environment_name}-{system_name}-{modules_name}"
 vnet_resource_group_name = f"rg-{environment_name}-{system_name}-nw"
+aks_resource_group_name = aks_meta.get("resourceGroupName", "")
+aks_name = aks_meta.get("aksName", "")
+if not aks_resource_group_name or not aks_name:
+    raise SystemExit("AKS meta の resourceGroupName / aksName が取得できません")
+enable_aks_acr_attach = bool(aks_meta.get("deploy", True))
 
 registry_name = f"cr{normalize_registry_suffix(environment_name)}{normalize_registry_suffix(system_name)}"
 if len(registry_name) < 5 or len(registry_name) > 50:
@@ -89,6 +96,9 @@ lines = [
     f"param logAnalyticsResourceGroupName = {quote(log_analytics_resource_group_name)}",
     f"param vnetName = {quote(vnet_name)}",
     f"param vnetResourceGroupName = {quote(vnet_resource_group_name)}",
+    f"param aksName = {quote(aks_name)}",
+    f"param aksResourceGroupName = {quote(aks_resource_group_name)}",
+    f"param enableAksAcrAttach = {'true' if enable_aks_acr_attach else 'false'}",
     f"param containerRegistryName = {quote(registry_name)}",
     f"param privateEndpointName = {quote(private_endpoint_name)}",
     f"param privateDnsZoneName = {quote(config.get('privateDnsZoneName', 'privatelink.azurecr.io'))}",
@@ -108,5 +118,6 @@ meta = {
     "resourceGroupName": resource_group_name,
     "deploy": deploy,
     "paramsFile": str(params_file),
+    "acrName": registry_name,
 }
 out_meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")

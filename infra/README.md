@@ -130,7 +130,7 @@ flowchart LR
   - エントリーポイント。パラメータ生成とデプロイを順序制御します。
 - `common.parameter.json`
   - 共通パラメータと、どのリソースをデプロイ対象にするか（実行可否）を管理します。
-  - `common` / `network` / `aks` / `postgres` / `redis` / `cosno` / `resourceToggles` の親オブジェクトで分類しています。
+  - `common` / `network` / `aks` / `keyVault` / `serviceBus` / `postgres` / `redis` / `cosno` / `resourceToggles` の親オブジェクトで分類しています。
 - `bicep/`
   - リソース単位の Bicep 本体。
 - `scripts/`
@@ -317,7 +317,33 @@ Kubernetes Service（ClusterIP）用の IP 範囲（CIDR）です。
 - 注意:
   - `network.vnetAddressPrefixes` と重複不可
   - `aks.podCidr` と重複不可
-  - 利用可能 IP が 10 個以上必要
+- 利用可能 IP が 10 個以上必要
+
+### keyVault.enableWorkloadIdentityRbac
+
+Key Vault へ Managed Identity ベースの RBAC（`Key Vault Secrets User`）を自動付与するかどうかを指定します。
+
+- `true`（デフォルト）: `mi-<env>-<system>-api/worker/cleanup` に対して `Key Vault Secrets User` を付与
+- `false`: Key Vault のロール割り当てを作成しない
+
+### serviceBus.enableWorkloadIdentityRbac
+
+Service Bus へ Managed Identity ベースの RBAC を自動付与するかどうかを指定します。
+
+- `true`（デフォルト）:
+  - `mi-<env>-<system>-api` に `Azure Service Bus Data Sender`
+  - `mi-<env>-<system>-worker` に `Azure Service Bus Data Receiver`
+- `false`: Service Bus のロール割り当てを作成しない
+
+### storage.enableWorkloadIdentityRbac
+
+Storage へ Managed Identity ベースの RBAC を自動付与するかどうかを指定します。
+
+- `true`（デフォルト）:
+  - `mi-<env>-<system>-api` に `Storage Blob Data Contributor`
+  - `mi-<env>-<system>-worker` に `Storage Blob Data Contributor`
+  - `mi-<env>-<system>-cleanup` に `Storage Blob Data Contributor`
+- `false`: Storage のロール割り当てを作成しない
 
 ### postgres.enableZoneRedundantHa
 
@@ -658,14 +684,16 @@ Cosmos DB のキーによるメタデータ書き込みを無効化するかど�
   - `subnets`, `route-tables`, `nsgs`, `subnet-attachments` を一括制御
 - `firewall`
 - `applicationGateway`
+- `aks`
 - `acr`
+- `keyVault`
+- `serviceBus`
 - `storage`
 - `redis`
-- `cosmosDatabase`
 - `postgresDatabase`
-- `keyVault`
-- `aks`
+- `cosmosDatabase`
 - `maintenanceVm`
+- `federatedCredential`
 
 ## ネットワーク構成ドキュメント
 
@@ -710,13 +738,15 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
   - Subnet Attachments（RouteTable/NSG紐づけ）
   - Application Gateway
 - service
-  - ACR
+  - AKS
+  - ACR（ACR RG スコープで AKS をアタッチ）
+  - Key Vault
+  - Service Bus
   - Storage Account
+  - backend Helm values 同期（`k8s/charts/backend/values.yaml` を MI/Azure リソース値で更新）
   - Redis
   - PostgreSQL Flexible Server
   - Cosmos DB (NoSQL)
-  - Key Vault
-  - AKS
   - Maintenance VM
 
 ## 出力ファイル（params/）
@@ -731,11 +761,12 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
 - `subnet-attachments.bicepparam`
 - `application-gateway.bicepparam`
 - `acr.bicepparam`
+- `key-vault.bicepparam`
+- `service-bus.bicepparam`
 - `storage.bicepparam`
 - `redis.bicepparam`
 - `cosmos-database.bicepparam`
 - `postgres-database.bicepparam`
-- `key-vault.bicepparam`
 - `aks.bicepparam`
 - `maintenance-vm.bicepparam`
 

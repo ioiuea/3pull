@@ -27,6 +27,15 @@ param vnetName string
 @description('VNET のリソースグループ名')
 param vnetResourceGroupName string
 
+@description('AKS クラスター名')
+param aksName string
+
+@description('AKS を配置したリソースグループ名')
+param aksResourceGroupName string
+
+@description('AKS kubelet への AcrPull 付与を有効化')
+param enableAksAcrAttach bool = true
+
 @description('Container Registry 名')
 param containerRegistryName string
 
@@ -68,6 +77,11 @@ var modulesTags = {
   billing: 'infra'
 }
 
+var acrPullRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+)
+
 var ipRules = [for ip in networkRuleIpRules: {
   action: 'Allow'
   value: string(ip)
@@ -81,6 +95,11 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-07-01' existing 
 resource privateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-07-01' existing = {
   parent: virtualNetwork
   name: 'PrivateEndpointSubnet'
+}
+
+resource aks 'Microsoft.ContainerService/managedClusters@2024-05-01' existing = {
+  scope: resourceGroup(aksResourceGroupName)
+  name: aksName
 }
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -143,6 +162,16 @@ resource containerRegistryDiagnosticSettings 'Microsoft.Insights/diagnosticSetti
         }
       }
     ]
+  }
+}
+
+resource acrPullForAksKubelet 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableAksAcrAttach) {
+  name: guid(containerRegistry.id, aks.id, 'AcrPull')
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: acrPullRoleDefinitionId
+    principalId: aks.properties.identityProfile.kubeletidentity.objectId
+    principalType: 'ServicePrincipal'
   }
 }
 

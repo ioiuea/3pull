@@ -41,8 +41,20 @@
 ## アクセス権（RBAC）方針
 
 - Key Vault は `enableRbacAuthorization=true` を前提とします。
-- アクセス権（ロール割り当て）は、デプロイ後に Azure Portal から運用者が設定する方針とします。
-- そのため、本設計では RBAC のロール割り当てリソースは含めません。
+- 認証は Managed Identity + Azure RBAC を前提とします。
+- RBAC は Bicep の `Microsoft.Authorization/roleAssignments` で冪等管理します。
+
+| principal | 推奨ロール | 付与スコープ | 主な用途 |
+| --- | --- | --- | --- |
+| `mi-[common.environmentName]-[common.systemName]-api` | `Key Vault Secrets User` | `kv-[common.environmentName]-[common.systemName]` | API 実行時の Secret 参照 |
+| `mi-[common.environmentName]-[common.systemName]-worker` | `Key Vault Secrets User` | `kv-[common.environmentName]-[common.systemName]` | worker 実行時の Secret 参照 |
+| `mi-[common.environmentName]-[common.systemName]-cleanup` | `Key Vault Secrets User` | `kv-[common.environmentName]-[common.systemName]` | cleanup 実行時の Secret 参照 |
+| CI/CD 実行 principal | `Key Vault Secrets Officer` | `kv-[common.environmentName]-[common.systemName]` | Secret 登録・更新 |
+
+補足:
+
+- Secret の投入（`az keyvault secret set`）は bootstrap 手順で実施し、値は CI Secret 管理に保持します。
+- 参照専用 workload に `Key Vault Administrator` は付与しません（過剰権限回避）。
 
 ## Private Endpoint
 

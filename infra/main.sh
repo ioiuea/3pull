@@ -40,6 +40,10 @@ key_vault_config_file="$infra_root/config/key-vault.json"
 key_vault_script="$infra_root/scripts/generate-key-vault-params.py"
 key_vault_meta_file="$params_dir/key-vault-meta.json"
 
+service_bus_config_file="$infra_root/config/service-bus.json"
+service_bus_script="$infra_root/scripts/generate-service-bus-params.py"
+service_bus_meta_file="$params_dir/service-bus-meta.json"
+
 acr_config_file="$infra_root/config/acr.json"
 acr_script="$infra_root/scripts/generate-acr-params.py"
 acr_meta_file="$params_dir/acr-meta.json"
@@ -77,6 +81,14 @@ subnet_attachments_meta_file="$params_dir/subnet-attachments-meta.json"
 maintenance_vm_config_file="$infra_root/config/maintenance-vm.json"
 maintenance_vm_script="$infra_root/scripts/generate-maintenance-vm-params.py"
 maintenance_vm_meta_file="$params_dir/maintenance-vm-meta.json"
+
+federated_credential_config_file="$infra_root/config/federated-credential.json"
+federated_credential_script="$infra_root/scripts/generate-federated-credential-params.py"
+federated_credential_meta_file="$params_dir/federated-credential-meta.json"
+
+backend_values_template_file="$repo_root/k8s/charts/backend/values.yaml"
+backend_values_generated_file="$repo_root/k8s/charts/backend/values.generate.yaml"
+backend_values_sync_script="$infra_root/scripts/sync-backend-values.py"
 
 # -----------------------------------------------------------------------------
 # CLI option parsing
@@ -151,6 +163,11 @@ if [[ ! -f "$key_vault_config_file" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$service_bus_config_file" ]]; then
+  echo "service bus config file が見つかりません: $service_bus_config_file" >&2
+  exit 1
+fi
+
 if [[ ! -f "$acr_config_file" ]]; then
   echo "acr config file が見つかりません: $acr_config_file" >&2
   exit 1
@@ -193,6 +210,26 @@ fi
 
 if [[ ! -f "$maintenance_vm_config_file" ]]; then
   echo "maintenance vm config file が見つかりません: $maintenance_vm_config_file" >&2
+  exit 1
+fi
+
+if [[ ! -f "$federated_credential_config_file" ]]; then
+  echo "federated credential config file が見つかりません: $federated_credential_config_file" >&2
+  exit 1
+fi
+
+if [[ ! -f "$federated_credential_script" ]]; then
+  echo "federated credential script が見つかりません: $federated_credential_script" >&2
+  exit 1
+fi
+
+if [[ ! -f "$backend_values_sync_script" ]]; then
+  echo "backend values sync script が見つかりません: $backend_values_sync_script" >&2
+  exit 1
+fi
+
+if [[ ! -f "$backend_values_template_file" ]]; then
+  echo "backend Helm values template file が見つかりません: $backend_values_template_file" >&2
   exit 1
 fi
 
@@ -255,27 +292,6 @@ TIMESTAMP="$timestamp" \
 "$application_gateway_script"
 
 COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$key_vault_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$key_vault_meta_file" \
-TIMESTAMP="$timestamp" \
-"$key_vault_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$acr_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$acr_meta_file" \
-TIMESTAMP="$timestamp" \
-"$acr_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$storage_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$storage_meta_file" \
-TIMESTAMP="$timestamp" \
-"$storage_script"
-
-COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$redis_config_file" \
 PARAMS_DIR="$params_dir" \
 OUT_META_FILE="$redis_meta_file" \
@@ -304,6 +320,38 @@ PARAMS_DIR="$params_dir" \
 OUT_META_FILE="$aks_meta_file" \
 TIMESTAMP="$timestamp" \
 "$aks_script"
+
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$acr_config_file" \
+AKS_META_FILE="$aks_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$acr_meta_file" \
+TIMESTAMP="$timestamp" \
+"$acr_script"
+
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$key_vault_config_file" \
+AKS_META_FILE="$aks_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$key_vault_meta_file" \
+TIMESTAMP="$timestamp" \
+"$key_vault_script"
+
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$service_bus_config_file" \
+AKS_META_FILE="$aks_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$service_bus_meta_file" \
+TIMESTAMP="$timestamp" \
+"$service_bus_script"
+
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$storage_config_file" \
+AKS_META_FILE="$aks_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$storage_meta_file" \
+TIMESTAMP="$timestamp" \
+"$storage_script"
 
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$route_tables_config_file" \
@@ -404,6 +452,16 @@ PY
 )"
 
 key_vault_resource_group_name="$(META_FILE="$key_vault_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("resourceGroupName", ""))
+PY
+)"
+
+service_bus_resource_group_name="$(META_FILE="$service_bus_meta_file" python - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -549,6 +607,11 @@ if [[ -z "$key_vault_resource_group_name" ]]; then
   exit 1
 fi
 
+if [[ -z "$service_bus_resource_group_name" ]]; then
+  echo "service bus resourceGroupName が取得できませんでした。config を確認してください。" >&2
+  exit 1
+fi
+
 if [[ -z "$acr_resource_group_name" ]]; then
   echo "acr resourceGroupName が取得できませんでした。config を確認してください。" >&2
   exit 1
@@ -655,35 +718,42 @@ if [[ "$acr_resource_group_name" != "$vnet_resource_group_name" && "$acr_resourc
     --location "$location" >/dev/null
 fi
 
-if [[ "$storage_resource_group_name" != "$vnet_resource_group_name" && "$storage_resource_group_name" != "$subnets_resource_group_name" && "$storage_resource_group_name" != "$firewall_resource_group_name" && "$storage_resource_group_name" != "$application_gateway_resource_group_name" && "$storage_resource_group_name" != "$key_vault_resource_group_name" && "$storage_resource_group_name" != "$acr_resource_group_name" ]]; then
+if [[ "$service_bus_resource_group_name" != "$vnet_resource_group_name" && "$service_bus_resource_group_name" != "$subnets_resource_group_name" && "$service_bus_resource_group_name" != "$firewall_resource_group_name" && "$service_bus_resource_group_name" != "$application_gateway_resource_group_name" && "$service_bus_resource_group_name" != "$key_vault_resource_group_name" && "$service_bus_resource_group_name" != "$acr_resource_group_name" ]]; then
+  echo "==> Ensure Resource Group: $service_bus_resource_group_name"
+  az group create \
+    --name "$service_bus_resource_group_name" \
+    --location "$location" >/dev/null
+fi
+
+if [[ "$storage_resource_group_name" != "$vnet_resource_group_name" && "$storage_resource_group_name" != "$subnets_resource_group_name" && "$storage_resource_group_name" != "$firewall_resource_group_name" && "$storage_resource_group_name" != "$application_gateway_resource_group_name" && "$storage_resource_group_name" != "$key_vault_resource_group_name" && "$storage_resource_group_name" != "$acr_resource_group_name" && "$storage_resource_group_name" != "$service_bus_resource_group_name" ]]; then
   echo "==> Ensure Resource Group: $storage_resource_group_name"
   az group create \
     --name "$storage_resource_group_name" \
     --location "$location" >/dev/null
 fi
 
-if [[ "$redis_resource_group_name" != "$vnet_resource_group_name" && "$redis_resource_group_name" != "$subnets_resource_group_name" && "$redis_resource_group_name" != "$firewall_resource_group_name" && "$redis_resource_group_name" != "$application_gateway_resource_group_name" && "$redis_resource_group_name" != "$key_vault_resource_group_name" && "$redis_resource_group_name" != "$acr_resource_group_name" && "$redis_resource_group_name" != "$storage_resource_group_name" ]]; then
+if [[ "$redis_resource_group_name" != "$vnet_resource_group_name" && "$redis_resource_group_name" != "$subnets_resource_group_name" && "$redis_resource_group_name" != "$firewall_resource_group_name" && "$redis_resource_group_name" != "$application_gateway_resource_group_name" && "$redis_resource_group_name" != "$key_vault_resource_group_name" && "$redis_resource_group_name" != "$acr_resource_group_name" && "$redis_resource_group_name" != "$service_bus_resource_group_name" && "$redis_resource_group_name" != "$storage_resource_group_name" ]]; then
   echo "==> Ensure Resource Group: $redis_resource_group_name"
   az group create \
     --name "$redis_resource_group_name" \
     --location "$location" >/dev/null
 fi
 
-if [[ "$postgres_resource_group_name" != "$vnet_resource_group_name" && "$postgres_resource_group_name" != "$subnets_resource_group_name" && "$postgres_resource_group_name" != "$firewall_resource_group_name" && "$postgres_resource_group_name" != "$application_gateway_resource_group_name" && "$postgres_resource_group_name" != "$key_vault_resource_group_name" && "$postgres_resource_group_name" != "$acr_resource_group_name" && "$postgres_resource_group_name" != "$storage_resource_group_name" && "$postgres_resource_group_name" != "$redis_resource_group_name" ]]; then
+if [[ "$postgres_resource_group_name" != "$vnet_resource_group_name" && "$postgres_resource_group_name" != "$subnets_resource_group_name" && "$postgres_resource_group_name" != "$firewall_resource_group_name" && "$postgres_resource_group_name" != "$application_gateway_resource_group_name" && "$postgres_resource_group_name" != "$key_vault_resource_group_name" && "$postgres_resource_group_name" != "$acr_resource_group_name" && "$postgres_resource_group_name" != "$service_bus_resource_group_name" && "$postgres_resource_group_name" != "$storage_resource_group_name" && "$postgres_resource_group_name" != "$redis_resource_group_name" ]]; then
   echo "==> Ensure Resource Group: $postgres_resource_group_name"
   az group create \
     --name "$postgres_resource_group_name" \
     --location "$location" >/dev/null
 fi
 
-if [[ "$cosmos_resource_group_name" != "$vnet_resource_group_name" && "$cosmos_resource_group_name" != "$subnets_resource_group_name" && "$cosmos_resource_group_name" != "$firewall_resource_group_name" && "$cosmos_resource_group_name" != "$application_gateway_resource_group_name" && "$cosmos_resource_group_name" != "$key_vault_resource_group_name" && "$cosmos_resource_group_name" != "$acr_resource_group_name" && "$cosmos_resource_group_name" != "$storage_resource_group_name" && "$cosmos_resource_group_name" != "$redis_resource_group_name" && "$cosmos_resource_group_name" != "$postgres_resource_group_name" ]]; then
+if [[ "$cosmos_resource_group_name" != "$vnet_resource_group_name" && "$cosmos_resource_group_name" != "$subnets_resource_group_name" && "$cosmos_resource_group_name" != "$firewall_resource_group_name" && "$cosmos_resource_group_name" != "$application_gateway_resource_group_name" && "$cosmos_resource_group_name" != "$key_vault_resource_group_name" && "$cosmos_resource_group_name" != "$acr_resource_group_name" && "$cosmos_resource_group_name" != "$service_bus_resource_group_name" && "$cosmos_resource_group_name" != "$storage_resource_group_name" && "$cosmos_resource_group_name" != "$redis_resource_group_name" && "$cosmos_resource_group_name" != "$postgres_resource_group_name" ]]; then
   echo "==> Ensure Resource Group: $cosmos_resource_group_name"
   az group create \
     --name "$cosmos_resource_group_name" \
     --location "$location" >/dev/null
 fi
 
-if [[ "$aks_resource_group_name" != "$vnet_resource_group_name" && "$aks_resource_group_name" != "$subnets_resource_group_name" && "$aks_resource_group_name" != "$firewall_resource_group_name" && "$aks_resource_group_name" != "$application_gateway_resource_group_name" && "$aks_resource_group_name" != "$key_vault_resource_group_name" && "$aks_resource_group_name" != "$acr_resource_group_name" && "$aks_resource_group_name" != "$storage_resource_group_name" && "$aks_resource_group_name" != "$redis_resource_group_name" && "$aks_resource_group_name" != "$postgres_resource_group_name" && "$aks_resource_group_name" != "$cosmos_resource_group_name" ]]; then
+if [[ "$aks_resource_group_name" != "$vnet_resource_group_name" && "$aks_resource_group_name" != "$subnets_resource_group_name" && "$aks_resource_group_name" != "$firewall_resource_group_name" && "$aks_resource_group_name" != "$application_gateway_resource_group_name" && "$aks_resource_group_name" != "$key_vault_resource_group_name" && "$aks_resource_group_name" != "$acr_resource_group_name" && "$aks_resource_group_name" != "$service_bus_resource_group_name" && "$aks_resource_group_name" != "$storage_resource_group_name" && "$aks_resource_group_name" != "$redis_resource_group_name" && "$aks_resource_group_name" != "$postgres_resource_group_name" && "$aks_resource_group_name" != "$cosmos_resource_group_name" ]]; then
   echo "==> Ensure Resource Group: $aks_resource_group_name"
   az group create \
     --name "$aks_resource_group_name" \
@@ -711,7 +781,7 @@ if [[ "$subnet_attachments_resource_group_name" != "$vnet_resource_group_name" &
     --location "$location" >/dev/null
 fi
 
-if [[ "$maintenance_vm_resource_group_name" != "$vnet_resource_group_name" && "$maintenance_vm_resource_group_name" != "$subnets_resource_group_name" && "$maintenance_vm_resource_group_name" != "$firewall_resource_group_name" && "$maintenance_vm_resource_group_name" != "$application_gateway_resource_group_name" && "$maintenance_vm_resource_group_name" != "$key_vault_resource_group_name" && "$maintenance_vm_resource_group_name" != "$acr_resource_group_name" && "$maintenance_vm_resource_group_name" != "$storage_resource_group_name" && "$maintenance_vm_resource_group_name" != "$redis_resource_group_name" && "$maintenance_vm_resource_group_name" != "$postgres_resource_group_name" && "$maintenance_vm_resource_group_name" != "$cosmos_resource_group_name" && "$maintenance_vm_resource_group_name" != "$aks_resource_group_name" && "$maintenance_vm_resource_group_name" != "$route_tables_resource_group_name" && "$maintenance_vm_resource_group_name" != "$nsgs_resource_group_name" && "$maintenance_vm_resource_group_name" != "$subnet_attachments_resource_group_name" ]]; then
+if [[ "$maintenance_vm_resource_group_name" != "$vnet_resource_group_name" && "$maintenance_vm_resource_group_name" != "$subnets_resource_group_name" && "$maintenance_vm_resource_group_name" != "$firewall_resource_group_name" && "$maintenance_vm_resource_group_name" != "$application_gateway_resource_group_name" && "$maintenance_vm_resource_group_name" != "$key_vault_resource_group_name" && "$maintenance_vm_resource_group_name" != "$acr_resource_group_name" && "$maintenance_vm_resource_group_name" != "$service_bus_resource_group_name" && "$maintenance_vm_resource_group_name" != "$storage_resource_group_name" && "$maintenance_vm_resource_group_name" != "$redis_resource_group_name" && "$maintenance_vm_resource_group_name" != "$postgres_resource_group_name" && "$maintenance_vm_resource_group_name" != "$cosmos_resource_group_name" && "$maintenance_vm_resource_group_name" != "$aks_resource_group_name" && "$maintenance_vm_resource_group_name" != "$route_tables_resource_group_name" && "$maintenance_vm_resource_group_name" != "$nsgs_resource_group_name" && "$maintenance_vm_resource_group_name" != "$subnet_attachments_resource_group_name" ]]; then
   echo "==> Ensure Resource Group: $maintenance_vm_resource_group_name"
   az group create \
     --name "$maintenance_vm_resource_group_name" \
@@ -1307,18 +1377,61 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# ACR / Storage / Redis / PostgreSQL / Cosmos DB / Key Vault / Application Gateway / AKS / Maintenance VM
+# Application Gateway / AKS / ACR / Key Vault / Service Bus / Storage / Redis / PostgreSQL / Cosmos DB / Maintenance VM
 # -----------------------------------------------------------------------------
 # 依存順:
-# 1) ACR (Private Endpoint 用サブネットが先に必要)
-# 2) Storage Account (Private Endpoint 用サブネットが先に必要)
-# 3) Redis (Private Endpoint 用サブネットが先に必要)
-# 4) PostgreSQL Flexible Server (Private Endpoint 用サブネットが先に必要)
-# 5) Cosmos DB (Private Endpoint 用サブネットが先に必要)
-# 6) Key Vault (Private Endpoint 用サブネットが先に必要)
-# 7) Application Gateway
-# 8) AKS (AGIC 連携先が先に必要)
-# 9) Maintenance VM
+# 1) Application Gateway
+# 2) AKS (AGIC 連携先が先に必要)
+# 3) ACR (ACR RG スコープで AKS kubelet へ AcrPull を付与)
+# 4) Key Vault (Private Endpoint 用サブネットが先に必要)
+# 5) Service Bus (Private Endpoint 用サブネットが先に必要)
+# 6) Storage Account (Private Endpoint 用サブネットが先に必要)
+# 7) Redis (Private Endpoint 用サブネットが先に必要)
+# 8) PostgreSQL Flexible Server (Private Endpoint 用サブネットが先に必要)
+# 9) Cosmos DB (Private Endpoint 用サブネットが先に必要)
+# 10) Maintenance VM
+if [[ "$application_gateway_deploy" == "true" ]]; then
+  echo "==> Deploy Application Gateway"
+  az deployment group create \
+    --name "main-network-application-gateway-${timestamp}" \
+    --resource-group "$application_gateway_resource_group_name" \
+    --parameters "$application_gateway_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip Application Gateway (resourceToggles.applicationGateway=false)"
+fi
+
+aks_deploy="$(META_FILE="$aks_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+aks_params_file="$(META_FILE="$aks_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
+if [[ "$aks_deploy" == "true" ]]; then
+  echo "==> Deploy AKS"
+  az deployment group create \
+    --name "main-service-aks-${timestamp}" \
+    --resource-group "$aks_resource_group_name" \
+    --parameters "$aks_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip AKS (resourceToggles.aks=false)"
+fi
+
 acr_deploy="$(META_FILE="$acr_meta_file" python - <<'PY'
 import json
 import os
@@ -1348,6 +1461,68 @@ if [[ "$acr_deploy" == "true" ]]; then
     ${what_if:+$what_if}
 else
   echo "==> Skip ACR (resourceToggles.acr=false)"
+fi
+
+key_vault_deploy="$(META_FILE="$key_vault_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+key_vault_params_file="$(META_FILE="$key_vault_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
+if [[ "$key_vault_deploy" == "true" ]]; then
+  echo "==> Deploy Key Vault"
+  az deployment group create \
+    --name "main-service-key-vault-${timestamp}" \
+    --resource-group "$key_vault_resource_group_name" \
+    --parameters "$key_vault_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip Key Vault (resourceToggles.keyVault=false)"
+fi
+
+service_bus_deploy="$(META_FILE="$service_bus_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+service_bus_params_file="$(META_FILE="$service_bus_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
+if [[ "$service_bus_deploy" == "true" ]]; then
+  echo "==> Deploy Service Bus"
+  az deployment group create \
+    --name "main-service-service-bus-${timestamp}" \
+    --resource-group "$service_bus_resource_group_name" \
+    --parameters "$service_bus_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip Service Bus (resourceToggles.serviceBus=false)"
 fi
 
 storage_deploy="$(META_FILE="$storage_meta_file" python - <<'PY'
@@ -1481,79 +1656,6 @@ else
   echo "==> Skip Cosmos DB (resourceToggles.cosmosDatabase=false)"
 fi
 
-key_vault_deploy="$(META_FILE="$key_vault_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-key_vault_params_file="$(META_FILE="$key_vault_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$key_vault_deploy" == "true" ]]; then
-  echo "==> Deploy Key Vault"
-  az deployment group create \
-    --name "main-service-key-vault-${timestamp}" \
-    --resource-group "$key_vault_resource_group_name" \
-    --parameters "$key_vault_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Key Vault (resourceToggles.keyVault=false)"
-fi
-
-if [[ "$application_gateway_deploy" == "true" ]]; then
-  echo "==> Deploy Application Gateway"
-  az deployment group create \
-    --name "main-network-application-gateway-${timestamp}" \
-    --resource-group "$application_gateway_resource_group_name" \
-    --parameters "$application_gateway_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Application Gateway (resourceToggles.applicationGateway=false)"
-fi
-
-aks_deploy="$(META_FILE="$aks_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-aks_params_file="$(META_FILE="$aks_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$aks_deploy" == "true" ]]; then
-  echo "==> Deploy AKS"
-  az deployment group create \
-    --name "main-service-aks-${timestamp}" \
-    --resource-group "$aks_resource_group_name" \
-    --parameters "$aks_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip AKS (resourceToggles.aks=false)"
-fi
-
 maintenance_vm_deploy="$(META_FILE="$maintenance_vm_meta_file" python - <<'PY'
 import json
 import os
@@ -1635,3 +1737,53 @@ NOTICE: Firewall Outbound Rule (Initial Provisioning)
 ------------------------------------------------------------
 EOF
 fi
+
+if [[ -n "$what_if" ]]; then
+  echo "==> Skip Federated Credential (--what-if)"
+else
+  COMMON_FILE="$common_file" \
+  RESOURCE_CONFIG_FILE="$federated_credential_config_file" \
+  AKS_META_FILE="$aks_meta_file" \
+  PARAMS_DIR="$params_dir" \
+  OUT_META_FILE="$federated_credential_meta_file" \
+  TIMESTAMP="$timestamp" \
+  "$federated_credential_script"
+
+  federated_credential_deploy="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+  federated_credential_params_file="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
+  if [[ "$federated_credential_deploy" == "true" ]]; then
+    echo "==> Deploy Federated Credential"
+    az deployment group create \
+      --name "main-service-federated-credential-${timestamp}" \
+      --resource-group "$aks_resource_group_name" \
+      --parameters "$federated_credential_params_file"
+  else
+    echo "==> Skip Federated Credential (config.enabled=false)"
+  fi
+fi
+
+echo "==> Generate backend Helm values file"
+COMMON_FILE="$common_file" \
+AKS_META_FILE="$aks_meta_file" \
+STORAGE_CONFIG_FILE="$storage_config_file" \
+TEMPLATE_FILE="$backend_values_template_file" \
+OUTPUT_FILE="$backend_values_generated_file" \
+"$backend_values_sync_script"

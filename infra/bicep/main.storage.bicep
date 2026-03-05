@@ -27,6 +27,21 @@ param vnetName string
 @description('VNET のリソースグループ名')
 param vnetResourceGroupName string
 
+@description('Managed Identity を配置したリソースグループ名')
+param managedIdentityResourceGroupName string
+
+@description('API 用 Managed Identity 名')
+param apiManagedIdentityName string
+
+@description('worker 用 Managed Identity 名')
+param workerManagedIdentityName string
+
+@description('cleanup 用 Managed Identity 名')
+param cleanupManagedIdentityName string
+
+@description('Workload Identity 用 RBAC 付与を有効化')
+param enableWorkloadIdentityRbac bool = true
+
 @description('Storage Account 名')
 param storageAccountName string
 
@@ -119,6 +134,11 @@ var modulesTags = {
   billing: 'infra'
 }
 
+var storageBlobDataContributorRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
+)
+
 resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-07-01' existing = {
   scope: resourceGroup(vnetResourceGroupName)
   name: vnetName
@@ -127,6 +147,21 @@ resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-07-01' existing 
 resource privateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-07-01' existing = {
   parent: virtualNetwork
   name: 'PrivateEndpointSubnet'
+}
+
+resource apiManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  scope: resourceGroup(managedIdentityResourceGroupName)
+  name: apiManagedIdentityName
+}
+
+resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  scope: resourceGroup(managedIdentityResourceGroupName)
+  name: workerManagedIdentityName
+}
+
+resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  scope: resourceGroup(managedIdentityResourceGroupName)
+  name: cleanupManagedIdentityName
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -345,6 +380,36 @@ resource tableServiceDiagnosticSettings 'Microsoft.Insights/diagnosticSettings@2
         }
       }
     ]
+  }
+}
+
+resource storageBlobDataContributorForApi 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(storageAccount.id, apiManagedIdentity.id, 'StorageBlobDataContributor')
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: storageBlobDataContributorRoleDefinitionId
+    principalId: apiManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource storageBlobDataContributorForWorker 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(storageAccount.id, workerManagedIdentity.id, 'StorageBlobDataContributor')
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: storageBlobDataContributorRoleDefinitionId
+    principalId: workerManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource storageBlobDataContributorForCleanup 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(storageAccount.id, cleanupManagedIdentity.id, 'StorageBlobDataContributor')
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: storageBlobDataContributorRoleDefinitionId
+    principalId: cleanupManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 

@@ -4,6 +4,7 @@
   "blobSkuName": "Standard_LRS",
   "blobKind": "StorageV2",
   "blobAccessTier": "Hot",
+  "blobContainerName": "async-jobs",
   "publicNetworkAccess": "Disabled",
   "enableBlobSoftDelete": true,
   "blobDeleteRetentionDays": 7,

@@ -1,0 +1,30 @@
+{{- $root := . -}}
+{{- range $name, $worker := .Values.workers }}
+{{- if and $root.Values.keda.enabled $worker.enabled $worker.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "backend.workerName" $root }}-{{ $name | kebabcase }}
+  namespace: {{ include "backend.namespace" $root }}
+  labels:
+    {{- include "backend.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: {{ $name | kebabcase }}
+spec:
+  scaleTargetRef:
+    name: {{ include "backend.workerName" $root }}-{{ $name | kebabcase }}
+  pollingInterval: {{ $worker.keda.pollingInterval }}
+  cooldownPeriod: {{ $worker.keda.cooldownPeriod }}
+  minReplicaCount: {{ $worker.keda.minReplicaCount }}
+  maxReplicaCount: {{ $worker.keda.maxReplicaCount }}
+  triggers:
+    - type: azure-servicebus
+      metadata:
+        queueName: {{ $worker.queueName | quote }}
+        namespace: {{ trimSuffix ".servicebus.windows.net" $root.Values.config.env.SERVICE_BUS_NAMESPACE_FQDN | quote }}
+        messageCount: {{ $worker.keda.queueLengthThreshold | quote }}
+      authenticationRef:
+        name: {{ $root.Values.keda.triggerAuthenticationName }}
+---
+{{- end }}
+{{- end }}

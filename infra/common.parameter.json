@@ -12,14 +12,16 @@
     "subnets": true,
     "firewall": true,
     "applicationGateway": true,
+    "aks": true,
     "acr": true,
+    "keyVault": true,
+    "serviceBus": true,
     "storage": true,
     "redis": true,
-    "cosmosDatabase": true,
     "postgresDatabase": true,
-    "keyVault": true,
-    "aks": true,
-    "maintenanceVm": true
+    "cosmosDatabase": true,
+    "maintenanceVm": true,
+    "federatedCredential": true
   },
   "network": {
     "enableFirewallIdps": false,
@@ -44,6 +46,15 @@
     "userPoolLabel": "user",
     "podCidr": "10.189.0.0/17",
     "serviceCidr": "10.47.0.0/24"
+  },
+  "keyVault": {
+    "enableWorkloadIdentityRbac": true
+  },
+  "serviceBus": {
+    "enableWorkloadIdentityRbac": true
+  },
+  "storage": {
+    "enableWorkloadIdentityRbac": true
   },
   "postgres": {
     "skuTier": "Burstable",

@@ -116,6 +116,9 @@ def main() -> int:
     common_values = common.get("common")
     network_values = common.get("network")
     aks_values = common.get("aks")
+    key_vault_values = common.get("keyVault")
+    service_bus_values = common.get("serviceBus")
+    storage_values = common.get("storage")
     postgres_values = common.get("postgres")
     redis_values = common.get("redis")
     cosno_values = common.get("cosno")
@@ -129,6 +132,21 @@ def main() -> int:
     if not isinstance(aks_values, dict):
         errors.append("aks: object で指定してください。")
         aks_values = {}
+    if key_vault_values is None:
+        key_vault_values = {}
+    elif not isinstance(key_vault_values, dict):
+        errors.append("keyVault: object で指定してください。")
+        key_vault_values = {}
+    if service_bus_values is None:
+        service_bus_values = {}
+    elif not isinstance(service_bus_values, dict):
+        errors.append("serviceBus: object で指定してください。")
+        service_bus_values = {}
+    if storage_values is None:
+        storage_values = {}
+    elif not isinstance(storage_values, dict):
+        errors.append("storage: object で指定してください。")
+        storage_values = {}
     if not isinstance(postgres_values, dict):
         errors.append("postgres: object で指定してください。")
         postgres_values = {}
@@ -236,6 +254,26 @@ def main() -> int:
                     "aks.serviceCidr は network.vnetAddressPrefixes と重複できません: "
                     f"serviceCidr={service_cidr}, vnet={vnet}"
                 )
+
+    # Key Vault 設定
+    if "enableWorkloadIdentityRbac" in key_vault_values:
+        as_bool(
+            key_vault_values.get("enableWorkloadIdentityRbac"),
+            "keyVault.enableWorkloadIdentityRbac",
+            errors,
+        )
+    if "enableWorkloadIdentityRbac" in service_bus_values:
+        as_bool(
+            service_bus_values.get("enableWorkloadIdentityRbac"),
+            "serviceBus.enableWorkloadIdentityRbac",
+            errors,
+        )
+    if "enableWorkloadIdentityRbac" in storage_values:
+        as_bool(
+            storage_values.get("enableWorkloadIdentityRbac"),
+            "storage.enableWorkloadIdentityRbac",
+            errors,
+        )
 
     # PostgreSQL 設定
     sku_tier = as_non_empty_str(postgres_values.get("skuTier"), "postgres.skuTier", errors)
@@ -600,14 +638,16 @@ def main() -> int:
         "subnets",
         "firewall",
         "applicationGateway",
+        "aks",
         "acr",
+        "keyVault",
+        "serviceBus",
         "storage",
         "redis",
-        "cosmosDatabase",
         "postgresDatabase",
-        "keyVault",
-        "aks",
+        "cosmosDatabase",
         "maintenanceVm",
+        "federatedCredential",
     ]
     if not isinstance(toggles, dict):
         errors.append("resourceToggles: object で指定してください。")

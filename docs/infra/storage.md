@@ -53,12 +53,35 @@
 - Azure CAF Resource Abbreviations
   - https://learn.microsoft.com/ja-jp/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations
 
+## 初期作成コンテナ
+
+初期構築時に以下の Blob コンテナを作成します。
+
+| 用途 | コンテナ名 | 備考 |
+| --- | --- | --- |
+| 非同期ジョブ成果物保存 | `async-jobs` | `AZURE_BLOB_CONTAINER` の既定値と一致させる |
+
 ## コンテナ
 
 | 項目 | 設定値 | Bicepプロパティ名 |
 | --- | --- | --- |
-| 名前 | st[common.environmentName][common.systemName]/default/[common.systemName] | name |
+| 名前 | st[common.environmentName][common.systemName]/default/async-jobs | name |
 | パブリックアクセス | None | properties.publicAccess |
+
+## アクセス権（RBAC）方針
+
+- 認証は Managed Identity + Azure RBAC を前提とします（接続文字列配布はしない）。
+- RBAC は Bicep の `Microsoft.Authorization/roleAssignments` で冪等管理します。
+
+| principal | 推奨ロール | 付与スコープ | 主な用途 |
+| --- | --- | --- | --- |
+| `mi-[common.environmentName]-[common.systemName]-api` | `Storage Blob Data Contributor` | Storage Account | 成果物作成/参照/更新 |
+| `mi-[common.environmentName]-[common.systemName]-worker` | `Storage Blob Data Contributor` | Storage Account | 成果物アップロード/更新 |
+| `mi-[common.environmentName]-[common.systemName]-cleanup` | `Storage Blob Data Contributor` | Storage Account | 成果物削除（期限切れ掃除） |
+
+補足:
+
+- 将来コンテナを追加する場合は、用途別コンテナ + 用途別ロールで分離します。
 
 ## Private Endpoint
 
