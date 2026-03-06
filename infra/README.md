@@ -773,10 +773,10 @@ Cosmos DB のキーによるメタデータ書き込みを無効化するかど�
 - `keyVault`
 - `serviceBus`
 - `storage`
-- `redis`
 - `postgresDatabase`
-- `cosmosDatabase`
 - `maintenanceVm`
+- `cosmosDatabase`
+- `redis`
 - `federatedCredential`
 
 ## ネットワーク構成ドキュメント
@@ -821,17 +821,21 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
   - NSGs
   - Subnet Attachments（RouteTable/NSG紐づけ）
   - Application Gateway
+  - Application Gateway（Low Latency, `network.enableLowLatencyApplicationGatewaySubnet=true` の場合）
 - service
   - AKS
   - ACR（ACR RG スコープで AKS をアタッチ）
   - Key Vault
   - Service Bus
   - Storage Account
-  - backend Helm values 同期（`k8s/charts/backend/values.yaml` を MI/Azure リソース値で更新）
-  - Redis
   - PostgreSQL Flexible Server
-  - Cosmos DB (NoSQL)
   - Maintenance VM
+  - Cosmos DB (NoSQL)
+  - Redis
+- post
+  - Federated Credential（AKS が存在する場合のみ）
+  - backend Helm values 生成（`infra/config/backend-values.template.yaml` から `k8s/charts/backend/values.yaml` を生成）
+  - frontend Helm values 生成（`infra/config/frontend-values.template.yaml` から `k8s/charts/frontend/values.yaml` を生成）
 
 ## 出力ファイル（params/）
 

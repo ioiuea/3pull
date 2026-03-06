@@ -137,4 +137,4 @@ updated = update_values(original, replacements)
 annotated = add_guidance_comments(updated)
 output_path.write_text(annotated, encoding="utf-8")
 
-print(f"[OK] frontend values synced: {output_path}")
+print(f"[OK] frontend values synced: {template_path} -> {output_path}")

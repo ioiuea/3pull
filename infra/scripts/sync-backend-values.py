@@ -134,6 +134,14 @@ def add_guidance_comments(content: str) -> str:
             "    # 必須: Entra テナント ID（本番値に置き換えてください）",
         ),
         (
+            "    FRONTEND_BASE_URL:",
+            "    # 必須: frontend の公開 URL（実ドメイン）に置き換えてください",
+        ),
+        (
+            "    CSRF_TRUSTED_ORIGINS:",
+            "    # 必須: CSRF 許可オリジンを実ドメインに置き換えてください（複数はカンマ区切り）",
+        ),
+        (
             "    ENTRA_CLIENT_ID:",
             "    # 必須: Entra アプリケーション(クライアント) ID（本番値に置き換えてください）",
         ),
@@ -169,12 +177,12 @@ def add_guidance_comments(content: str) -> str:
 common_path = Path(os.environ["COMMON_FILE"])
 aks_meta_path = Path(os.environ["AKS_META_FILE"])
 storage_config_path = Path(os.environ["STORAGE_CONFIG_FILE"])
-template_path_raw = os.environ.get("TEMPLATE_FILE", os.environ.get("VALUES_FILE", "")).strip()
-output_path_raw = os.environ.get("OUTPUT_FILE", os.environ.get("VALUES_FILE", "")).strip()
+template_path_raw = os.environ.get("TEMPLATE_FILE", "").strip()
+output_path_raw = os.environ.get("OUTPUT_FILE", "").strip()
 if not template_path_raw:
-    raise SystemExit("TEMPLATE_FILE または VALUES_FILE が必要です。")
+    raise SystemExit("TEMPLATE_FILE が必要です。")
 if not output_path_raw:
-    raise SystemExit("OUTPUT_FILE または VALUES_FILE が必要です。")
+    raise SystemExit("OUTPUT_FILE が必要です。")
 template_path = Path(template_path_raw)
 output_path = Path(output_path_raw)
 
@@ -286,4 +294,4 @@ updated = update_values(original, replacements)
 annotated = add_guidance_comments(updated)
 output_path.write_text(annotated, encoding="utf-8")
 
-print(f"[OK] backend values synced: {output_path}")
+print(f"[OK] backend values synced: {template_path} -> {output_path}")

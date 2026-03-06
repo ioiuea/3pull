@@ -1,0 +1,24 @@
+systemName: sample-system
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: example.azurecr.io/sample-system-web
+    tag: __IMAGE_TAG__
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+    targetPort: 3000
+  probes:
+    readiness:
+      path: /
+      initialDelaySeconds: 3
+      periodSeconds: 10
+    liveness:
+      path: /
+      initialDelaySeconds: 10
+      periodSeconds: 15
+  podAnnotations: {}
+  resources: {}

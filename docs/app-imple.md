@@ -24,10 +24,11 @@
 | Storage Account コンテナ作成 | Bicep | 実装済み | `blobServices/containers` で作成可能 |
 | Service Bus キュー作成 | Bicep | 実装済み | `queues` で作成可能 |
 | federated credential 作成 | Bicep | 実装済み | `main.federated-credential.bicep` で作成 |
-| Helm values 生成（backend/frontend） | Script | 実装済み | `main.sh` 末尾で `values.generate.yaml` を自動生成 |
+| Helm values 生成（backend/frontend） | Script | 実装済み | `main.sh` 末尾で `infra/config/*-values.template.yaml` から `k8s/charts/*/values.yaml` を自動生成 |
 | Key Vault への Secret 値投入 | Script + CI Secret | 未実装 | bootstrap script で `az keyvault secret set`。GitHub Actions の `Secrets`（例: `DATABASE_URL`, `SESSION_SECRET_KEY`, `ENTRA_CLIENT_SECRET`, `ENTRA_TOKEN_ENCRYPTION_KEY`）から値を渡す。固定値は `Variables` を使用。値は IaC に入れない |
 | KEDA デプロイ | Helm + Makefile + GitHub Actions | 一部実装 | chart は実装済み。deploy 導線（Makefile/CI）は未整備 |
 | KEDA annotation（keda-operator） | Helm values 管理 | 一部実装 | 手動 annotation は廃止し、values/CI 注入に統一する |
+| Ingress（backend/frontend） | Helm + CI | 未実装 | AGIC addon 継続。通常系/低遅延系はドメイン分離し、低遅延系は限定 API のみ公開 |
 
 ## 3. 項目別の判断
 
@@ -56,6 +57,7 @@
 以下は Kubernetes アプリ配備レイヤのため、Bicep ではなく Helm 管理が適切。
 
 - backend/frontend chart デプロイ
+- backend/frontend Ingress デプロイ
 - KEDA chart デプロイ
 - KEDA operator の Workload Identity 関連設定
   - chart values で `ServiceAccount` annotation と Pod label を管理する

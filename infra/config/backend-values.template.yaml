@@ -1,0 +1,161 @@
+systemName: sample-system
+
+api:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: example.azurecr.io/sample-system-api
+    tag: __IMAGE_TAG__
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+  podAnnotations: {}
+  resources: {}
+
+workers:
+  authAuditExport:
+    enabled: true
+    replicaCount: 1
+    image:
+      repository: example.azurecr.io/sample-system-worker
+      tag: __IMAGE_TAG__
+      pullPolicy: IfNotPresent
+    queueName: auth-audit-export
+    workerModule: app.workers.entrypoints.auth_audit_export
+    keda:
+      enabled: true
+      pollingInterval: 30
+      cooldownPeriod: 300
+      minReplicaCount: 0
+      maxReplicaCount: 5
+      queueLengthThreshold: 1
+    podAnnotations: {}
+    resources: {}
+  sampleWaitBlob:
+    enabled: true
+    replicaCount: 1
+    image:
+      repository: example.azurecr.io/sample-system-worker
+      tag: __IMAGE_TAG__
+      pullPolicy: IfNotPresent
+    queueName: sample-wait-blob
+    workerModule: app.workers.entrypoints.sample_wait_blob
+    keda:
+      enabled: true
+      pollingInterval: 30
+      cooldownPeriod: 300
+      minReplicaCount: 0
+      maxReplicaCount: 5
+      queueLengthThreshold: 1
+    podAnnotations: {}
+    resources: {}
+
+keda:
+  enabled: true
+  triggerAuthenticationName: r-sample-system-worker-trigger-auth
+  workloadIdentity:
+    clientId: "00000000-0000-0000-0000-000000000000"
+
+cleanup:
+  image:
+    repository: example.azurecr.io/sample-system-cleanup
+    tag: __IMAGE_TAG__
+    pullPolicy: IfNotPresent
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobs:
+    sessions:
+      enabled: true
+      schedule: "0 * * * *"
+      suspend: false
+      concurrencyPolicy: Forbid
+      command: sessions
+      podAnnotations: {}
+      resources: {}
+    audit:
+      enabled: true
+      schedule: "0 2 * * *"
+      suspend: false
+      concurrencyPolicy: Forbid
+      command: audit
+      podAnnotations: {}
+      resources: {}
+    jobs:
+      enabled: true
+      schedule: "15 * * * *"
+      suspend: false
+      concurrencyPolicy: Forbid
+      command: jobs
+      podAnnotations: {}
+      resources: {}
+
+keyVault:
+  enabled: true
+  secretProviderClassName: backend-secrets
+  secretName: backend-secrets
+  vaultName: kv-example
+  tenantId: 00000000-0000-0000-0000-000000000000
+  objects:
+    databaseUrl:
+      keyVaultName: database-url
+      secretKey: DATABASE_URL
+    sessionSecretKey:
+      keyVaultName: session-secret-key
+      secretKey: SESSION_SECRET_KEY
+    entraClientSecret:
+      keyVaultName: entra-client-secret
+      secretKey: ENTRA_CLIENT_SECRET
+    entraTokenEncryptionKey:
+      keyVaultName: entra-token-encryption-key
+      secretKey: ENTRA_TOKEN_ENCRYPTION_KEY
+
+serviceAccounts:
+  api:
+    create: true
+    name: sa-sample-system-api
+    clientId: "00000000-0000-0000-0000-000000000000"
+    annotations: {}
+  worker:
+    create: true
+    name: sa-sample-system-worker
+    clientId: "00000000-0000-0000-0000-000000000000"
+    annotations: {}
+  cleanup:
+    create: true
+    name: sa-sample-system-cleanup
+    clientId: "00000000-0000-0000-0000-000000000000"
+    annotations: {}
+
+config:
+  enabled: true
+  env:
+    SERVICE_NAME: sample-system-api
+    API_LOG_LEVEL: INFO
+    API_PORT: "8000"
+    FRONTEND_BASE_URL: https://app.example.com
+    AUTH_POST_LOGIN_DEFAULT_PATH: /en
+    CSRF_TRUSTED_ORIGINS: https://app.example.com
+    SESSION_COOKIE_NAME: app_session
+    SESSION_COOKIE_SECURE: "false"
+    SESSION_COOKIE_SAMESITE: lax
+    ASYNC_JOBS_ENABLED: "true"
+    SERVICE_BUS_NAMESPACE_FQDN: sb-example.servicebus.windows.net
+    SERVICE_BUS_AUTH_AUDIT_EXPORT_QUEUE_NAME: auth-audit-export
+    SERVICE_BUS_SAMPLE_WAIT_BLOB_QUEUE_NAME: sample-wait-blob
+    AZURE_BLOB_ACCOUNT_URL: https://stexample.blob.core.windows.net/
+    AZURE_BLOB_CONTAINER: async-jobs
+    ENTRA_TENANT_ID: 00000000-0000-0000-0000-000000000000
+    ENTRA_CLIENT_ID: 00000000-0000-0000-0000-000000000000
+    ENTRA_REDIRECT_URI: https://api.example.com/backend/auth/entra/callback
+    ENTRA_INTERNAL_DOMAINS: example.com
+
+secretRefs:
+  create: false
+  name: backend-secrets
+  keys:
+    databaseUrl: DATABASE_URL
+    sessionSecretKey: SESSION_SECRET_KEY
+    entraClientSecret: ENTRA_CLIENT_SECRET
+    entraTokenEncryptionKey: ENTRA_TOKEN_ENCRYPTION_KEY

@@ -649,14 +649,18 @@
      - 8. queue が空のときに worker が `0` 台まで落ちることを確認する
        - 目標: `minReplicaCount: 0`
    - Ingress / App Gateway を実装する手順
-     - 1. 外部公開方式を決める
-       - AKS Ingress Controller を使うか
-       - App Gateway / AGIC を使うか
-     - 2. 公開用の実ドメインと DNS を用意する
-     - 3. backend / frontend chart に Ingress template を追加する
-     - 4. `FRONTEND_BASE_URL` / `CSRF_TRUSTED_ORIGINS` / `ENTRA_REDIRECT_URI` を実ドメインへ切り替える
-     - 5. frontend image も本番 URL 向け `VITE_BACKEND_BASE_URL` を埋め込んで再 build する
-     - 6. `helm upgrade --install` で反映し、ブラウザからの疎通を確認する
+     - 1. AGIC addon を継続利用する（AKS 側 `ingressApplicationGateway` addon）
+     - 2. 通常系/低遅延系はドメイン分離で公開する
+       - 例: `api.3pull.com`（通常系）, `ll-api.3pull.com`（低遅延系, `ll` は `low-latency` の略）
+     - 3. backend / frontend chart それぞれに Ingress template を追加する
+       - frontend は通常系のみ公開する
+       - backend は通常系 + 低遅延系（限定 API のみ）を公開する
+     - 4. 低遅延対象 API は Ingress values の host/path 単位で明示管理する
+     - 5. TLS は App Gateway 側で終端し、証明書も App Gateway 側で管理する
+     - 6. `FRONTEND_BASE_URL` / `CSRF_TRUSTED_ORIGINS` / `ENTRA_REDIRECT_URI` を実ドメインへ切り替える
+     - 7. frontend image も本番 URL 向け `VITE_BACKEND_BASE_URL` を埋め込んで再 build する
+     - 8. app-deploy（Helm）で `helm upgrade --install` を実行して反映する
+     - 9. 通常系/低遅延系を分離して監視・アラートを設定する
    - 追加後の確認観点
      - worker: queue 投入時だけ Pod が起動 / 増減する
      - cleanup: CronJob が定刻実行される

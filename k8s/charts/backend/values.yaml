@@ -1,15 +1,26 @@
-systemName: 3pull
+# -----------------------------------------------------------------------------
+# Auto-generated file
+# -----------------------------------------------------------------------------
+# このファイルは `infra/main.sh` から自動生成されます。
+# 直接編集しても次回生成時に上書きされます。
+#
+# 使い方:
+# 1. まず image.tag の `__IMAGE_TAG__` を CI で実際のタグに置き換えます
+#    例: git sha やリリースタグ
+# 2. Entra 関連の値は環境に合わせて必ず設定します
+# 3. 変更したファイルを使って `helm upgrade --install` を実行します
+# -----------------------------------------------------------------------------
+systemName: '3pull'
 
-nameOverride: ""
-fullnameOverride: ""
-namespaceOverride: ""
-
+# API Deployment 設定
+# image.repository はインフラ側で自動更新されます。
+# image.tag は CI で毎回置き換えてください。
 api:
   enabled: true
   replicaCount: 1
   image:
-    repository: cr3pulltest.azurecr.io/3pull-api
-    tag: 20260303-01
+    repository: 'crdev3pull.azurecr.io/3pull-api'
+    tag: '__IMAGE_TAG__'
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -18,13 +29,16 @@ api:
   podAnnotations: {}
   resources: {}
 
+# 非同期 worker 設定
+# worker ごとの queueName / workerModule を定義します。
+# image.tag は CI で毎回置き換えてください。
 workers:
   authAuditExport:
     enabled: true
     replicaCount: 1
     image:
-      repository: cr3pulltest.azurecr.io/3pull-worker
-      tag: 20260303-01
+      repository: 'crdev3pull.azurecr.io/3pull-worker'
+      tag: '__IMAGE_TAG__'
       pullPolicy: IfNotPresent
     queueName: auth-audit-export
     workerModule: app.workers.entrypoints.auth_audit_export
@@ -41,8 +55,8 @@ workers:
     enabled: true
     replicaCount: 1
     image:
-      repository: cr3pulltest.azurecr.io/3pull-worker
-      tag: 20260303-01
+      repository: 'crdev3pull.azurecr.io/3pull-worker'
+      tag: '__IMAGE_TAG__'
       pullPolicy: IfNotPresent
     queueName: sample-wait-blob
     workerModule: app.workers.entrypoints.sample_wait_blob
@@ -56,16 +70,20 @@ workers:
     podAnnotations: {}
     resources: {}
 
+# KEDA 設定
+# workloadIdentity.clientId は worker Managed Identity で自動更新されます。
 keda:
   enabled: true
-  triggerAuthenticationName: r-3pull-worker-trigger-auth
+  triggerAuthenticationName: r-sample-system-worker-trigger-auth
   workloadIdentity:
-    clientId: "65f99eae-cd86-4493-b3ec-3a88c67cc512"
+    clientId: '2eb5f14c-ba01-4dd1-a65a-41534a0ec4e2'
 
+# Cleanup CronJob 設定
+# image.tag は CI で毎回置き換えてください。
 cleanup:
   image:
-    repository: cr3pulltest.azurecr.io/3pull-cleanup
-    tag: 20260303-01
+    repository: 'crdev3pull.azurecr.io/3pull-cleanup'
+    tag: '__IMAGE_TAG__'
     pullPolicy: IfNotPresent
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3
@@ -95,12 +113,14 @@ cleanup:
       podAnnotations: {}
       resources: {}
 
+# Key Vault 連携設定
+# vaultName / tenantId はインフラ情報から自動更新されます。
 keyVault:
   enabled: true
   secretProviderClassName: backend-secrets
   secretName: backend-secrets
-  vaultName: kv3pulltest
-  tenantId: f3b16e80-cf34-4e90-860e-cef1ac25d9dd
+  vaultName: 'kv-dev-3pull'
+  tenantId: 'f3b16e80-cf34-4e90-860e-cef1ac25d9dd'
   objects:
     databaseUrl:
       keyVaultName: database-url
@@ -115,46 +135,59 @@ keyVault:
       keyVaultName: entra-token-encryption-key
       secretKey: ENTRA_TOKEN_ENCRYPTION_KEY
 
+# ServiceAccount 設定
+# name / clientId は Managed Identity 情報で自動更新されます。
+# 手動変更すると federated credential と不整合になるため非推奨です。
 serviceAccounts:
   api:
     create: true
-    name: sa-3pull-api
-    clientId: "d73d245b-4fdf-4c18-b450-914d7506c0a1"
+    name: 'sa-dev-3pull-api'
+    clientId: '7cadac8a-e70b-465f-bbdf-90622a61316a'
     annotations: {}
   worker:
     create: true
-    name: sa-3pull-worker
-    clientId: "65f99eae-cd86-4493-b3ec-3a88c67cc512"
+    name: 'sa-dev-3pull-worker'
+    clientId: '2eb5f14c-ba01-4dd1-a65a-41534a0ec4e2'
     annotations: {}
   cleanup:
     create: true
-    name: sa-3pull-cleanup
-    clientId: "96d3c6bf-1964-4ce0-bc83-4cc1fe3e0ccb"
+    name: 'sa-dev-3pull-cleanup'
+    clientId: 'ae443f13-4b85-4cb8-bc4d-71e3e6604659'
     annotations: {}
 
+# アプリケーション設定（環境変数）
+# Azure 接続先（Service Bus / Blob など）は自動更新されます。
 config:
   enabled: true
   env:
-    SERVICE_NAME: 3pull-api
+    SERVICE_NAME: '3pull-api'
     API_LOG_LEVEL: INFO
     API_PORT: "8000"
-    FRONTEND_BASE_URL: http://localhost:3000
+    # 必須: frontend の公開 URL（実ドメイン）に置き換えてください
+    FRONTEND_BASE_URL: https://app.example.com
     AUTH_POST_LOGIN_DEFAULT_PATH: /en
-    CSRF_TRUSTED_ORIGINS: http://localhost:3000
+    # 必須: CSRF 許可オリジンを実ドメインに置き換えてください（複数はカンマ区切り）
+    CSRF_TRUSTED_ORIGINS: https://app.example.com
     SESSION_COOKIE_NAME: app_session
     SESSION_COOKIE_SECURE: "false"
     SESSION_COOKIE_SAMESITE: lax
     ASYNC_JOBS_ENABLED: "true"
-    SERVICE_BUS_NAMESPACE_FQDN: sb-3pull-test.servicebus.windows.net
+    SERVICE_BUS_NAMESPACE_FQDN: 'sb-dev-3pull.servicebus.windows.net'
     SERVICE_BUS_AUTH_AUDIT_EXPORT_QUEUE_NAME: auth-audit-export
     SERVICE_BUS_SAMPLE_WAIT_BLOB_QUEUE_NAME: sample-wait-blob
-    AZURE_BLOB_ACCOUNT_URL: https://storage3pulltest.blob.core.windows.net/
-    AZURE_BLOB_CONTAINER: async-jobs
-    ENTRA_TENANT_ID: 9d252ced-a744-45c1-a42f-9116a0ab846d
-    ENTRA_CLIENT_ID: ecaf6d08-70a6-47b5-b7c2-0d91c49fe259
-    ENTRA_REDIRECT_URI: http://localhost:8000/backend/auth/entra/callback
-    ENTRA_INTERNAL_DOMAINS: 1rqtr6.onmicrosoft.com
+    AZURE_BLOB_ACCOUNT_URL: 'https://stdev3pull.blob.core.windows.net/'
+    AZURE_BLOB_CONTAINER: 'async-jobs'
+    # 必須: Entra テナント ID（本番値に置き換えてください）
+    ENTRA_TENANT_ID: '00000000-0000-0000-0000-000000000000'
+    # 必須: Entra アプリケーション(クライアント) ID（本番値に置き換えてください）
+    ENTRA_CLIENT_ID: '00000000-0000-0000-0000-000000000000'
+    # 必須: Entra リダイレクト URI（公開 URL に合わせてください）
+    ENTRA_REDIRECT_URI: https://api.example.com/backend/auth/entra/callback
+    # 必須: 許可する社内ドメイン（例: example.com）
+    ENTRA_INTERNAL_DOMAINS: 'example.com'
 
+# Secret のキー名マッピング
+# Key Vault から取得したシークレット名と一致させます。
 secretRefs:
   create: false
   name: backend-secrets

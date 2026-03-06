@@ -1,22 +1,13 @@
 {{- define "frontend.name" -}}
-{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" -}}
+{{- .Chart.Name | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "frontend.fullname" -}}
-{{- if .Values.fullnameOverride -}}
-{{- $name := .Values.fullnameOverride | trunc 63 | trimSuffix "-" -}}
-{{- if regexMatch "^[a-z]" $name -}}
-{{- $name -}}
-{{- else -}}
-{{- printf "r-%s" $name | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
-{{- else -}}
 {{- $name := printf "%s-%s" .Release.Name (include "frontend.name" .) | trunc 63 | trimSuffix "-" -}}
 {{- if regexMatch "^[a-z]" $name -}}
 {{- $name -}}
 {{- else -}}
 {{- printf "r-%s" $name | trunc 63 | trimSuffix "-" -}}
-{{- end -}}
 {{- end -}}
 {{- end -}}
 
@@ -33,7 +24,7 @@
 {{- end -}}
 
 {{- define "frontend.namespace" -}}
-{{- default .Release.Namespace .Values.namespaceOverride -}}
+{{- .Release.Namespace -}}
 {{- end -}}
 
 {{- define "frontend.labels" -}}

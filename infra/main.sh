@@ -93,12 +93,12 @@ federated_credential_config_file="$infra_root/config/federated-credential.json"
 federated_credential_script="$infra_root/scripts/generate-federated-credential-params.py"
 federated_credential_meta_file="$params_dir/federated-credential-meta.json"
 
-backend_values_template_file="$repo_root/k8s/charts/backend/values.yaml"
-backend_values_generated_file="$repo_root/k8s/charts/backend/values.generate.yaml"
+backend_values_template_file="$infra_root/config/backend-values.template.yaml"
+backend_values_generated_file="$repo_root/k8s/charts/backend/values.yaml"
 backend_values_sync_script="$infra_root/scripts/sync-backend-values.py"
 
-frontend_values_template_file="$repo_root/k8s/charts/frontend/values.yaml"
-frontend_values_generated_file="$repo_root/k8s/charts/frontend/values.generate.yaml"
+frontend_values_template_file="$infra_root/config/frontend-values.template.yaml"
+frontend_values_generated_file="$repo_root/k8s/charts/frontend/values.yaml"
 frontend_values_sync_script="$infra_root/scripts/sync-frontend-values.py"
 
 # -----------------------------------------------------------------------------
@@ -1447,7 +1447,7 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Application Gateway / AKS / ACR / Key Vault / Service Bus / Storage / Redis / PostgreSQL / Cosmos DB / Maintenance VM
+# Application Gateway / AKS / ACR / Key Vault / Service Bus / Storage / PostgreSQL / Maintenance VM / Cosmos DB / Redis
 # -----------------------------------------------------------------------------
 # 依存順:
 # 1) Application Gateway
@@ -1456,10 +1456,10 @@ fi
 # 4) Key Vault (Private Endpoint 用サブネットが先に必要)
 # 5) Service Bus (Private Endpoint 用サブネットが先に必要)
 # 6) Storage Account (Private Endpoint 用サブネットが先に必要)
-# 7) Redis (Private Endpoint 用サブネットが先に必要)
-# 8) PostgreSQL Flexible Server (Private Endpoint 用サブネットが先に必要)
+# 7) PostgreSQL Flexible Server (Private Endpoint 用サブネットが先に必要)
+# 8) Maintenance VM
 # 9) Cosmos DB (Private Endpoint 用サブネットが先に必要)
-# 10) Maintenance VM
+# 10) Redis (Private Endpoint 用サブネットが先に必要)
 if [[ "$application_gateway_deploy" == "true" ]]; then
   echo "==> Deploy Application Gateway"
   az deployment group create \
@@ -1637,37 +1637,6 @@ else
   echo "==> Skip Storage Account (resourceToggles.storage=false)"
 fi
 
-redis_deploy="$(META_FILE="$redis_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-redis_params_file="$(META_FILE="$redis_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$redis_deploy" == "true" ]]; then
-  echo "==> Deploy Redis"
-  az deployment group create \
-    --name "main-service-redis-${timestamp}" \
-    --resource-group "$redis_resource_group_name" \
-    --parameters "$redis_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Redis (resourceToggles.redis=false)"
-fi
-
 postgres_deploy="$(META_FILE="$postgres_meta_file" python - <<'PY'
 import json
 import os
@@ -1706,37 +1675,6 @@ else
   echo "==> Skip PostgreSQL Flexible Server (resourceToggles.postgresDatabase=false)"
 fi
 
-cosmos_deploy="$(META_FILE="$cosmos_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-cosmos_params_file="$(META_FILE="$cosmos_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$cosmos_deploy" == "true" ]]; then
-  echo "==> Deploy Cosmos DB (NoSQL)"
-  az deployment group create \
-    --name "main-service-cosmos-database-${timestamp}" \
-    --resource-group "$cosmos_resource_group_name" \
-    --parameters "$cosmos_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Cosmos DB (resourceToggles.cosmosDatabase=false)"
-fi
-
 maintenance_vm_deploy="$(META_FILE="$maintenance_vm_meta_file" python - <<'PY'
 import json
 import os
@@ -1773,6 +1711,68 @@ if [[ "$maintenance_vm_deploy" == "true" ]]; then
     ${what_if:+$what_if}
 else
   echo "==> Skip Maintenance VM (resourceToggles.maintenanceVm=false)"
+fi
+
+cosmos_deploy="$(META_FILE="$cosmos_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+cosmos_params_file="$(META_FILE="$cosmos_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
+if [[ "$cosmos_deploy" == "true" ]]; then
+  echo "==> Deploy Cosmos DB (NoSQL)"
+  az deployment group create \
+    --name "main-service-cosmos-database-${timestamp}" \
+    --resource-group "$cosmos_resource_group_name" \
+    --parameters "$cosmos_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip Cosmos DB (resourceToggles.cosmosDatabase=false)"
+fi
+
+redis_deploy="$(META_FILE="$redis_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+redis_params_file="$(META_FILE="$redis_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
+if [[ "$redis_deploy" == "true" ]]; then
+  echo "==> Deploy Redis"
+  az deployment group create \
+    --name "main-service-redis-${timestamp}" \
+    --resource-group "$redis_resource_group_name" \
+    --parameters "$redis_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip Redis (resourceToggles.redis=false)"
 fi
 
 # -----------------------------------------------------------------------------
@@ -1896,8 +1896,8 @@ EOF
 else
   if [[ -n "$what_if" ]]; then
     echo "==> Skip Federated Credential (--what-if)"
-    echo "==> Skip Generate backend Helm values file (--what-if)"
     echo "==> Skip Generate frontend Helm values file (--what-if)"
+    echo "==> Skip Generate backend Helm values file (--what-if)"
   else
     COMMON_FILE="$common_file" \
     RESOURCE_CONFIG_FILE="$federated_credential_config_file" \
@@ -1937,6 +1937,12 @@ PY
       echo "==> Skip Federated Credential (resourceToggles.federatedCredential=false or config.enabled=false)"
     fi
 
+    echo "==> Generate frontend Helm values file"
+    COMMON_FILE="$common_file" \
+    TEMPLATE_FILE="$frontend_values_template_file" \
+    OUTPUT_FILE="$frontend_values_generated_file" \
+    "$frontend_values_sync_script"
+
     echo "==> Generate backend Helm values file"
     COMMON_FILE="$common_file" \
     AKS_META_FILE="$aks_meta_file" \
@@ -1945,10 +1951,25 @@ PY
     OUTPUT_FILE="$backend_values_generated_file" \
     "$backend_values_sync_script"
 
-    echo "==> Generate frontend Helm values file"
-    COMMON_FILE="$common_file" \
-    TEMPLATE_FILE="$frontend_values_template_file" \
-    OUTPUT_FILE="$frontend_values_generated_file" \
-    "$frontend_values_sync_script"
+    cat <<'EOF'
+------------------------------------------------------------
+NOTICE: Backend Helm values (manual update required)
+[EN] Please review and update the following parameters in backend values before Helm deploy:
+     - config.env.FRONTEND_BASE_URL
+     - config.env.CSRF_TRUSTED_ORIGINS
+     - config.env.ENTRA_TENANT_ID
+     - config.env.ENTRA_CLIENT_ID
+     - config.env.ENTRA_REDIRECT_URI
+     - config.env.ENTRA_INTERNAL_DOMAINS
+
+[JA] Helm デプロイ前に、backend values の以下パラメータを確認し、実環境値へ更新してください:
+     - config.env.FRONTEND_BASE_URL
+     - config.env.CSRF_TRUSTED_ORIGINS
+     - config.env.ENTRA_TENANT_ID
+     - config.env.ENTRA_CLIENT_ID
+     - config.env.ENTRA_REDIRECT_URI
+     - config.env.ENTRA_INTERNAL_DOMAINS
+------------------------------------------------------------
+EOF
   fi
 fi
