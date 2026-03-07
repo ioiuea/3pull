@@ -155,13 +155,13 @@ lines = [
     f"param networkPlugin = {quote(config.get('networkPlugin', 'azure'))}",
     f"param networkPolicy = {quote(config.get('networkPolicy', 'azure'))}",
     f"param networkPluginMode = {quote(config.get('networkPluginMode', 'overlay'))}",
-    f"param loadBalancerSku = {quote(config.get('loadBalancerSku', 'standard'))}",
+    f"param loadBalancerSku = {quote(config.get('loadBalancerSku', 'Standard'))}",
     f"param podCidr = {quote(pod_cidr)}",
     f"param serviceCidr = {quote(service_cidr)}",
     f"param dnsServiceIP = {quote(dns_service_ip)}",
     f"param autoUpgradeChannel = {quote(config.get('autoUpgradeChannel', 'patch'))}",
     f"param enableAzurePolicyAddon = {'true' if bool(config.get('enableAzurePolicyAddon', True)) else 'false'}",
-    f"param enableIngressApplicationGatewayAddon = {'true' if bool(config.get('enableIngressApplicationGatewayAddon', True)) else 'false'}",
+    f"param enableIngressApplicationGatewayAddon = {'true' if bool(config.get('enableIngressApplicationGatewayAddon', False)) else 'false'}",
     f"param enableOidcIssuer = {'true' if bool(config.get('enableOidcIssuer', True)) else 'false'}",
     f"param enableWorkloadIdentity = {'true' if bool(config.get('enableWorkloadIdentity', True)) else 'false'}",
     f"param enableAzureKeyvaultSecretsProviderAddon = {'true' if bool(config.get('enableAzureKeyvaultSecretsProviderAddon', True)) else 'false'}",
@@ -169,6 +169,7 @@ lines = [
     f"param managedAad = {'true' if bool(config.get('managedAad', True)) else 'false'}",
     f"param enablePrivateCluster = {'true' if bool(config.get('enablePrivateCluster', True)) else 'false'}",
     f"param enablePrivateClusterPublicFqdn = {'true' if bool(config.get('enablePrivateClusterPublicFqdn', False)) else 'false'}",
+    f"param enableLowLatencyApplicationGatewaySubnet = {'true' if bool(network_values.get('enableLowLatencyApplicationGatewaySubnet', False)) else 'false'}",
     "",
 ]
 params_file.write_text("\n".join(lines), encoding="utf-8")

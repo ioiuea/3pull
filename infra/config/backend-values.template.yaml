@@ -1,5 +1,24 @@
 systemName: sample-system
 
+ingress:
+  enabled: true
+  standard:
+    ingressClassName: azure-application-gateway
+    annotations: {}
+    host: api.example.com
+    paths:
+      - path: /backend
+        pathType: Prefix
+  lowLatency:
+    enabled: true
+    ingressClassName: azure-application-gateway-low-latency
+    annotations: {}
+    host: ll-api.example.com
+    # 低遅延系は限定 API のみを公開する
+    paths:
+      - path: /backend/realtime
+        pathType: Prefix
+
 api:
   enabled: true
   replicaCount: 1

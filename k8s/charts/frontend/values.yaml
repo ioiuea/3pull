@@ -11,6 +11,19 @@
 # -----------------------------------------------------------------------------
 systemName: '3pull'
 
+# Ingress 設定
+# frontend は通常系 App Gateway のみで公開する前提です。
+ingress:
+  enabled: true
+  standard:
+    ingressClassName: azure-application-gateway
+    annotations: {}
+    # 必須: frontend の公開ドメインへ置き換えてください
+    host: 'app-dev-3pull.example.com'
+    paths:
+      - path: /
+        pathType: Prefix
+
 # Frontend Deployment 設定
 # image.repository はインフラ側で自動更新されます。
 # image.tag は CI で毎回置き換えてください。

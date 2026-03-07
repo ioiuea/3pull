@@ -98,6 +98,18 @@ def add_guidance_comments(content: str) -> str:
 
     section_comments = [
         (
+            "ingress:",
+            "# Ingress 設定\n# 通常系/低遅延系のドメイン分離を前提とします（ll = low-latency）。",
+        ),
+        (
+            "  standard:",
+            "  # 通常系 API 向け Ingress",
+        ),
+        (
+            "  lowLatency:",
+            "  # 低遅延系 API 向け Ingress（限定 API のみ公開）",
+        ),
+        (
             "api:",
             "# API Deployment 設定\n# image.repository はインフラ側で自動更新されます。\n# image.tag は CI で毎回置き換えてください。",
         ),
@@ -107,7 +119,7 @@ def add_guidance_comments(content: str) -> str:
         ),
         (
             "keda:",
-            "# KEDA 設定\n# workloadIdentity.clientId は worker Managed Identity で自動更新されます。",
+            "# KEDA 設定\n# workloadIdentity.clientId は keda-operator Managed Identity で自動更新されます。",
         ),
         (
             "cleanup:",
@@ -128,6 +140,10 @@ def add_guidance_comments(content: str) -> str:
         (
             "secretRefs:",
             "# Secret のキー名マッピング\n# Key Vault から取得したシークレット名と一致させます。",
+        ),
+        (
+            "    host:",
+            "    # 必須: 公開ドメインへ置き換えてください",
         ),
         (
             "    ENTRA_TENANT_ID:",
@@ -191,6 +207,7 @@ aks_meta = json.loads(aks_meta_path.read_text(encoding="utf-8"))
 storage_config = json.loads(storage_config_path.read_text(encoding="utf-8"))
 
 common_values = common.get("common", {})
+network_values = common.get("network", {})
 environment_name = str(common_values.get("environmentName", "")).strip()
 system_name = str(common_values.get("systemName", "")).strip()
 if not environment_name or not system_name:
@@ -206,6 +223,7 @@ if not template_path.exists():
 api_identity_name = f"mi-{environment_name}-{system_name}-api"
 worker_identity_name = f"mi-{environment_name}-{system_name}-worker"
 cleanup_identity_name = f"mi-{environment_name}-{system_name}-cleanup"
+keda_operator_identity_name = f"mi-{environment_name}-{system_name}-keda-operator"
 
 api_client_id = run_az(
     [
@@ -255,6 +273,22 @@ cleanup_client_id = run_az(
     ]
 )
 
+keda_operator_client_id = run_az(
+    [
+        "az",
+        "identity",
+        "show",
+        "--resource-group",
+        managed_identity_resource_group_name,
+        "--name",
+        keda_operator_identity_name,
+        "--query",
+        "clientId",
+        "-o",
+        "tsv",
+    ]
+)
+
 tenant_id = run_az(["az", "account", "show", "--query", "tenantId", "-o", "tsv"])
 
 acr_name = f"cr{normalize_registry_suffix(environment_name)}{normalize_registry_suffix(system_name)}"
@@ -262,16 +296,22 @@ image_prefix = f"{acr_name}.azurecr.io"
 system_image_name = normalize_image_component(system_name)
 storage_account_name = normalize_storage_account_name(environment_name, system_name)
 blob_container_name = str(storage_config.get("blobContainerName", "async-jobs")).strip() or "async-jobs"
+standard_api_host = f"api-{environment_name}-{system_name}.example.com"
+low_latency_api_host = f"ll-api-{environment_name}-{system_name}.example.com"
+enable_low_latency_subnet = bool(network_values.get("enableLowLatencyApplicationGatewaySubnet", False))
 
 replacements = {
     "systemName": yaml_quote(system_name),
+    "ingress.standard.host": yaml_quote(standard_api_host),
+    "ingress.lowLatency.host": yaml_quote(low_latency_api_host),
+    "ingress.lowLatency.enabled": "true" if enable_low_latency_subnet else "false",
     "api.image.repository": yaml_quote(f"{image_prefix}/{system_image_name}-api"),
     "api.image.tag": yaml_quote("__IMAGE_TAG__"),
     "workers.*.image.repository": yaml_quote(f"{image_prefix}/{system_image_name}-worker"),
     "workers.*.image.tag": yaml_quote("__IMAGE_TAG__"),
     "cleanup.image.repository": yaml_quote(f"{image_prefix}/{system_image_name}-cleanup"),
     "cleanup.image.tag": yaml_quote("__IMAGE_TAG__"),
-    "keda.workloadIdentity.clientId": yaml_quote(worker_client_id),
+    "keda.workloadIdentity.clientId": yaml_quote(keda_operator_client_id),
     "keyVault.vaultName": yaml_quote(f"kv-{environment_name}-{system_name}"),
     "keyVault.tenantId": yaml_quote(tenant_id),
     "serviceAccounts.api.name": yaml_quote(f"sa-{environment_name}-{system_name}-api"),

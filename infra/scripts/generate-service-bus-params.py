@@ -85,6 +85,7 @@ if not managed_identity_resource_group_name:
 
 api_managed_identity_name = f"mi-{environment_name}-{system_name}-api"
 worker_managed_identity_name = f"mi-{environment_name}-{system_name}-worker"
+keda_operator_managed_identity_name = f"mi-{environment_name}-{system_name}-keda-operator"
 enable_workload_identity_rbac = bool(service_bus_values.get("enableWorkloadIdentityRbac", True))
 
 service_bus_namespace_name = f"sb-{environment_name}-{system_name}"
@@ -133,6 +134,7 @@ lines = [
     f"param managedIdentityResourceGroupName = {quote(managed_identity_resource_group_name)}",
     f"param apiManagedIdentityName = {quote(api_managed_identity_name)}",
     f"param workerManagedIdentityName = {quote(worker_managed_identity_name)}",
+    f"param kedaOperatorManagedIdentityName = {quote(keda_operator_managed_identity_name)}",
     f"param enableWorkloadIdentityRbac = {'true' if enable_workload_identity_rbac else 'false'}",
     f"param serviceBusNamespaceName = {quote(service_bus_namespace_name)}",
     f"param serviceBusSkuName = {quote(config.get('skuName', 'Standard'))}",

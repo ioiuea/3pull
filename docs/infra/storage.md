@@ -1,161 +1,64 @@
-# ストレージアカウント
+# Storage Account
 
-## ストレージアカウント本体
-
-| 項目 | 設定値 | Bicepプロパティ名 |
-| --- | --- | --- |
-| 名前 | st[common.environmentName][common.systemName] | name |
-| 場所 | [common.location] | location |
-| SKU Name | Standard_LRS | sku.name |
-| Kind | StorageV2 | kind |
-| Access Tier | Hot | properties.accessTier |
-| パブリックアクセス | Disabled | properties.publicNetworkAccess |
-
-## 診断設定
-
-- 対象:
-  - Blob Service（`Microsoft.Storage/storageAccounts/blobServices`）
-  - File Service（`Microsoft.Storage/storageAccounts/fileServices`）
-  - Queue Service（`Microsoft.Storage/storageAccounts/queueServices`）
-  - Table Service（`Microsoft.Storage/storageAccounts/tableServices`）
-- ログ（各サービス共通）: `audit`, `allLogs`
-- メトリック（各サービス共通）: `AllMetrics`
-- 送信先: Log Analytics
-
-## 削除ロック
-
-- Storage Account 本体に削除ロックを適用
-- 各 Private Endpoint（blob/file/queue/table）に削除ロックを適用
-- 各 Private DNS ゾーンに削除ロックを適用（`network.enableCentralizedPrivateDns=false` の場合のみ）
-
-## Blob サービスのデータ保護
-
-誤削除や上書き時の復旧性を高めるため、以下を有効化します。
+## Storage Account 本体
 
 | 項目 | 設定値 | Bicepプロパティ名 |
 | --- | --- | --- |
-| BLOB の論理的な削除 | 有効 | blobServices.properties.deleteRetentionPolicy.enabled |
-| BLOB の論理削除保持日数 | 7日 | blobServices.properties.deleteRetentionPolicy.days |
-| コンテナーの論理的な削除 | 有効 | blobServices.properties.containerDeleteRetentionPolicy.enabled |
-| コンテナー論理削除保持日数 | 7日 | blobServices.properties.containerDeleteRetentionPolicy.days |
-| バージョン管理 | 有効 | blobServices.properties.isVersioningEnabled |
+| 名前 | `st[common.environmentName][common.systemName]` | `name` |
+| 場所 | `[common.location]` | `location` |
+| SKU | `Standard_LRS` | `sku.name` |
+| Kind | `StorageV2` | `kind` |
+| Access Tier | `Hot` | `properties.accessTier` |
+| Public Network Access | `Disabled` | `properties.publicNetworkAccess` |
 
-## リソース命名規則
+## 初期 Blob コンテナ
 
-- CAF の省略形ルールに準拠し、Storage Account は `st` を利用します。
-- Storage Account 名は **ハイフン不可** です。
-- Storage Account 名は英小文字・数字のみを使用します。
-- そのため命名は `st[common.environmentName][common.systemName]` を基本とします。
-- 文字数制約（3〜24文字）を超える場合は、`environmentName` / `systemName` を短縮して調整します。
+| 用途 | コンテナ名 |
+| --- | --- |
+| 非同期ジョブ成果物 | `async-jobs` |
 
-参考:
+## RBAC（Workload Identity）
 
-- Azure CAF Resource Abbreviations
-  - https://learn.microsoft.com/ja-jp/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations
+`storage.enableWorkloadIdentityRbac=true` のとき Bicep で付与。
 
-## 初期作成コンテナ
-
-初期構築時に以下の Blob コンテナを作成します。
-
-| 用途 | コンテナ名 | 備考 |
-| --- | --- | --- |
-| 非同期ジョブ成果物保存 | `async-jobs` | `AZURE_BLOB_CONTAINER` の既定値と一致させる |
-
-## コンテナ
-
-| 項目 | 設定値 | Bicepプロパティ名 |
-| --- | --- | --- |
-| 名前 | st[common.environmentName][common.systemName]/default/async-jobs | name |
-| パブリックアクセス | None | properties.publicAccess |
-
-## アクセス権（RBAC）方針
-
-- 認証は Managed Identity + Azure RBAC を前提とします（接続文字列配布はしない）。
-- RBAC は Bicep の `Microsoft.Authorization/roleAssignments` で冪等管理します。
-
-| principal | 推奨ロール | 付与スコープ | 主な用途 |
+| principal | ロール | 付与スコープ | 用途 |
 | --- | --- | --- | --- |
-| `mi-[common.environmentName]-[common.systemName]-api` | `Storage Blob Data Contributor` | Storage Account | 成果物作成/参照/更新 |
-| `mi-[common.environmentName]-[common.systemName]-worker` | `Storage Blob Data Contributor` | Storage Account | 成果物アップロード/更新 |
-| `mi-[common.environmentName]-[common.systemName]-cleanup` | `Storage Blob Data Contributor` | Storage Account | 成果物削除（期限切れ掃除） |
+| `mi-[env]-[system]-api` | `Storage Blob Data Contributor` | Storage Account | API の作成/更新/参照 |
+| `mi-[env]-[system]-worker` | `Storage Blob Data Contributor` | Storage Account | worker の作成/更新/参照 |
+| `mi-[env]-[system]-cleanup` | `Storage Blob Data Contributor` | Storage Account | cleanup の削除含むメンテ |
 
 補足:
 
-- 将来コンテナを追加する場合は、用途別コンテナ + 用途別ロールで分離します。
+- スコープはコンテナ単位ではなく Storage Account 固定。
+- keda-operator MI には Storage RBAC を付与しません。
 
-## Private Endpoint
+## Private Endpoint / DNS
 
-| サービス | 名前 | プライベートリンク接続名 | グループID | サブネットID |
-| --- | --- | --- | --- | --- |
-| Blob | pep-st-blob-[common.environmentName]-[common.systemName] | pep-st-blob-[common.environmentName]-[common.systemName] | blob | vnet-[common.environmentName]-[common.systemName]/PrivateEndpointSubnet |
-| File | pep-st-file-[common.environmentName]-[common.systemName] | pep-st-file-[common.environmentName]-[common.systemName] | file | vnet-[common.environmentName]-[common.systemName]/PrivateEndpointSubnet |
-| Queue | pep-st-queue-[common.environmentName]-[common.systemName] | pep-st-queue-[common.environmentName]-[common.systemName] | queue | vnet-[common.environmentName]-[common.systemName]/PrivateEndpointSubnet |
-| Table | pep-st-table-[common.environmentName]-[common.systemName] | pep-st-table-[common.environmentName]-[common.systemName] | table | vnet-[common.environmentName]-[common.systemName]/PrivateEndpointSubnet |
+4サービス（blob/file/queue/table）分を作成します。
 
-共通:
+- PEP: `pep-st-blob|file|queue|table-[env]-[system]`
+- DNS Zone:
+  - `privatelink.blob.core.windows.net`
+  - `privatelink.file.core.windows.net`
+  - `privatelink.queue.core.windows.net`
+  - `privatelink.table.core.windows.net`
+- `network.enableCentralizedPrivateDns=true` の場合は環境側 DNS 作成をスキップ
 
-- 場所: `[common.location]`
-- プライベートリンク対象ID: `id(st[common.environmentName][common.systemName])`
-- Bicepプロパティ:
-  - `name`
-  - `properties.privateLinkServiceConnections.name`
-  - `properties.privateLinkServiceConnections.properties.privateLinkServiceId`
-  - `properties.privateLinkServiceConnections.properties.groupIds`
-  - `properties.subnet.id`
+## データ保護
 
-## NSG（PrivateEndpointSubnet）方針
-
-- Blob Private Endpoint 宛ては AKS サブネットからのみ許可します。
-- 許可ソースは `UserNodeSubnet` と `AgentNodeSubnet` の両方です。
-- 受信規則は `docs/infra/network.md` の `nsg-[common.environmentName]-[common.systemName]-pep` に従います。
-
-## Private DNS ゾーン
-
-`network.enableCentralizedPrivateDns` を使って、ゾーン作成の有無を制御します。
-
-- `false`（デフォルト）: 集約 DNS なし。環境内で各サービスの Private DNS ゾーンを作成して利用
-- `true`: 集約 DNS あり。環境内でのゾーン作成はスキップし、集約側 DNS（ハブ側）で管理されたゾーンを利用
-
-| サービス | ゾーン名 |
+| 項目 | 設定値 |
 | --- | --- |
-| Blob | privatelink.blob.core.windows.net |
-| File | privatelink.file.core.windows.net |
-| Queue | privatelink.queue.core.windows.net |
-| Table | privatelink.table.core.windows.net |
+| Blob soft delete | 有効 |
+| Container soft delete | 有効 |
+| Blob versioning | 有効 |
 
-Bicepプロパティ:
+## 診断設定 / ロック
 
-- `name`
-- `location` (`global`)
+- 診断設定: Blob/File/Queue/Table 各サービスを Log Analytics へ送信
+- `enableResourceLock=true` の場合に Storage/PEP/DNS へ削除ロック
 
-## DNS ゾーングループ
+## 実装ファイル
 
-PEP と Private DNS ゾーンを紐づけるリソース。
-
-- `network.enableCentralizedPrivateDns=false` の場合: 各サービス分を作成します
-- `network.enableCentralizedPrivateDns=true` の場合: 環境内ゾーンを作成しないため、DNS ゾーングループも作成しません
-
-| サービス | 親 (Private Endpoint) | DNS ゾーングループ名 | DNS ゾーン構成名 | DNS ゾーンID |
-| --- | --- | --- | --- | --- |
-| Blob | pep-st-blob-[common.environmentName]-[common.systemName] | dnszg-st-blob-[common.environmentName]-[common.systemName] | privatelink-st-blob-core-windows-net | id(privatelink.blob.core.windows.net) |
-| File | pep-st-file-[common.environmentName]-[common.systemName] | dnszg-st-file-[common.environmentName]-[common.systemName] | privatelink-file-core-windows-net | id(privatelink.file.core.windows.net) |
-| Queue | pep-st-queue-[common.environmentName]-[common.systemName] | dnszg-st-queue-[common.environmentName]-[common.systemName] | privatelink-queue-core-windows-net | id(privatelink.queue.core.windows.net) |
-| Table | pep-st-table-[common.environmentName]-[common.systemName] | dnszg-st-table-[common.environmentName]-[common.systemName] | privatelink-table-core-windows-net | id(privatelink.table.core.windows.net) |
-
-## 仮想ネットワークリンク
-
-- `network.enableCentralizedPrivateDns=false` の場合: 作成します
-- `network.enableCentralizedPrivateDns=true` の場合: 環境内ゾーンを作成しないため、仮想ネットワークリンクも作成しません
-
-| サービス | 親 (Private DNS ゾーン) | リンク名 |
-| --- | --- | --- |
-| Blob | privatelink.blob.core.windows.net | link-st-blob-to-vnet-[common.environmentName]-[common.systemName] |
-| File | privatelink.file.core.windows.net | link-st-file-to-vnet-[common.environmentName]-[common.systemName] |
-| Queue | privatelink.queue.core.windows.net | link-st-queue-to-vnet-[common.environmentName]-[common.systemName] |
-| Table | privatelink.table.core.windows.net | link-st-table-to-vnet-[common.environmentName]-[common.systemName] |
-
-共通:
-
-- 場所: `global`
-- 自動登録: `false` (`properties.registrationEnabled`)
-- 仮想ネットワークID: `id(vnet-[common.environmentName]-[common.systemName])` (`properties.virtualNetwork.id`)
+- `infra/bicep/main.storage.bicep`
+- `infra/scripts/generate-storage-params.py`
+- `infra/config/storage.json`

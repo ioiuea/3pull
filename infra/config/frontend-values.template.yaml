@@ -1,5 +1,15 @@
 systemName: sample-system
 
+ingress:
+  enabled: true
+  standard:
+    ingressClassName: azure-application-gateway
+    annotations: {}
+    host: app.example.com
+    paths:
+      - path: /
+        pathType: Prefix
+
 frontend:
   enabled: true
   replicaCount: 1

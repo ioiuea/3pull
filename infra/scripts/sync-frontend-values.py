@@ -77,8 +77,16 @@ def add_guidance_comments(content: str) -> str:
 
     section_comments = [
         (
+            "ingress:",
+            "# Ingress 設定\n# frontend は通常系 App Gateway のみで公開する前提です。",
+        ),
+        (
             "frontend:",
             "# Frontend Deployment 設定\n# image.repository はインフラ側で自動更新されます。\n# image.tag は CI で毎回置き換えてください。",
+        ),
+        (
+            "    host:",
+            "    # 必須: frontend の公開ドメインへ置き換えてください",
         ),
     ]
 
@@ -125,9 +133,11 @@ if not template_path.exists():
 acr_name = f"cr{normalize_registry_suffix(environment_name)}{normalize_registry_suffix(system_name)}"
 image_prefix = f"{acr_name}.azurecr.io"
 system_image_name = normalize_image_component(system_name)
+frontend_host = f"app-{environment_name}-{system_name}.example.com"
 
 replacements = {
     "systemName": yaml_quote(system_name),
+    "ingress.standard.host": yaml_quote(frontend_host),
     "frontend.image.repository": yaml_quote(f"{image_prefix}/{system_image_name}-web"),
     "frontend.image.tag": yaml_quote("__IMAGE_TAG__"),
 }

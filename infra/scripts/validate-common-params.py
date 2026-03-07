@@ -653,6 +653,8 @@ def main() -> int:
         "cosmosDatabase",
         "maintenanceVm",
         "federatedCredential",
+        "agicController",
+        "kedaController",
     ]
     if not isinstance(toggles, dict):
         errors.append("resourceToggles: object で指定してください。")

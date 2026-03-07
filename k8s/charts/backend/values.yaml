@@ -12,6 +12,30 @@
 # -----------------------------------------------------------------------------
 systemName: '3pull'
 
+# Ingress 設定
+# 通常系/低遅延系のドメイン分離を前提とします（ll = low-latency）。
+ingress:
+  enabled: true
+  # 通常系 API 向け Ingress
+  standard:
+    ingressClassName: azure-application-gateway
+    annotations: {}
+    # 必須: 公開ドメインへ置き換えてください
+    host: 'api-dev-3pull.example.com'
+    paths:
+      - path: /backend
+        pathType: Prefix
+  # 低遅延系 API 向け Ingress（限定 API のみ公開）
+  lowLatency:
+    enabled: false
+    ingressClassName: azure-application-gateway-low-latency
+    annotations: {}
+    host: 'll-api-dev-3pull.example.com'
+    # 低遅延系は限定 API のみを公開する
+    paths:
+      - path: /backend/realtime
+        pathType: Prefix
+
 # API Deployment 設定
 # image.repository はインフラ側で自動更新されます。
 # image.tag は CI で毎回置き換えてください。
@@ -71,12 +95,12 @@ workers:
     resources: {}
 
 # KEDA 設定
-# workloadIdentity.clientId は worker Managed Identity で自動更新されます。
+# workloadIdentity.clientId は keda-operator Managed Identity で自動更新されます。
 keda:
   enabled: true
   triggerAuthenticationName: r-sample-system-worker-trigger-auth
   workloadIdentity:
-    clientId: '2eb5f14c-ba01-4dd1-a65a-41534a0ec4e2'
+    clientId: '9fc24cb4-4717-4c24-862a-75e97f3bff67'
 
 # Cleanup CronJob 設定
 # image.tag は CI で毎回置き換えてください。

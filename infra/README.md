@@ -417,6 +417,7 @@ Service Bus へ Managed Identity ベースの RBAC を自動付与するかど�
 - `true`（デフォルト）:
   - `mi-<env>-<system>-api` に `Azure Service Bus Data Sender`
   - `mi-<env>-<system>-worker` に `Azure Service Bus Data Receiver`
+  - `mi-<env>-<system>-keda-operator` に `Azure Service Bus Data Receiver`
 - `false`: Service Bus のロール割り当てを作成しない
 
 ### storage.enableWorkloadIdentityRbac
@@ -778,6 +779,8 @@ Cosmos DB のキーによるメタデータ書き込みを無効化するかど�
 - `cosmosDatabase`
 - `redis`
 - `federatedCredential`
+- `agicController`
+- `kedaController`
 
 ## ネットワーク構成ドキュメント
 
@@ -824,6 +827,7 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
   - Application Gateway（Low Latency, `network.enableLowLatencyApplicationGatewaySubnet=true` の場合）
 - service
   - AKS
+  - Application Gateway RBAC（AGIC 用 Managed Identity に App Gateway 更新権限を付与）
   - ACR（ACR RG スコープで AKS をアタッチ）
   - Key Vault
   - Service Bus
@@ -834,8 +838,10 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
   - Redis
 - post
   - Federated Credential（AKS が存在する場合のみ）
-  - backend Helm values 生成（`infra/config/backend-values.template.yaml` から `k8s/charts/backend/values.yaml` を生成）
+  - AGIC コントローラ導入（`resourceToggles.agicController=true` かつ `resourceToggles.federatedCredential=true` かつ AKS が存在する場合のみ）
+  - KEDA コントローラ導入（`resourceToggles.kedaController=true` かつ `resourceToggles.federatedCredential=true` かつ AKS が存在する場合のみ）
   - frontend Helm values 生成（`infra/config/frontend-values.template.yaml` から `k8s/charts/frontend/values.yaml` を生成）
+  - backend Helm values 生成（`infra/config/backend-values.template.yaml` から `k8s/charts/backend/values.yaml` を生成）
 
 ## 出力ファイル（params/）
 

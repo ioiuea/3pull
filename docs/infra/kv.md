@@ -4,110 +4,44 @@
 
 | 項目 | 設定値 | Bicepプロパティ名 |
 | --- | --- | --- |
-| 名前 | kv-[common.environmentName]-[common.systemName] | name |
-| 場所 | [common.location] | location |
-| SKU Family | A | properties.sku.family |
-| SKU Name | standard | properties.sku.name |
-| RBAC有効化 | true | properties.enableRbacAuthorization |
-| パブリックアクセス | Disabled | properties.publicNetworkAccess |
-| ソフトデリート | true | properties.enableSoftDelete |
-| パージ保護 | true | properties.enablePurgeProtection |
-| 論理削除保持日数 | 90 | properties.softDeleteRetentionInDays |
+| 名前 | `kv-[common.environmentName]-[common.systemName]` | `name` |
+| 場所 | `[common.location]` | `location` |
+| SKU | `standard` | `properties.sku.name` |
+| RBAC 有効化 | `true` | `properties.enableRbacAuthorization` |
+| Public Network Access | `Disabled` | `properties.publicNetworkAccess` |
+| Soft Delete | `true` | `properties.enableSoftDelete` |
+| Purge Protection | `true` | `properties.enablePurgeProtection` |
+| 保持日数 | `90` | `properties.softDeleteRetentionInDays` |
 
-## 診断設定
+## RBAC（Workload Identity）
 
-- 対象: Key Vault 本体（`Microsoft.KeyVault/vaults`）
-- ログ: `allLogs`, `audit`
-- メトリック: `AllMetrics`
-- 送信先: Log Analytics
+`keyVault.enableWorkloadIdentityRbac=true` のとき Bicep で付与。
 
-## 削除ロック
-
-- Key Vault 本体に削除ロックを適用
-- Private Endpoint に削除ロックを適用
-- Private DNS ゾーンに削除ロックを適用（`network.enableCentralizedPrivateDns=false` の場合のみ）
-
-## リソース命名規則
-
-- CAF の省略形ルールに準拠し、Key Vault は `kv` を利用します。
-- そのため命名は `kv-[common.environmentName]-[common.systemName]` を基本とします。
-- 文字数制約（3〜24文字）を超える場合は、`environmentName` / `systemName` を短縮して調整します。
-
-参考:
-
-- Azure CAF Resource Abbreviations
-  - https://learn.microsoft.com/ja-jp/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations
-
-## アクセス権（RBAC）方針
-
-- Key Vault は `enableRbacAuthorization=true` を前提とします。
-- 認証は Managed Identity + Azure RBAC を前提とします。
-- RBAC は Bicep の `Microsoft.Authorization/roleAssignments` で冪等管理します。
-
-| principal | 推奨ロール | 付与スコープ | 主な用途 |
+| principal | ロール | スコープ | 用途 |
 | --- | --- | --- | --- |
-| `mi-[common.environmentName]-[common.systemName]-api` | `Key Vault Secrets User` | `kv-[common.environmentName]-[common.systemName]` | API 実行時の Secret 参照 |
-| `mi-[common.environmentName]-[common.systemName]-worker` | `Key Vault Secrets User` | `kv-[common.environmentName]-[common.systemName]` | worker 実行時の Secret 参照 |
-| `mi-[common.environmentName]-[common.systemName]-cleanup` | `Key Vault Secrets User` | `kv-[common.environmentName]-[common.systemName]` | cleanup 実行時の Secret 参照 |
-| CI/CD 実行 principal | `Key Vault Secrets Officer` | `kv-[common.environmentName]-[common.systemName]` | Secret 登録・更新 |
+| `mi-[env]-[system]-api` | `Key Vault Secrets User` | Key Vault | API 実行時のSecret参照 |
+| `mi-[env]-[system]-worker` | `Key Vault Secrets User` | Key Vault | worker 実行時のSecret参照 |
+| `mi-[env]-[system]-cleanup` | `Key Vault Secrets User` | Key Vault | cleanup 実行時のSecret参照 |
+| bootstrap/CI principal | `Key Vault Secrets Officer` | Key Vault | Secret 登録/更新 |
 
 補足:
 
-- Secret の投入（`az keyvault secret set`）は bootstrap 手順で実施し、値は CI Secret 管理に保持します。
-- 参照専用 workload に `Key Vault Administrator` は付与しません（過剰権限回避）。
+- keda-operator MI には Key Vault RBAC を付与しません（最小権限）。
+- Secret 値そのものは IaC に含めず、`az keyvault secret set` で投入します。
 
-## Private Endpoint
+## Private Endpoint / DNS
 
-| 項目 | 設定値 | Bicepプロパティ名 |
-| --- | --- | --- |
-| 名前 | pep-kv-[common.environmentName]-[common.systemName] | name |
-| 場所 | [common.location] | location |
-| プライベートリンク接続名 | pep-kv-[common.environmentName]-[common.systemName] | properties.privateLinkServiceConnections.name |
-| プライベートリンク対象ID | id(kv-[common.environmentName]-[common.systemName]) | properties.privateLinkServiceConnections.properties.privateLinkServiceId |
-| グループID | vault | properties.privateLinkServiceConnections.properties.groupIds |
-| サブネットID | vnet-[common.environmentName]-[common.systemName]/PrivateEndpointSubnet | properties.subnet.id |
+- PEP: `pep-kv-[env]-[system]`
+- DNS Zone: `privatelink.vaultcore.azure.net`
+- `network.enableCentralizedPrivateDns=true` の場合は環境側 DNS 作成をスキップ
 
-## NSG（PrivateEndpointSubnet）方針
+## 診断設定 / ロック
 
-- Key Vault Private Endpoint 宛ては AKS サブネットからのみ許可します。
-- 許可ソースは `UserNodeSubnet` と `AgentNodeSubnet` の両方です。
-- 受信規則は `docs/infra/network.md` の `nsg-[common.environmentName]-[common.systemName]-pep` に従います。
+- 診断設定: `allLogs`, `audit`, `AllMetrics` -> Log Analytics
+- `enableResourceLock=true` の場合に Key Vault/PEP/DNS へ削除ロック
 
-## Private DNS ゾーン
+## 実装ファイル
 
-`network.enableCentralizedPrivateDns` を使って、ゾーン作成の有無を制御します。
-
-- `false`（デフォルト）: 集約 DNS なし。環境内で `privatelink.vaultcore.azure.net` を作成して利用
-- `true`: 集約 DNS あり。環境内でのゾーン作成はスキップし、集約側 DNS（ハブ側）で管理されたゾーンを利用
-
-| 項目 | 設定値 | Bicepプロパティ名 |
-| --- | --- | --- |
-| 名前 | privatelink.vaultcore.azure.net | name |
-| 場所 | global | location |
-
-## DNS ゾーングループ
-
-PEP と Private DNS ゾーンを紐づけるリソース。
-
-- `network.enableCentralizedPrivateDns=false` の場合: 作成します
-- `network.enableCentralizedPrivateDns=true` の場合: 環境内ゾーンを作成しないため、DNS ゾーングループも作成しません
-
-| 項目 | 設定値 | Bicepプロパティ名 |
-| --- | --- | --- |
-| 親 | pep-kv-[common.environmentName]-[common.systemName] | parent |
-| 名前 | dnszg-kv-[common.environmentName]-[common.systemName] | name |
-| プライベートDNSゾーン構成名 | privatelink-vaultcore-azure-net | properties.privateDnsZoneConfigs.name |
-| プライベートDNSゾーンID | id(privatelink.vaultcore.azure.net) | properties.privateDnsZoneConfigs.properties.privateDnsZoneId |
-
-## 仮想ネットワークリンク
-
-- `network.enableCentralizedPrivateDns=false` の場合: 作成します
-- `network.enableCentralizedPrivateDns=true` の場合: 環境内ゾーンを作成しないため、仮想ネットワークリンクも作成しません
-
-| 項目 | 設定値 | Bicepプロパティ名 |
-| --- | --- | --- |
-| 親 | privatelink.vaultcore.azure.net | parent |
-| 名前 | link-kv-to-vnet-[common.environmentName]-[common.systemName] | name |
-| 場所 | global | location |
-| 自動登録 | false | properties.registrationEnabled |
-| 仮想ネットワークID | id(vnet-[common.environmentName]-[common.systemName]) | properties.virtualNetwork.id |
+- `infra/bicep/main.key-vault.bicep`
+- `infra/scripts/generate-key-vault-params.py`
+- `infra/config/key-vault.json`

@@ -454,12 +454,12 @@
        `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-worker --name fic-3pull-worker --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:<namespace>:<serviceAccounts.worker.name>" --audience "api://AzureADTokenExchange"`
      - cleanup:
        `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-cleanup --name fic-3pull-cleanup --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:<namespace>:<serviceAccounts.cleanup.name>" --audience "api://AzureADTokenExchange"`
-     - KEDA operator（例: worker 用 Managed Identity を流用する場合）:
-       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-worker --name fic-keda-operator --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:keda:keda-operator" --audience "api://AzureADTokenExchange"`
-   - KEDA の Azure scaler が動くためには、上記に加えて `keda-operator` ServiceAccount に利用する clientId を annotation 設定する
-     - 例: `kubectl annotate serviceaccount -n keda keda-operator azure.workload.identity/client-id=<KEDA_OR_WORKER_MI_CLIENT_ID> --overwrite`
-   - `keda-operator` Pod 側にも Workload Identity の利用ラベルを付与する
-     - 例: `kubectl patch deployment -n keda keda-operator --type='merge' -p '{"spec":{"template":{"metadata":{"labels":{"azure.workload.identity/use":"true"}}}}}'`
+    - KEDA operator（専用 Managed Identity を利用する場合）:
+      `az identity federated-credential create --resource-group 3pull-app --identity-name mi-<ENV>-3pull-keda-operator --name fic-<ENV>-3pull-keda-operator --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:keda:keda-operator" --audience "api://AzureADTokenExchange"`
+  - 現在の実装では、KEDA の `keda-operator` ServiceAccount annotation と Pod の Workload Identity 設定は `infra/main.sh` の KEDA Helm デプロイ時に自動設定する
+    - `serviceAccount.operator.annotations.azure.workload.identity/client-id`
+    - `podIdentity.azureWorkload.enabled=true`
+    - `podIdentity.azureWorkload.clientId=<mi-<env>-<system>-keda-operator の clientId>`
    - 作成後は各 Managed Identity ごとに一覧確認する
      - `az identity federated-credential list --resource-group 3pull-app --identity-name mi-3pull-api`
      - `az identity federated-credential list --resource-group 3pull-app --identity-name mi-3pull-worker`
@@ -649,7 +649,7 @@
      - 8. queue が空のときに worker が `0` 台まで落ちることを確認する
        - 目標: `minReplicaCount: 0`
    - Ingress / App Gateway を実装する手順
-     - 1. AGIC addon を継続利用する（AKS 側 `ingressApplicationGateway` addon）
+     - 1. AGIC は Helm 管理へ統一する（AKS 側 `ingressApplicationGateway` addon は利用しない）
      - 2. 通常系/低遅延系はドメイン分離で公開する
        - 例: `api.3pull.com`（通常系）, `ll-api.3pull.com`（低遅延系, `ll` は `low-latency` の略）
      - 3. backend / frontend chart それぞれに Ingress template を追加する

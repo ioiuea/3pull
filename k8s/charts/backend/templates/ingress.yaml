@@ -1,0 +1,79 @@
+{{- if and .Values.ingress.enabled .Values.api.enabled .Values.ingress.standard.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "backend.apiName" . }}-standard
+  namespace: {{ include "backend.namespace" . }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+  {{- with .Values.ingress.standard.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.standard.ingressClassName }}
+  rules:
+    - host: {{ .Values.ingress.standard.host }}
+      http:
+        paths:
+          {{- if .Values.ingress.standard.paths }}
+          {{- range .Values.ingress.standard.paths }}
+          - path: {{ .path }}
+            pathType: {{ default "Prefix" .pathType }}
+            backend:
+              service:
+                name: {{ include "backend.apiName" $ }}
+                port:
+                  number: {{ $.Values.api.service.port }}
+          {{- end }}
+          {{- else }}
+          - path: {{ default "/" .Values.ingress.standard.path }}
+            pathType: {{ default "Prefix" .Values.ingress.standard.pathType }}
+            backend:
+              service:
+                name: {{ include "backend.apiName" . }}
+                port:
+                  number: {{ .Values.api.service.port }}
+          {{- end }}
+---
+{{- end }}
+{{- if and .Values.ingress.enabled .Values.api.enabled .Values.ingress.lowLatency.enabled .Values.ingress.lowLatency.host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "backend.apiName" . }}-low-latency
+  namespace: {{ include "backend.namespace" . }}
+  labels:
+    {{- include "backend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+  {{- with .Values.ingress.lowLatency.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.lowLatency.ingressClassName }}
+  rules:
+    - host: {{ .Values.ingress.lowLatency.host }}
+      http:
+        paths:
+          {{- if .Values.ingress.lowLatency.paths }}
+          {{- range .Values.ingress.lowLatency.paths }}
+          - path: {{ .path }}
+            pathType: {{ default "Prefix" .pathType }}
+            backend:
+              service:
+                name: {{ include "backend.apiName" $ }}
+                port:
+                  number: {{ $.Values.api.service.port }}
+          {{- end }}
+          {{- else }}
+          - path: {{ default "/backend/realtime" .Values.ingress.lowLatency.path }}
+            pathType: {{ default "Prefix" .Values.ingress.lowLatency.pathType }}
+            backend:
+              service:
+                name: {{ include "backend.apiName" . }}
+                port:
+                  number: {{ .Values.api.service.port }}
+          {{- end }}
+{{- end }}

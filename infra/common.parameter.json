@@ -21,7 +21,9 @@
     "maintenanceVm": true,
     "cosmosDatabase": false,
     "redis": false,
-    "federatedCredential": false
+    "federatedCredential": true,
+    "agicController": true,
+    "kedaController": true
   },
   "network": {
     "enableFirewallIdps": false,

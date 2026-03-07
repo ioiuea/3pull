@@ -34,6 +34,7 @@ config = json.loads(config_path.read_text(encoding="utf-8"))
 aks_meta = json.loads(aks_meta_path.read_text(encoding="utf-8"))
 
 common_values = common.get("common", {})
+network_values = common.get("network", {})
 toggles = common.get("resourceToggles", {})
 environment_name = str(common_values.get("environmentName", "")).strip()
 system_name = str(common_values.get("systemName", "")).strip()
@@ -81,11 +82,22 @@ if not oidc_issuer_url:
 api_managed_identity_name = f"mi-{environment_name}-{system_name}-api"
 worker_managed_identity_name = f"mi-{environment_name}-{system_name}-worker"
 cleanup_managed_identity_name = f"mi-{environment_name}-{system_name}-cleanup"
+keda_operator_managed_identity_name = f"mi-{environment_name}-{system_name}-keda-operator"
 
 app_namespace = str(config.get("appNamespace", system_name)).strip() or system_name
 keda_namespace = str(config.get("kedaNamespace", "keda")).strip() or "keda"
 keda_operator_service_account_name = (
     str(config.get("kedaOperatorServiceAccountName", "keda-operator")).strip() or "keda-operator"
+)
+agic_namespace = str(config.get("agicNamespace", "ingress")).strip() or "ingress"
+agic_standard_service_account_name = (
+    str(config.get("agicStandardServiceAccountName", "sa-agic-standard")).strip() or "sa-agic-standard"
+)
+agic_low_latency_service_account_name = (
+    str(config.get("agicLowLatencyServiceAccountName", "sa-agic-lowlatency")).strip() or "sa-agic-lowlatency"
+)
+enable_low_latency_application_gateway_subnet = bool(
+    network_values.get("enableLowLatencyApplicationGatewaySubnet", False)
 )
 
 api_service_account_name = f"sa-{environment_name}-{system_name}-api"
@@ -96,6 +108,10 @@ api_federated_credential_name = f"fic-{environment_name}-{system_name}-api"
 worker_federated_credential_name = f"fic-{environment_name}-{system_name}-worker"
 cleanup_federated_credential_name = f"fic-{environment_name}-{system_name}-cleanup"
 keda_operator_federated_credential_name = f"fic-{environment_name}-{system_name}-keda-operator"
+agic_standard_managed_identity_name = f"mi-{environment_name}-{system_name}-agic-standard"
+agic_low_latency_managed_identity_name = f"mi-{environment_name}-{system_name}-agic-lowlatency"
+agic_standard_federated_credential_name = f"fic-{environment_name}-{system_name}-agic-standard"
+agic_low_latency_federated_credential_name = f"fic-{environment_name}-{system_name}-agic-lowlatency"
 
 params_dir.mkdir(parents=True, exist_ok=True)
 params_file = params_dir / "federated-credential.bicepparam"
@@ -106,16 +122,25 @@ lines = [
     f"param apiManagedIdentityName = {quote(api_managed_identity_name)}",
     f"param workerManagedIdentityName = {quote(worker_managed_identity_name)}",
     f"param cleanupManagedIdentityName = {quote(cleanup_managed_identity_name)}",
+    f"param kedaOperatorManagedIdentityName = {quote(keda_operator_managed_identity_name)}",
     f"param appNamespace = {quote(app_namespace)}",
     f"param apiServiceAccountName = {quote(api_service_account_name)}",
     f"param workerServiceAccountName = {quote(worker_service_account_name)}",
     f"param cleanupServiceAccountName = {quote(cleanup_service_account_name)}",
+    f"param agicNamespace = {quote(agic_namespace)}",
+    f"param agicStandardServiceAccountName = {quote(agic_standard_service_account_name)}",
+    f"param agicLowLatencyServiceAccountName = {quote(agic_low_latency_service_account_name)}",
     f"param kedaNamespace = {quote(keda_namespace)}",
     f"param kedaOperatorServiceAccountName = {quote(keda_operator_service_account_name)}",
+    f"param agicStandardManagedIdentityName = {quote(agic_standard_managed_identity_name)}",
+    f"param agicLowLatencyManagedIdentityName = {quote(agic_low_latency_managed_identity_name)}",
+    f"param enableLowLatencyApplicationGatewaySubnet = {'true' if enable_low_latency_application_gateway_subnet else 'false'}",
     f"param apiFederatedCredentialName = {quote(api_federated_credential_name)}",
     f"param workerFederatedCredentialName = {quote(worker_federated_credential_name)}",
     f"param cleanupFederatedCredentialName = {quote(cleanup_federated_credential_name)}",
     f"param kedaOperatorFederatedCredentialName = {quote(keda_operator_federated_credential_name)}",
+    f"param agicStandardFederatedCredentialName = {quote(agic_standard_federated_credential_name)}",
+    f"param agicLowLatencyFederatedCredentialName = {quote(agic_low_latency_federated_credential_name)}",
     "",
 ]
 params_file.write_text("\n".join(lines), encoding="utf-8")

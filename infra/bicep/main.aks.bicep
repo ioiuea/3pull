@@ -124,7 +124,7 @@ param networkPolicy string = 'azure'
 param networkPluginMode string = 'overlay'
 
 @description('Load balancer SKU')
-param loadBalancerSku string = 'standard'
+param loadBalancerSku string = 'Standard'
 
 @description('Pod CIDR')
 param podCidr string
@@ -142,7 +142,7 @@ param autoUpgradeChannel string = 'patch'
 param enableAzurePolicyAddon bool = true
 
 @description('Ingress Application Gateway addon 有効化')
-param enableIngressApplicationGatewayAddon bool = true
+param enableIngressApplicationGatewayAddon bool = false
 
 @description('OIDC issuer 有効化')
 param enableOidcIssuer bool = true
@@ -164,6 +164,9 @@ param enablePrivateCluster bool = true
 
 @description('プライベートクラスター公開 FQDN 有効化')
 param enablePrivateClusterPublicFqdn bool = false
+
+@description('低遅延系 Application Gateway サブネット有効化')
+param enableLowLatencyApplicationGatewaySubnet bool = false
 
 var modulesTags = {
   environmentName: environmentName
@@ -191,6 +194,24 @@ resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities
 
 resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'mi-${environmentName}-${systemName}-cleanup'
+  location: location
+  tags: modulesTags
+}
+
+resource kedaOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-keda-operator'
+  location: location
+  tags: modulesTags
+}
+
+resource agicStandardManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-agic-standard'
+  location: location
+  tags: modulesTags
+}
+
+resource agicLowLatencyManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (enableLowLatencyApplicationGatewaySubnet) {
+  name: 'mi-${environmentName}-${systemName}-agic-lowlatency'
   location: location
   tags: modulesTags
 }
@@ -377,3 +398,12 @@ output workerManagedIdentityPrincipalId string = workerManagedIdentity.propertie
 output cleanupManagedIdentityName string = cleanupManagedIdentity.name
 output cleanupManagedIdentityClientId string = cleanupManagedIdentity.properties.clientId
 output cleanupManagedIdentityPrincipalId string = cleanupManagedIdentity.properties.principalId
+output kedaOperatorManagedIdentityName string = kedaOperatorManagedIdentity.name
+output kedaOperatorManagedIdentityClientId string = kedaOperatorManagedIdentity.properties.clientId
+output kedaOperatorManagedIdentityPrincipalId string = kedaOperatorManagedIdentity.properties.principalId
+output agicStandardManagedIdentityName string = agicStandardManagedIdentity.name
+output agicStandardManagedIdentityClientId string = agicStandardManagedIdentity.properties.clientId
+output agicStandardManagedIdentityPrincipalId string = agicStandardManagedIdentity.properties.principalId
+output agicLowLatencyManagedIdentityName string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.name : ''
+output agicLowLatencyManagedIdentityClientId string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.properties.clientId : ''
+output agicLowLatencyManagedIdentityPrincipalId string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.properties.principalId : ''

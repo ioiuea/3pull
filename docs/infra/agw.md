@@ -1,220 +1,70 @@
-# ApplicationGateway
+# Application Gateway
 
-- ※[]内は`infra/common.parameter.json`の設定値に従って設定されます。
+- ※ `[]` 内は `infra/common.parameter.json` の設定値に従います。
 
-## 低遅延オプション
+## 構成
 
-- `network.enableLowLatencyApplicationGatewaySubnet=false`（デフォルト）
-  - 通常系 App Gateway のみ作成
+本環境は通常系 App Gateway を標準構成とし、低遅延オプションを有効化した場合に 2 台目を追加します。
+
+- `network.enableLowLatencyApplicationGatewaySubnet=false`
+  - 通常系のみ
 - `network.enableLowLatencyApplicationGatewaySubnet=true`
-  - 通常系 App Gateway に加えて、低遅延系 App Gateway を追加作成
-  - 低遅延系は `ApplicationGatewayLowLatencySubnet` に配置
-  - 命名規則:
-    - App Gateway: `agw-ll-[common.environmentName]-[common.systemName]`
-    - Public IP: `pip-agw-ll-[common.environmentName]-[common.systemName]`
-    - WAF Policy: `waf-ll-[common.environmentName]-[common.systemName]`
+  - 通常系 + 低遅延系を追加
 
-## 基本
+## リソース命名
 
-| 項目         | 設定値                             | Bicepプロパティ名 |
-| ------------ | ---------------------------------- | ----------------- |
-| 名前         | agw-[common.environmentName]-[common.systemName] | name              |
-| 場所         | [common.location]                  | location          |
-| マネージドID | -                                  | identity          |
+| 用途 | 命名規則 |
+| --- | --- |
+| 通常系 AppGW | `agw-[common.environmentName]-[common.systemName]` |
+| 通常系 Public IP | `pip-agw-[common.environmentName]-[common.systemName]` |
+| 通常系 WAF policy | `waf-[common.environmentName]-[common.systemName]` |
+| 低遅延系 AppGW | `agw-ll-[common.environmentName]-[common.systemName]` |
+| 低遅延系 Public IP | `pip-agw-ll-[common.environmentName]-[common.systemName]` |
+| 低遅延系 WAF policy | `waf-ll-[common.environmentName]-[common.systemName]` |
 
-低遅延オプション有効時は、以下も追加作成します。
+## サブネット配置
 
-| 項目         | 設定値                             | Bicepプロパティ名 |
-| ------------ | ---------------------------------- | ----------------- |
-| 名前         | agw-ll-[common.environmentName]-[common.systemName] | name              |
-| 場所         | [common.location]                  | location          |
-| マネージドID | -                                  | identity          |
+| 用途 | サブネット |
+| --- | --- |
+| 通常系 AppGW | `ApplicationGatewaySubnet` |
+| 低遅延系 AppGW | `ApplicationGatewayLowLatencySubnet`（オプション有効時のみ） |
 
-## 診断設定
+## SKU / WAF
 
-- 対象: Application Gateway（`Microsoft.Network/applicationGateways`）
-- ログ: `allLogs`
-- メトリック: `AllMetrics`
-- 送信先: Log Analytics
+| 項目 | 設定値 |
+| --- | --- |
+| SKU | `WAF_v2` |
+| Capacity | `1` |
+| WAF Mode | `Detection` |
+| RuleSet | `OWASP 3.2` |
 
-## 削除ロック
+## AGIC 連携（Helm 統一）
 
-- Application Gateway 本体に削除ロックを適用
-- WAF Policy に削除ロックを適用
-- Public IP に削除ロックを適用
+AKS addon AGIC は使わず、`infra/main.sh` で Helm リリースを導入します。
 
-## SKU
+| AGIC リリース | ingressClass | 制御対象 AppGW | SA |
+| --- | --- | --- | --- |
+| `agic-standard` | `azure-application-gateway` | 通常系 AppGW | `sa-agic-standard` |
+| `agic-lowlatency` | `azure-application-gateway-low-latency` | 低遅延系 AppGW | `sa-agic-lowlatency` |
 
-| 項目   | 設定値 | Bicepプロパティ名 |
-| ------ | ------ | ----------------- |
-| 名前   | WAF_v2 | name              |
-| サイズ | WAF_v2 | tier              |
-| 容量   | 1      | capacity          |
+## RBAC（App Gateway 更新権限）
 
-## ゲートウェイIP構成
+`main.application-gateway-rbac.bicep` で AGIC 用 Managed Identity に `AppGateway Contributor` を付与します。
 
-| 項目         | 設定値                                                       | Bicepプロパティ名    |
-| ------------ | ------------------------------------------------------------ | -------------------- |
-| 名前         | appGatewayIpConfig                                           | name                 |
-| サブネットID | vnet-[common.environmentName]-[common.systemName]/ApplicationGatewaySubnet | properties.subnet.id |
+| Managed Identity | 付与対象 |
+| --- | --- |
+| `mi-[env]-[system]-agic-standard` | 通常系 App Gateway |
+| `mi-[env]-[system]-agic-lowlatency` | 低遅延系 App Gateway（オプション有効時） |
 
-低遅延オプション有効時（追加作成分）:
+## 低遅延系の意図
 
-| 項目         | 設定値                                                       | Bicepプロパティ名    |
-| ------------ | ------------------------------------------------------------ | -------------------- |
-| 名前         | appGatewayIpConfig                                           | name                 |
-| サブネットID | vnet-[common.environmentName]-[common.systemName]/ApplicationGatewayLowLatencySubnet | properties.subnet.id |
+低遅延系 AppGW は、用途限定 API を通常系と分離するための入口です。
 
-## フロントエンドIP構成
+- 通常系とドメインを分離（例: `api-*` / `ll-api-*`）
+- IngressClass を分離して同一 AKS 内でルーティング面を切り分ける
+- WAF は両系統で適用
 
-| 項目                       | 設定値                                                       | Bicepプロパティ名                    |
-| -------------------------- | ------------------------------------------------------------ | ------------------------------------ |
-| 名前                       | appGatewayFrontendPrivateIP                                  | name                                 |
-| プライベートIP割り当て方法 | Static                                                       | properties.privateIPAllocationMethod |
-| プライベートIPアドレス     | [ApplicationGatewaySubnetのレンジの10個目のIP]               | properties.privateIPAddress          |
-| サブネットID               | vnet-[common.environmentName]-[common.systemName]/ApplicationGatewaySubnet | properties.subnet.id                 |
+## 診断設定 / ロック
 
-| 項目                       | 設定値                                 | Bicepプロパティ名                    |
-| -------------------------- | -------------------------------------- | ------------------------------------ |
-| 名前                       | appGatewayFrontendPublicIP             | name                                 |
-| プライベートIP割り当て方法 | -                                      | properties.privateIPAllocationMethod |
-| プライベートIPアドレス     | -                                      | properties.privateIPAddress          |
-| パブリックIPアドレスID     | pip-agw-[common.environmentName]-[common.systemName] | properties.publicIPAddress.id        |
-
-## フロントエンドポート
-
-※これはリソース作成時に必須の項目のため仮のパラメータを記述しているが、後ほど実行するAKSマニフェストで上書きされる。
-| 項目 | 設定値 | Bicepプロパティ名 |
-|------|------|------|
-| 名前 | appGatewayFrontendPort | name |
-| ポート | 80 | properties.port |
-
-## バックエンドプール
-
-※これはリソース作成時に必須の項目のため仮のパラメータを記述しているが、後ほど実行するAKSマニフェストで上書きされる。
-| 項目 | 設定値 | Bicepプロパティ名 |
-|------|------|------|
-| 名前 | appGatewayBackendPool | name |
-| バックエンドアドレスリスト | - | properties.backendAddresses |
-
-## バックエンドHTTP設定
-
-※これはリソース作成時に必須の項目のため仮のパラメータを記述しているが、後ほど実行するAKSマニフェストで上書きされる。
-| 項目 | 設定値 | Bicepプロパティ名 |
-|------|------|------|
-| 名前 | appGatewayBackendHttpSettings | name |
-| ポート | 80 | properties.port |
-| プロトコル | Http | properties.protocol |
-| Cookieベースのセッションアフィニティ | Enabled | properties.cookieBasedAffinity |
-| タイムアウト | 60 | properties.requestTimeout |
-| プローブID | appGatewayProbe | properties.probe.id |
-
-## リスナー
-
-※これはリソース作成時に必須の項目のため仮のパラメータを記述しているが、後ほど実行するAKSマニフェストで上書きされる。
-| 項目 | 設定値 | Bicepプロパティ名 |
-|------|------|------|
-| 名前 | appGatewayHttpListener | name |
-| フロントエンドIP構成 | appGatewayFrontendPrivateIP | properties.frontendIPConfiguration.id |
-| フロントエンドポート | appGatewayFrontendPort | properties.frontendPort.id |
-| プロトコル | Http | properties.protocol |
-
-## ルール
-
-※これはリソース作成時に必須の項目のため仮のパラメータを記述しているが、後ほど実行するAKSマニフェストで上書きされる。
-| 項目 | 設定値 | Bicepプロパティ名 |
-|------|------|------|
-| 名前 | appGatewayRule | name |
-| 種類 | Basic | properties.ruleType |
-| リスナー | appGatewayHttpListener | properties.httpListener.id |
-| バックエンドプール | appGatewayBackendPool | properties.backendAddressPool.id |
-| バックエンドHTTP設定 | appGatewayBackendHttpSettings | properties.backendHttpSettings.id |
-| 優先度 | 1 | properties.priority |
-
-## プローブ
-
-※これはリソース作成時に必須の項目のため仮のパラメータを記述しているが、後ほど実行するAKSマニフェストで上書きされる。
-| 項目 | 設定値 | Bicepプロパティ名 |
-|------|------|------|
-| 名前 | appGatewayProbe | name |
-| プロトコル | Http | properties.protocol |
-| ホスト | www.contoso.com | properties.host |
-| パス | /path/to/probe | properties.path |
-| インターバル | 30 | properties.interval |
-| タイムアウト | 120 | properties.timeout |
-| 閾値 | 8 | properties.unhealthyThreshold |
-
-## WAFポリシー
-
-| 項目 | 設定値                             | Bicepプロパティ名 |
-| ---- | ---------------------------------- | ----------------- |
-| ID   | waf-[common.environmentName]-[common.systemName] | id                |
-
-低遅延オプション有効時（追加作成分）:
-
-| 項目 | 設定値                             | Bicepプロパティ名 |
-| ---- | ---------------------------------- | ----------------- |
-| ID   | waf-ll-[common.environmentName]-[common.systemName] | id                |
-
-# パブリックIPアドレス
-
-| IPアドレス名                           | 概要  |
-| -------------------------------------- | ----- |
-| pip-agw-[common.environmentName]-[common.systemName] | AGW用 |
-| pip-agw-ll-[common.environmentName]-[common.systemName] | 低遅延系AGW用（オプション有効時） |
-
-##　基本
-| 項目 | 設定値 | Bicepプロパティ名 |
-|------|------|------|
-| 名前 | pip-agw-[common.environmentName]-[common.systemName] | name |
-| 場所 | [common.location] | location |
-| sku | Standard | sku.name |
-| IPアドレス割り当て方法 | Static | properties.publicIPAllocationMethod |
-| IPアドレスバージョン | IPv4 | properties.publicIPAddressVersion |
-| DDOS保護 | `network.enableDdosProtection=true` の場合は Enabled、`false` の場合は Disabled | properties.ddosSettings.protectionMode |
-
-# WebApplicationFirewall Policy
-
-## 基本
-
-| 項目 | 設定値                             | Bicepプロパティ名 |
-| ---- | ---------------------------------- | ----------------- |
-| 名前 | waf-[common.environmentName]-[common.systemName] | name              |
-| 場所 | [common.location]                  | location          |
-
-低遅延オプション有効時（追加作成分）:
-
-| 項目 | 設定値                             | Bicepプロパティ名 |
-| ---- | ---------------------------------- | ----------------- |
-| 名前 | waf-ll-[common.environmentName]-[common.systemName] | name              |
-| 場所 | [common.location]                  | location          |
-
-## カスタムルール
-
-| 項目 | 設定値 | Bicepプロパティ名 |
-| ---- | ------ | ----------------- |
-| -    | -      | -                 |
-
-## 管理されているルール
-
-| 項目         | 設定値 | Bicepプロパティ名              |
-| ------------ | ------ | ------------------------------ |
-| ルールセット | OWASP  | managedRuleSets.ruleSetType    |
-| バージョン   | 3.2    | managedRuleSets.ruleSetVersion |
-
-## 除外
-
-| 項目 | 設定値 | Bicepプロパティ名 |
-| ---- | ------ | ----------------- |
-| -    | -      | -                 |
-
-## ポリシー設定
-
-| 項目                             | 設定値    | Bicepプロパティ名           |
-| -------------------------------- | --------- | --------------------------- |
-| モード                           | Detection | mode                        |
-| 状態                             | Enabled   | state                       |
-| 要求本文の検査                   | true      | requestBodyCheck            |
-| 要求本文検査の最大サイズ         | 2000      | requestBodyInspectLimitInKB |
-| 要求本文の最大サイズ             | 2000      | maxRequestBodySizeInKb      |
-| ファイルアップロードの最大サイズ | 100       | fileUploadLimitInMb         |
+- App Gateway, Public IP, WAF Policy に診断設定を適用
+- `enableResourceLock=true` の場合は各リソースに削除ロックを適用

@@ -42,6 +42,9 @@ application_gateway_script="$infra_root/scripts/generate-application-gateway-par
 application_gateway_meta_file="$params_dir/application-gateway-meta.json"
 application_gateway_low_latency_script="$infra_root/scripts/generate-application-gateway-low-latency-params.py"
 application_gateway_low_latency_meta_file="$params_dir/application-gateway-low-latency-meta.json"
+application_gateway_rbac_config_file="$infra_root/config/application-gateway-rbac.json"
+application_gateway_rbac_script="$infra_root/scripts/generate-application-gateway-rbac-params.py"
+application_gateway_rbac_meta_file="$params_dir/application-gateway-rbac-meta.json"
 
 key_vault_config_file="$infra_root/config/key-vault.json"
 key_vault_script="$infra_root/scripts/generate-key-vault-params.py"
@@ -171,6 +174,16 @@ fi
 
 if [[ ! -f "$application_gateway_low_latency_script" ]]; then
   echo "application gateway low latency script が見つかりません: $application_gateway_low_latency_script" >&2
+  exit 1
+fi
+
+if [[ ! -f "$application_gateway_rbac_config_file" ]]; then
+  echo "application gateway rbac config file が見つかりません: $application_gateway_rbac_config_file" >&2
+  exit 1
+fi
+
+if [[ ! -f "$application_gateway_rbac_script" ]]; then
+  echo "application gateway rbac script が見つかりません: $application_gateway_rbac_script" >&2
   exit 1
 fi
 
@@ -356,6 +369,16 @@ TIMESTAMP="$timestamp" \
 "$aks_script"
 
 COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$application_gateway_rbac_config_file" \
+AKS_META_FILE="$aks_meta_file" \
+APPLICATION_GATEWAY_META_FILE="$application_gateway_meta_file" \
+APPLICATION_GATEWAY_LOW_LATENCY_META_FILE="$application_gateway_low_latency_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$application_gateway_rbac_meta_file" \
+TIMESTAMP="$timestamp" \
+"$application_gateway_rbac_script"
+
+COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$acr_config_file" \
 AKS_META_FILE="$aks_meta_file" \
 PARAMS_DIR="$params_dir" \
@@ -476,6 +499,16 @@ PY
 )"
 
 application_gateway_resource_group_name="$(META_FILE="$application_gateway_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("resourceGroupName", ""))
+PY
+)"
+
+application_gateway_rbac_resource_group_name="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -633,6 +666,11 @@ fi
 
 if [[ -z "$application_gateway_resource_group_name" ]]; then
   echo "application gateway resourceGroupName が取得できませんでした。config を確認してください。" >&2
+  exit 1
+fi
+
+if [[ -z "$application_gateway_rbac_resource_group_name" ]]; then
+  echo "application gateway rbac resourceGroupName が取得できませんでした。config を確認してください。" >&2
   exit 1
 fi
 
@@ -1513,6 +1551,37 @@ else
   echo "==> Skip AKS (resourceToggles.aks=false)"
 fi
 
+application_gateway_rbac_deploy="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+application_gateway_rbac_params_file="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
+if [[ "$application_gateway_rbac_deploy" == "true" ]]; then
+  echo "==> Deploy Application Gateway RBAC"
+  az deployment group create \
+    --name "main-service-application-gateway-rbac-${timestamp}" \
+    --resource-group "$application_gateway_rbac_resource_group_name" \
+    --parameters "$application_gateway_rbac_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip Application Gateway RBAC (resourceToggles.aks=false)"
+fi
+
 acr_deploy="$(META_FILE="$acr_meta_file" python - <<'PY'
 import json
 import os
@@ -1885,17 +1954,19 @@ if [[ -z "$existing_aks_name" ]]; then
 ------------------------------------------------------------
 NOTICE: Skip Federated / Helm Values Export
 [EN] AKS is not found in the target resource group.
-     Federated Credential deployment and backend Helm values export are skipped.
+     Federated Credential deployment, AGIC/KEDA Helm deployment, and Helm values export are skipped.
      Create/deploy AKS first, then run this script again.
 
 [JA] 対象リソースグループに AKS が存在しないため、
-     Federated Credential デプロイと backend Helm values エクスポートをスキップします。
+     Federated Credential デプロイ、AGIC/KEDA Helm デプロイ、および Helm values エクスポートをスキップします。
      先に AKS を作成/デプロイしてから、このスクリプトを再実行してください。
 ------------------------------------------------------------
 EOF
 else
   if [[ -n "$what_if" ]]; then
     echo "==> Skip Federated Credential (--what-if)"
+    echo "==> Skip Deploy AGIC Helm releases (--what-if)"
+    echo "==> Skip Deploy KEDA Helm release (--what-if)"
     echo "==> Skip Generate frontend Helm values file (--what-if)"
     echo "==> Skip Generate backend Helm values file (--what-if)"
   else
@@ -1937,6 +2008,271 @@ PY
       echo "==> Skip Federated Credential (resourceToggles.federatedCredential=false or config.enabled=false)"
     fi
 
+    agic_controller_deploy="$(COMMON_FILE="$common_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(common.get("resourceToggles", {}).get("agicController", False))).lower())
+PY
+)"
+
+    keda_controller_deploy="$(COMMON_FILE="$common_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(common.get("resourceToggles", {}).get("kedaController", False))).lower())
+PY
+)"
+
+    enable_low_latency_application_gateway_subnet="$(COMMON_FILE="$common_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(common.get("network", {}).get("enableLowLatencyApplicationGatewaySubnet", False))).lower())
+PY
+)"
+
+    agic_namespace="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
+print(str(config.get("agicNamespace", "ingress")).strip() or "ingress")
+PY
+)"
+
+    agic_standard_service_account_name="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
+print(str(config.get("agicStandardServiceAccountName", "sa-agic-standard")).strip() or "sa-agic-standard")
+PY
+)"
+
+    agic_low_latency_service_account_name="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
+print(str(config.get("agicLowLatencyServiceAccountName", "sa-agic-lowlatency")).strip() or "sa-agic-lowlatency")
+PY
+)"
+
+    keda_namespace="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
+print(str(config.get("kedaNamespace", "keda")).strip() or "keda")
+PY
+)"
+
+    keda_operator_service_account_name="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
+print(str(config.get("kedaOperatorServiceAccountName", "keda-operator")).strip() or "keda-operator")
+PY
+)"
+
+    environment_name_for_agic="$(COMMON_FILE="$common_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
+print(str(common.get("common", {}).get("environmentName", "")).strip())
+PY
+)"
+
+    system_name_for_agic="$(COMMON_FILE="$common_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
+print(str(common.get("common", {}).get("systemName", "")).strip())
+PY
+)"
+
+    standard_application_gateway_name="$(META_FILE="$application_gateway_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(meta.get("applicationGatewayName", "")).strip())
+PY
+)"
+
+    low_latency_application_gateway_name="$(META_FILE="$application_gateway_low_latency_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(meta.get("applicationGatewayName", "")).strip())
+PY
+)"
+
+    if [[ "$agic_controller_deploy" == "true" || "$keda_controller_deploy" == "true" ]]; then
+      if ! command -v helm >/dev/null 2>&1; then
+        echo "Helm コマンドが見つかりません。AGIC/KEDA Helm デプロイを実行できません。" >&2
+        exit 1
+      fi
+      if ! command -v kubectl >/dev/null 2>&1; then
+        echo "kubectl コマンドが見つかりません。AGIC/KEDA Helm デプロイを実行できません。" >&2
+        exit 1
+      fi
+
+      # AGIC/KEDA Helm を AKS へ適用するため、現在の kubeconfig を対象 AKS の接続情報で更新する。
+      # --overwrite-existing により既存エントリを上書きし、以降の kubectl/helm が確実に対象クラスタへ向くようにする。
+      echo "==> Configure kubectl context for AKS"
+      az aks get-credentials \
+        --resource-group "$aks_resource_group_name" \
+        --name "$aks_name_for_post" \
+        --overwrite-existing \
+        --only-show-errors >/dev/null
+    fi
+
+    if [[ "$agic_controller_deploy" == "true" && "$federated_credential_deploy" == "true" ]]; then
+      if [[ -z "$standard_application_gateway_name" ]]; then
+        echo "通常系 Application Gateway 名が取得できません。application-gateway-meta を確認してください。" >&2
+        exit 1
+      fi
+
+      # 通常系 AGIC リリースが制御対象とする Application Gateway のリソース ID を取得する。
+      # この ID を Helm の appgw.applicationGatewayID に渡して、どの AppGW を更新するかを明示する。
+      standard_application_gateway_id="$(az network application-gateway show \
+        --resource-group "$application_gateway_resource_group_name" \
+        --name "$standard_application_gateway_name" \
+        --query id \
+        -o tsv)"
+
+      # 通常系 AGIC 用 User Assigned Managed Identity の clientId を取得する。
+      # Workload Identity の ServiceAccount annotation と armAuth 設定に同じ clientId を渡して認証を一致させる。
+      agic_standard_client_id="$(az identity show \
+        --resource-group "$aks_resource_group_name" \
+        --name "mi-${environment_name_for_agic}-${system_name_for_agic}-agic-standard" \
+        --query clientId \
+        -o tsv)"
+
+      # 通常系 AGIC コントローラを Helm で導入/更新する。
+      # 利用する chart は Microsoft 公式 OCI chart:
+      # oci://mcr.microsoft.com/azure-application-gateway/charts/ingress-azure
+      # 参考: https://learn.microsoft.com/ja-jp/azure/application-gateway/ingress-controller-install-new
+      # - appgw.applicationGatewayID: 通常系 AppGW を制御対象に固定
+      # - kubernetes.ingressClass: 通常系 Ingress が参照するクラス名
+      # - serviceAccount.*: AGIC 用 ServiceAccount を作成し、Workload Identity annotation を付与
+      # - armAuth.*: AGIC が Azure ARM を操作する際に Workload Identity(clientId) を使う
+      echo "==> Deploy AGIC Helm release: agic-standard"
+      helm upgrade --install agic-standard oci://mcr.microsoft.com/azure-application-gateway/charts/ingress-azure \
+        --namespace "$agic_namespace" \
+        --create-namespace \
+        --set-string appgw.applicationGatewayID="$standard_application_gateway_id" \
+        --set-string kubernetes.ingressClass="azure-application-gateway" \
+        --set-string serviceAccount.name="$agic_standard_service_account_name" \
+        --set serviceAccount.create=true \
+        --set-string serviceAccount.annotations.azure\\.workload\\.identity/client-id="$agic_standard_client_id" \
+        --set-string armAuth.type="workloadIdentity" \
+        --set-string armAuth.identityClientID="$agic_standard_client_id" \
+        --set-string armAuth.identityClientId="$agic_standard_client_id"
+
+      if [[ "$enable_low_latency_application_gateway_subnet" == "true" ]]; then
+        if [[ -z "$low_latency_application_gateway_name" ]]; then
+          echo "低遅延系 Application Gateway 名が取得できません。application-gateway-low-latency-meta を確認してください。" >&2
+          exit 1
+        fi
+        # 低遅延系 AGIC リリースが制御対象とする Application Gateway のリソース ID を取得する。
+        # Helm の appgw.applicationGatewayID に渡し、低遅延系 AGIC が通常系と別 AppGW を更新するようにする。
+        low_latency_application_gateway_id="$(az network application-gateway show \
+          --resource-group "$application_gateway_resource_group_name" \
+          --name "$low_latency_application_gateway_name" \
+          --query id \
+          -o tsv)"
+
+        # 低遅延系 AGIC 用 User Assigned Managed Identity の clientId を取得する。
+        # Workload Identity の ServiceAccount annotation と armAuth に同一 clientId を設定するために利用する。
+        agic_low_latency_client_id="$(az identity show \
+          --resource-group "$aks_resource_group_name" \
+          --name "mi-${environment_name_for_agic}-${system_name_for_agic}-agic-lowlatency" \
+          --query clientId \
+          -o tsv)"
+
+        # 低遅延系 AGIC コントローラを Helm で導入/更新する。
+        # 利用する chart は Microsoft 公式 OCI chart:
+        # oci://mcr.microsoft.com/azure-application-gateway/charts/ingress-azure
+        # 参考: https://learn.microsoft.com/ja-jp/azure/application-gateway/ingress-controller-install-new
+        # - appgw.applicationGatewayID: 低遅延系 AppGW を制御対象に固定
+        # - kubernetes.ingressClass: 低遅延系 Ingress が参照するクラス名
+        # - serviceAccount.*: 低遅延系 AGIC 用 ServiceAccount と Workload Identity annotation を設定
+        # - armAuth.*: 低遅延系 Managed Identity(clientId) で ARM 操作を行う
+        echo "==> Deploy AGIC Helm release: agic-lowlatency"
+        helm upgrade --install agic-lowlatency oci://mcr.microsoft.com/azure-application-gateway/charts/ingress-azure \
+          --namespace "$agic_namespace" \
+          --create-namespace \
+          --set-string appgw.applicationGatewayID="$low_latency_application_gateway_id" \
+          --set-string kubernetes.ingressClass="azure-application-gateway-low-latency" \
+          --set-string serviceAccount.name="$agic_low_latency_service_account_name" \
+          --set serviceAccount.create=true \
+          --set-string serviceAccount.annotations.azure\\.workload\\.identity/client-id="$agic_low_latency_client_id" \
+          --set-string armAuth.type="workloadIdentity" \
+          --set-string armAuth.identityClientID="$agic_low_latency_client_id" \
+          --set-string armAuth.identityClientId="$agic_low_latency_client_id"
+      else
+        echo "==> Skip AGIC Helm release: agic-lowlatency (network.enableLowLatencyApplicationGatewaySubnet=false)"
+      fi
+    elif [[ "$agic_controller_deploy" != "true" ]]; then
+      echo "==> Skip Deploy AGIC Helm releases (resourceToggles.agicController=false)"
+    else
+      echo "==> Skip Deploy AGIC Helm releases (requires federated credential / workload identity)"
+    fi
+
+    if [[ "$keda_controller_deploy" == "true" && "$federated_credential_deploy" == "true" ]]; then
+      # KEDA 用 User Assigned Managed Identity の clientId を取得する。
+      # ServiceAccount annotation と chart 側の Workload Identity 設定へ渡し、federated credential と一致させる。
+      keda_operator_client_id="$(az identity show \
+        --resource-group "$aks_resource_group_name" \
+        --name "mi-${environment_name_for_agic}-${system_name_for_agic}-keda-operator" \
+        --query clientId \
+        -o tsv)"
+
+      # KEDA コントローラを Helm で導入/更新する。
+      # 利用する chart は kedacore 公式 chart:
+      # https://kedacore.github.io/charts
+      # 参考:
+      # https://keda.sh/docs
+      # https://learn.microsoft.com/ja-jp/azure/aks/keda-about
+      echo "==> Deploy KEDA Helm release: keda"
+      helm repo add kedacore https://kedacore.github.io/charts >/dev/null
+      helm repo update >/dev/null
+      helm upgrade --install keda kedacore/keda \
+        --namespace "$keda_namespace" \
+        --create-namespace \
+        --set serviceAccount.operator.create=true \
+        --set-string serviceAccount.operator.name="$keda_operator_service_account_name" \
+        --set-string serviceAccount.operator.annotations.azure\\.workload\\.identity/client-id="$keda_operator_client_id" \
+        --set podIdentity.azureWorkload.enabled=true \
+        --set-string podIdentity.azureWorkload.clientId="$keda_operator_client_id"
+    elif [[ "$keda_controller_deploy" != "true" ]]; then
+      echo "==> Skip Deploy KEDA Helm release (resourceToggles.kedaController=false)"
+    else
+      echo "==> Skip Deploy KEDA Helm release (requires federated credential / workload identity)"
+    fi
+
     echo "==> Generate frontend Helm values file"
     COMMON_FILE="$common_file" \
     TEMPLATE_FILE="$frontend_values_template_file" \
@@ -1955,6 +2291,8 @@ PY
 ------------------------------------------------------------
 NOTICE: Backend Helm values (manual update required)
 [EN] Please review and update the following parameters in backend values before Helm deploy:
+     - ingress.standard.host
+     - ingress.lowLatency.host
      - config.env.FRONTEND_BASE_URL
      - config.env.CSRF_TRUSTED_ORIGINS
      - config.env.ENTRA_TENANT_ID
@@ -1963,6 +2301,8 @@ NOTICE: Backend Helm values (manual update required)
      - config.env.ENTRA_INTERNAL_DOMAINS
 
 [JA] Helm デプロイ前に、backend values の以下パラメータを確認し、実環境値へ更新してください:
+     - ingress.standard.host
+     - ingress.lowLatency.host
      - config.env.FRONTEND_BASE_URL
      - config.env.CSRF_TRUSTED_ORIGINS
      - config.env.ENTRA_TENANT_ID

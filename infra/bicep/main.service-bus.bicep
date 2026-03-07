@@ -36,6 +36,9 @@ param apiManagedIdentityName string
 @description('worker 用 Managed Identity 名')
 param workerManagedIdentityName string
 
+@description('keda-operator 用 Managed Identity 名')
+param kedaOperatorManagedIdentityName string
+
 @description('Workload Identity 用 RBAC 付与を有効化')
 param enableWorkloadIdentityRbac bool = true
 
@@ -110,6 +113,11 @@ resource apiManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@20
 resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   scope: resourceGroup(managedIdentityResourceGroupName)
   name: workerManagedIdentityName
+}
+
+resource kedaOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  scope: resourceGroup(managedIdentityResourceGroupName)
+  name: kedaOperatorManagedIdentityName
 }
 
 resource serviceBusNamespace 'Microsoft.ServiceBus/namespaces@2023-01-01-preview' = {
@@ -198,6 +206,16 @@ resource serviceBusReceiverForWorker 'Microsoft.Authorization/roleAssignments@20
   properties: {
     roleDefinitionId: serviceBusDataReceiverRoleDefinitionId
     principalId: workerManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource serviceBusReceiverForKedaOperator 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(serviceBusNamespace.id, kedaOperatorManagedIdentity.id, serviceBusDataReceiverRoleDefinitionId)
+  scope: serviceBusNamespace
+  properties: {
+    roleDefinitionId: serviceBusDataReceiverRoleDefinitionId
+    principalId: kedaOperatorManagedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }

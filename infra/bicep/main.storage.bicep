@@ -413,6 +413,7 @@ resource storageBlobDataContributorForCleanup 'Microsoft.Authorization/roleAssig
   }
 }
 
+
 resource privateEndpointBlob 'Microsoft.Network/privateEndpoints@2024-07-01' = {
   name: privateEndpointBlobName
   location: location
