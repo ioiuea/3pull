@@ -5,6 +5,9 @@
     "systemName": "3pull",
     "enableResourceLock": true
   },
+  "logAnalytics": {
+    "dailyQuotaGb": -1
+  },
   "resourceToggles": {
     "logAnalytics": true,
     "applicationInsights": true,

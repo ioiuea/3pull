@@ -114,6 +114,7 @@ def main() -> int:
         return 1
 
     common_values = common.get("common")
+    log_analytics_values = common.get("logAnalytics")
     network_values = common.get("network")
     aks_values = common.get("aks")
     key_vault_values = common.get("keyVault")
@@ -126,6 +127,11 @@ def main() -> int:
     if not isinstance(common_values, dict):
         errors.append("common: object で指定してください。")
         common_values = {}
+    if log_analytics_values is None:
+        log_analytics_values = {}
+    elif not isinstance(log_analytics_values, dict):
+        errors.append("logAnalytics: object で指定してください。")
+        log_analytics_values = {}
     if not isinstance(network_values, dict):
         errors.append("network: object で指定してください。")
         network_values = {}
@@ -162,6 +168,13 @@ def main() -> int:
     as_non_empty_str(common_values.get("environmentName"), "common.environmentName", errors)
     as_non_empty_str(common_values.get("systemName"), "common.systemName", errors)
     as_bool(common_values.get("enableResourceLock"), "common.enableResourceLock", errors)
+    log_analytics_daily_quota_gb = as_int(
+        log_analytics_values.get("dailyQuotaGb", -1),
+        "logAnalytics.dailyQuotaGb",
+        errors,
+    )
+    if log_analytics_daily_quota_gb is not None and log_analytics_daily_quota_gb < -1:
+        errors.append("logAnalytics.dailyQuotaGb: -1 または 0 以上の整数を指定してください。")
 
     # ネットワーク/セキュリティ系のフラグ
     as_bool(network_values.get("enableFirewallIdps"), "network.enableFirewallIdps", errors)

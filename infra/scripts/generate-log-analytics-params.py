@@ -29,11 +29,13 @@ common = json.loads(common_path.read_text(encoding="utf-8"))
 config = json.loads(config_path.read_text(encoding="utf-8"))
 
 common_values = common.get("common", {})
+log_analytics_values = common.get("logAnalytics", {})
 enable_resource_lock = bool(common_values.get("enableResourceLock", True))
 lock_kind = config.get("lockKind", "CanNotDelete") if enable_resource_lock else ""
 environment_name = common_values.get("environmentName", "")
 system_name = common_values.get("systemName", "")
 location = common_values.get("location", "")
+log_analytics_daily_quota_gb = int(log_analytics_values.get("dailyQuotaGb", -1))
 
 if not environment_name or not system_name or not location:
     raise SystemExit("common.parameter.json の common.environmentName / common.systemName / common.location を設定してください")
@@ -58,6 +60,7 @@ params_file.write_text(
             f"param location = {quote(location)}",
             f"param modulesName = {quote(modules_name)}",
             f"param retentionInDays = {int(config.get('retentionInDays', 365))}",
+            f"param logAnalyticsDailyQuotaGb = {log_analytics_daily_quota_gb}",
             "param publicNetworkAccessForIngestion = "
             + quote(config.get("publicNetworkAccessForIngestion", "Disabled")),
             "param publicNetworkAccessForQuery = "

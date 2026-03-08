@@ -195,7 +195,7 @@ flowchart LR
   - エントリーポイント。パラメータ生成とデプロイを順序制御します。
 - `common.parameter.json`
   - 共通パラメータと、どのリソースをデプロイ対象にするか（実行可否）を管理します。
-  - `common` / `network` / `aks` / `keyVault` / `serviceBus` / `postgres` / `redis` / `cosno` / `resourceToggles` の親オブジェクトで分類しています。
+  - `common` / `logAnalytics` / `network` / `aks` / `keyVault` / `serviceBus` / `postgres` / `redis` / `cosno` / `resourceToggles` の親オブジェクトで分類しています。
 - `bicep/`
   - リソース単位の Bicep 本体。
 - `scripts/`
@@ -237,6 +237,27 @@ az account list-locations --query "[].name" -o tsv
 
 - `true`（デフォルト）: すべての対象リソースに削除ロックを適用
 - `false`: 削除ロックを適用しない（検証環境での作成/削除を優先する場合）
+
+### logAnalytics.dailyQuotaGb
+
+Log Analytics Workspace の日次データ取り込み上限を指定します。  
+単位は **GB/日**（1 日あたりの上限）です。
+
+- `-1`（デフォルト）: 無制限
+- `0` 以上の整数: 指定した GB/日 を上限として適用
+
+設定例:
+
+```json
+"logAnalytics": {
+  "dailyQuotaGb": 10
+}
+```
+
+注意:
+
+- 小数は指定できません（整数のみ）。
+- `-1` 未満は無効値です。
 
 ### network.enableFirewallIdps
 

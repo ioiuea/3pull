@@ -15,6 +15,9 @@ param modulesName string = 'monitor'
 @description('データ保持期間')
 param retentionInDays int = 365
 
+@description('日次データ上限 (GB/日)。-1 の場合は無制限')
+param logAnalyticsDailyQuotaGb int = -1
+
 @description('Ingestion用のパブリックネットワークアクセス')
 param publicNetworkAccessForIngestion string = 'Disabled'
 
@@ -47,6 +50,9 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2025-02-01' = {
       name: logAnalyticsSku
     }
     retentionInDays: retentionInDays
+    workspaceCapping: {
+      dailyQuotaGb: logAnalyticsDailyQuotaGb
+    }
     publicNetworkAccessForIngestion: publicNetworkAccessForIngestion
     publicNetworkAccessForQuery: publicNetworkAccessForQuery
   }
