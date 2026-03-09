@@ -50,6 +50,7 @@ AKS addon AGIC は使わず、`infra/main.sh` で Helm リリースを導入し�
 ## RBAC（App Gateway 更新権限）
 
 `main.application-gateway-rbac.bicep` で AGIC 用 Managed Identity に `AppGateway Contributor` を付与します。
+Managed Identity 自体は `main.managed-ids.bicep` で先に作成されます。
 
 | Managed Identity | 付与対象 |
 | --- | --- |

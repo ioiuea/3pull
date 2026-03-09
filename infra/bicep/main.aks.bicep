@@ -165,9 +165,6 @@ param enablePrivateCluster bool = true
 @description('プライベートクラスター公開 FQDN 有効化')
 param enablePrivateClusterPublicFqdn bool = false
 
-@description('低遅延系 Application Gateway サブネット有効化')
-param enableLowLatencyApplicationGatewaySubnet bool = false
-
 var modulesTags = {
   environmentName: environmentName
   systemName: systemName
@@ -179,42 +176,6 @@ var modulesTags = {
 var agentSubnetId = resourceId(vnetResourceGroupName, 'Microsoft.Network/virtualNetworks/subnets', vnetName, 'AgentNodeSubnet')
 var userSubnetId = resourceId(vnetResourceGroupName, 'Microsoft.Network/virtualNetworks/subnets', vnetName, 'UserNodeSubnet')
 var applicationGatewayId = resourceId(applicationGatewayResourceGroupName, 'Microsoft.Network/applicationGateways', applicationGatewayName)
-
-resource apiManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'mi-${environmentName}-${systemName}-api'
-  location: location
-  tags: modulesTags
-}
-
-resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'mi-${environmentName}-${systemName}-worker'
-  location: location
-  tags: modulesTags
-}
-
-resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'mi-${environmentName}-${systemName}-cleanup'
-  location: location
-  tags: modulesTags
-}
-
-resource kedaOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'mi-${environmentName}-${systemName}-keda-operator'
-  location: location
-  tags: modulesTags
-}
-
-resource agicStandardManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'mi-${environmentName}-${systemName}-agic-standard'
-  location: location
-  tags: modulesTags
-}
-
-resource agicLowLatencyManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (enableLowLatencyApplicationGatewaySubnet) {
-  name: 'mi-${environmentName}-${systemName}-agic-lowlatency'
-  location: location
-  tags: modulesTags
-}
 
 resource aks 'Microsoft.ContainerService/managedClusters@2024-05-01' = {
   name: aksName
@@ -389,21 +350,3 @@ resource aksDiagnosticSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01
 
 output aksNameOutput string = aks.name
 output aksIdOutput string = aks.id
-output apiManagedIdentityName string = apiManagedIdentity.name
-output apiManagedIdentityClientId string = apiManagedIdentity.properties.clientId
-output apiManagedIdentityPrincipalId string = apiManagedIdentity.properties.principalId
-output workerManagedIdentityName string = workerManagedIdentity.name
-output workerManagedIdentityClientId string = workerManagedIdentity.properties.clientId
-output workerManagedIdentityPrincipalId string = workerManagedIdentity.properties.principalId
-output cleanupManagedIdentityName string = cleanupManagedIdentity.name
-output cleanupManagedIdentityClientId string = cleanupManagedIdentity.properties.clientId
-output cleanupManagedIdentityPrincipalId string = cleanupManagedIdentity.properties.principalId
-output kedaOperatorManagedIdentityName string = kedaOperatorManagedIdentity.name
-output kedaOperatorManagedIdentityClientId string = kedaOperatorManagedIdentity.properties.clientId
-output kedaOperatorManagedIdentityPrincipalId string = kedaOperatorManagedIdentity.properties.principalId
-output agicStandardManagedIdentityName string = agicStandardManagedIdentity.name
-output agicStandardManagedIdentityClientId string = agicStandardManagedIdentity.properties.clientId
-output agicStandardManagedIdentityPrincipalId string = agicStandardManagedIdentity.properties.principalId
-output agicLowLatencyManagedIdentityName string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.name : ''
-output agicLowLatencyManagedIdentityClientId string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.properties.clientId : ''
-output agicLowLatencyManagedIdentityPrincipalId string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.properties.principalId : ''

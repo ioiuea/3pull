@@ -94,7 +94,7 @@
    - federated credential は `main.federated-credential.bicep`
    - ServiceAccount/annotation は `infra/main.sh` の AGIC Helm で設定
 5. Helm で AGIC を 2 リリース導入する: 完了
-   - `resourceToggles.agicController=true` かつ `resourceToggles.federatedCredential=true` で実行
+   - `resourceToggles.agicController=true` かつ Federated Credential 作成済みで実行
 6. アプリ側 Ingress の振り分け: 完了
    - backend: standard + lowLatency
    - frontend: standard のみ
@@ -109,7 +109,7 @@
 - KEDA 用 ServiceAccount/annotation は `infra/main.sh` の KEDA Helm で設定
 - backend chart 側の `keda.workloadIdentity.clientId` は values 生成時に keda-operator MI の clientId を埋め込み
 - KEDA 実行条件は AGIC と同様に federated 前提
-  - `resourceToggles.kedaController=true` かつ `resourceToggles.federatedCredential=true`
+  - `resourceToggles.kedaController=true` かつ Federated Credential 作成済み
 
 ### AGIC の namespace 方針
 

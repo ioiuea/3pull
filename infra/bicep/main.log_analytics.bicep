@@ -41,7 +41,7 @@ var modulesTags = {
   billing: 'infra'
 }
 
-resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2025-02-01' = {
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2025-07-01' = {
   name: logAnalyticsName
   location: location
   tags: modulesTags

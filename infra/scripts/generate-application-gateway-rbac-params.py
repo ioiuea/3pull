@@ -3,6 +3,7 @@
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 
@@ -11,9 +12,33 @@ def quote(value: str) -> str:
     return f"'{escaped}'"
 
 
+def identity_exists(resource_group_name: str, identity_name: str) -> bool:
+    """Managed Identity の存在有無を判定する。"""
+    result = subprocess.run(
+        [
+            "az",
+            "identity",
+            "show",
+            "--resource-group",
+            resource_group_name,
+            "--name",
+            identity_name,
+            "--query",
+            "id",
+            "-o",
+            "tsv",
+            "--only-show-errors",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
 common_path = Path(os.environ["COMMON_FILE"])
 config_path = Path(os.environ["RESOURCE_CONFIG_FILE"])
-aks_meta_path = Path(os.environ["AKS_META_FILE"])
+managed_ids_meta_path = Path(os.environ["MANAGED_IDS_META_FILE"])
 application_gateway_meta_path = Path(os.environ["APPLICATION_GATEWAY_META_FILE"])
 application_gateway_low_latency_meta_path = Path(os.environ["APPLICATION_GATEWAY_LOW_LATENCY_META_FILE"])
 params_dir = Path(os.environ["PARAMS_DIR"])
@@ -21,7 +46,7 @@ out_meta_path = Path(os.environ["OUT_META_FILE"])
 
 common = json.loads(common_path.read_text(encoding="utf-8"))
 config = json.loads(config_path.read_text(encoding="utf-8"))
-aks_meta = json.loads(aks_meta_path.read_text(encoding="utf-8"))
+managed_ids_meta = json.loads(managed_ids_meta_path.read_text(encoding="utf-8"))
 application_gateway_meta = json.loads(application_gateway_meta_path.read_text(encoding="utf-8"))
 application_gateway_low_latency_meta = json.loads(application_gateway_low_latency_meta_path.read_text(encoding="utf-8"))
 
@@ -37,12 +62,13 @@ if not environment_name or not system_name:
     )
 
 enable_low_latency_subnet = bool(network_values.get("enableLowLatencyApplicationGatewaySubnet", False))
-deploy = bool(resource_toggles.get("aks", True))
 
 application_gateway_resource_group_name = application_gateway_meta.get(
     "resourceGroupName", f"rg-{environment_name}-{system_name}-nw"
 )
-managed_identity_resource_group_name = aks_meta.get("resourceGroupName", f"rg-{environment_name}-{system_name}-svc")
+managed_identity_resource_group_name = managed_ids_meta.get("resourceGroupName", f"rg-{environment_name}-{system_name}-svc")
+if not managed_identity_resource_group_name:
+    raise SystemExit("managed ids meta の resourceGroupName が取得できません")
 
 standard_application_gateway_name = application_gateway_meta.get(
     "applicationGatewayName", f"agw-{environment_name}-{system_name}"
@@ -56,6 +82,17 @@ agic_low_latency_managed_identity_name = f"mi-{environment_name}-{system_name}-a
 app_gateway_contributor_role_definition_id = config.get(
     "appGatewayContributorRoleDefinitionId", "b24988ac-6180-42a0-ab88-20f7382dd24c"
 )
+
+has_standard_agic_identity = identity_exists(
+    managed_identity_resource_group_name,
+    agic_standard_managed_identity_name,
+)
+has_low_latency_agic_identity = (
+    identity_exists(managed_identity_resource_group_name, agic_low_latency_managed_identity_name)
+    if enable_low_latency_subnet
+    else True
+)
+deploy = bool(resource_toggles.get("applicationGateway", True)) and has_standard_agic_identity and has_low_latency_agic_identity
 
 params_dir.mkdir(parents=True, exist_ok=True)
 params_file = params_dir / "application-gateway-rbac.bicepparam"

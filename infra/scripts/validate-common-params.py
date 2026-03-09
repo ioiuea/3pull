@@ -273,26 +273,6 @@ def main() -> int:
                     f"serviceCidr={service_cidr}, vnet={vnet}"
                 )
 
-    # Key Vault 設定
-    if "enableWorkloadIdentityRbac" in key_vault_values:
-        as_bool(
-            key_vault_values.get("enableWorkloadIdentityRbac"),
-            "keyVault.enableWorkloadIdentityRbac",
-            errors,
-        )
-    if "enableWorkloadIdentityRbac" in service_bus_values:
-        as_bool(
-            service_bus_values.get("enableWorkloadIdentityRbac"),
-            "serviceBus.enableWorkloadIdentityRbac",
-            errors,
-        )
-    if "enableWorkloadIdentityRbac" in storage_values:
-        as_bool(
-            storage_values.get("enableWorkloadIdentityRbac"),
-            "storage.enableWorkloadIdentityRbac",
-            errors,
-        )
-
     # PostgreSQL 設定
     sku_tier = as_non_empty_str(postgres_values.get("skuTier"), "postgres.skuTier", errors)
     if sku_tier is not None and sku_tier not in ["Burstable", "GeneralPurpose", "MemoryOptimized"]:
@@ -655,6 +635,7 @@ def main() -> int:
         "virtualNetwork",
         "subnets",
         "firewall",
+        "managedIds",
         "applicationGateway",
         "aks",
         "acr",
@@ -665,7 +646,6 @@ def main() -> int:
         "postgresDatabase",
         "cosmosDatabase",
         "maintenanceVm",
-        "federatedCredential",
         "agicController",
         "kedaController",
     ]

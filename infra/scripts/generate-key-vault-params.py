@@ -3,6 +3,7 @@
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 
@@ -12,19 +13,42 @@ def quote(value: str) -> str:
     return f"'{escaped}'"
 
 
+def identity_exists(resource_group_name: str, identity_name: str) -> bool:
+    """Managed Identity の存在有無を判定する。"""
+    result = subprocess.run(
+        [
+            "az",
+            "identity",
+            "show",
+            "--resource-group",
+            resource_group_name,
+            "--name",
+            identity_name,
+            "--query",
+            "id",
+            "-o",
+            "tsv",
+            "--only-show-errors",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
 common_path = Path(os.environ["COMMON_FILE"])
 config_path = Path(os.environ["RESOURCE_CONFIG_FILE"])
-aks_meta_path = Path(os.environ["AKS_META_FILE"])
+managed_ids_meta_path = Path(os.environ["MANAGED_IDS_META_FILE"])
 params_dir = Path(os.environ["PARAMS_DIR"])
 out_meta_path = Path(os.environ["OUT_META_FILE"])
 
 common = json.loads(common_path.read_text(encoding="utf-8"))
 config = json.loads(config_path.read_text(encoding="utf-8"))
-aks_meta = json.loads(aks_meta_path.read_text(encoding="utf-8"))
+managed_ids_meta = json.loads(managed_ids_meta_path.read_text(encoding="utf-8"))
 
 common_values = common.get("common", {})
 network_values = common.get("network", {})
-key_vault_values = common.get("keyVault", {})
 
 environment_name = common_values.get("environmentName", "")
 system_name = common_values.get("systemName", "")
@@ -41,13 +65,20 @@ enable_resource_lock = bool(common_values.get("enableResourceLock", True))
 lock_kind = config.get("lockKind", "CanNotDelete") if enable_resource_lock else ""
 resource_group_name = f"rg-{environment_name}-{system_name}-{modules_name}"
 vnet_resource_group_name = f"rg-{environment_name}-{system_name}-nw"
-managed_identity_resource_group_name = aks_meta.get("resourceGroupName", "")
+managed_identity_resource_group_name = managed_ids_meta.get("resourceGroupName", "")
 if not managed_identity_resource_group_name:
-    raise SystemExit("AKS meta の resourceGroupName が取得できません")
+    raise SystemExit("managed ids meta の resourceGroupName が取得できません")
 api_managed_identity_name = f"mi-{environment_name}-{system_name}-api"
 worker_managed_identity_name = f"mi-{environment_name}-{system_name}-worker"
 cleanup_managed_identity_name = f"mi-{environment_name}-{system_name}-cleanup"
-enable_workload_identity_rbac = bool(key_vault_values.get("enableWorkloadIdentityRbac", True))
+toggle_enabled = bool(common.get("resourceToggles", {}).get("keyVault", True))
+enable_workload_identity_rbac = toggle_enabled and all(
+    [
+        identity_exists(managed_identity_resource_group_name, api_managed_identity_name),
+        identity_exists(managed_identity_resource_group_name, worker_managed_identity_name),
+        identity_exists(managed_identity_resource_group_name, cleanup_managed_identity_name),
+    ]
+)
 
 key_vault_name = f"kv-{environment_name}-{system_name}"
 private_endpoint_name = f"pep-kv-{environment_name}-{system_name}"

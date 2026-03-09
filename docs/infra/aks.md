@@ -59,8 +59,8 @@
 
 `infra/main.sh` の post-deploy で実施します。
 
-- AGIC: `resourceToggles.agicController=true` かつ `resourceToggles.federatedCredential=true` のとき実行
-- KEDA: `resourceToggles.kedaController=true` かつ `resourceToggles.federatedCredential=true` のとき実行
+- AGIC: `resourceToggles.agicController=true` かつ Federated Credential が作成済みのとき実行
+- KEDA: `resourceToggles.kedaController=true` かつ Federated Credential が作成済みのとき実行
 
 ## 診断設定 / ロック
 

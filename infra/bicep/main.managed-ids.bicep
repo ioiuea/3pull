@@ -1,0 +1,67 @@
+targetScope = 'resourceGroup'
+
+@description('環境名')
+param environmentName string
+
+@description('システム名称')
+param systemName string
+
+@description('デプロイ先リージョン')
+param location string
+
+@description('モジュール名')
+param modulesName string = 'svc'
+
+@description('低遅延系 Application Gateway サブネット有効化')
+param enableLowLatencyApplicationGatewaySubnet bool = false
+
+var modulesTags = {
+  environmentName: environmentName
+  systemName: systemName
+  modulesName: modulesName
+  createdBy: 'bicep'
+  billing: 'infra'
+}
+
+resource apiManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-api'
+  location: location
+  tags: modulesTags
+}
+
+resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-worker'
+  location: location
+  tags: modulesTags
+}
+
+resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-cleanup'
+  location: location
+  tags: modulesTags
+}
+
+resource kedaOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-keda-operator'
+  location: location
+  tags: modulesTags
+}
+
+resource agicStandardManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-agic-standard'
+  location: location
+  tags: modulesTags
+}
+
+resource agicLowLatencyManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = if (enableLowLatencyApplicationGatewaySubnet) {
+  name: 'mi-${environmentName}-${systemName}-agic-lowlatency'
+  location: location
+  tags: modulesTags
+}
+
+output apiManagedIdentityName string = apiManagedIdentity.name
+output workerManagedIdentityName string = workerManagedIdentity.name
+output cleanupManagedIdentityName string = cleanupManagedIdentity.name
+output kedaOperatorManagedIdentityName string = kedaOperatorManagedIdentity.name
+output agicStandardManagedIdentityName string = agicStandardManagedIdentity.name
+output agicLowLatencyManagedIdentityName string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.name : ''

@@ -5,7 +5,6 @@
   "keyVaultSkuName": "standard",
   "publicNetworkAccess": "Disabled",
   "enableRbacAuthorization": true,
-  "enableWorkloadIdentityRbac": true,
   "keyVaultOfficerObjectId": "",
   "enableSoftDelete": true,
   "enablePurgeProtection": true,

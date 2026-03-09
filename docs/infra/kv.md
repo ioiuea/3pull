@@ -15,7 +15,7 @@
 
 ## RBAC（Workload Identity）
 
-`keyVault.enableWorkloadIdentityRbac=true` のとき Bicep で付与。
+対象リソースのデプロイが有効で、必要な Managed Identity が Azure 上に存在する場合に Bicep で付与。
 
 | principal | ロール | スコープ | 用途 |
 | --- | --- | --- | --- |

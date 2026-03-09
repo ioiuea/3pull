@@ -424,32 +424,14 @@ Kubernetes Service（ClusterIP）用の IP 範囲（CIDR）です。
   - `aks.podCidr` と重複不可
 - 利用可能 IP が 10 個以上必要
 
-### keyVault.enableWorkloadIdentityRbac
+### Key Vault / Service Bus / Storage の Workload Identity RBAC
 
-Key Vault へ Managed Identity ベースの RBAC（`Key Vault Secrets User`）を自動付与するかどうかを指定します。
+`keyVault` / `serviceBus` / `storage` をデプロイする場合、各リソースの Managed Identity RBAC は自動判定で適用します。
 
-- `true`（デフォルト）: `mi-<env>-<system>-api/worker/cleanup` に対して `Key Vault Secrets User` を付与
-- `false`: Key Vault のロール割り当てを作成しない
-
-### serviceBus.enableWorkloadIdentityRbac
-
-Service Bus へ Managed Identity ベースの RBAC を自動付与するかどうかを指定します。
-
-- `true`（デフォルト）:
-  - `mi-<env>-<system>-api` に `Azure Service Bus Data Sender`
-  - `mi-<env>-<system>-worker` に `Azure Service Bus Data Receiver`
-  - `mi-<env>-<system>-keda-operator` に `Azure Service Bus Data Receiver`
-- `false`: Service Bus のロール割り当てを作成しない
-
-### storage.enableWorkloadIdentityRbac
-
-Storage へ Managed Identity ベースの RBAC を自動付与するかどうかを指定します。
-
-- `true`（デフォルト）:
-  - `mi-<env>-<system>-api` に `Storage Blob Data Contributor`
-  - `mi-<env>-<system>-worker` に `Storage Blob Data Contributor`
-  - `mi-<env>-<system>-cleanup` に `Storage Blob Data Contributor`
-- `false`: Storage のロール割り当てを作成しない
+- 判定条件:
+  - 対象リソースの `resourceToggles` が `true`
+  - 必要な Managed Identity が Azure 上に実在する
+- 条件を満たす場合のみ RBAC を作成し、満たさない場合は RBAC 作成をスキップします。
 
 ### postgres.enableZoneRedundantHa
 
@@ -789,6 +771,7 @@ Cosmos DB のキーによるメタデータ書き込みを無効化するかど�
 - `subnets`
   - `subnets`, `route-tables`, `nsgs`, `subnet-attachments` を一括制御
 - `firewall`
+- `managedIds`
 - `applicationGateway`
 - `aks`
 - `acr`
@@ -799,7 +782,6 @@ Cosmos DB のキーによるメタデータ書き込みを無効化するかど�
 - `maintenanceVm`
 - `cosmosDatabase`
 - `redis`
-- `federatedCredential`
 - `agicController`
 - `kedaController`
 
@@ -844,11 +826,13 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
   - Route Tables
   - NSGs
   - Subnet Attachments（RouteTable/NSG紐づけ）
+- service
+  - Managed IDs
   - Application Gateway
   - Application Gateway（Low Latency, `network.enableLowLatencyApplicationGatewaySubnet=true` の場合）
-- service
-  - AKS
   - Application Gateway RBAC（AGIC 用 Managed Identity に App Gateway 更新権限を付与）
+  - AKS
+  - Federated Credential（`resourceToggles.aks=true` かつ必要な Managed Identity が存在し、`infra/config/federated-credential.json` の `enabled=true` の場合）
   - ACR（ACR RG スコープで AKS をアタッチ）
   - Key Vault
   - Service Bus
@@ -858,9 +842,8 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
   - Cosmos DB (NoSQL)
   - Redis
 - post
-  - Federated Credential（AKS が存在する場合のみ）
-  - AGIC コントローラ導入（`resourceToggles.agicController=true` かつ `resourceToggles.federatedCredential=true` かつ AKS が存在する場合のみ）
-  - KEDA コントローラ導入（`resourceToggles.kedaController=true` かつ `resourceToggles.federatedCredential=true` かつ AKS が存在する場合のみ）
+  - AGIC コントローラ導入（`resourceToggles.agicController=true` かつ Federated Credential が作成済み かつ AKS が存在する場合のみ）
+  - KEDA コントローラ導入（`resourceToggles.kedaController=true` かつ Federated Credential が作成済み かつ AKS が存在する場合のみ）
   - frontend Helm values 生成（`infra/config/frontend-values.template.yaml` から `k8s/charts/frontend/values.yaml` を生成）
   - backend Helm values 生成（`infra/config/backend-values.template.yaml` から `k8s/charts/backend/values.yaml` を生成）
 
@@ -874,7 +857,9 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
 - `route-tables.bicepparam`
 - `nsgs.bicepparam`
 - `subnet-attachments.bicepparam`
+- `managed-ids.bicepparam`
 - `application-gateway.bicepparam`
+- `application-gateway-rbac.bicepparam`
 - `acr.bicepparam`
 - `key-vault.bicepparam`
 - `service-bus.bicepparam`

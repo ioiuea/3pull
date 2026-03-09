@@ -5,15 +5,13 @@
     "systemName": "3pull",
     "enableResourceLock": true
   },
-  "logAnalytics": {
-    "dailyQuotaGb": -1
-  },
   "resourceToggles": {
     "logAnalytics": true,
     "applicationInsights": true,
     "virtualNetwork": true,
     "subnets": true,
     "firewall": true,
+    "managedIds": true,
     "applicationGateway": true,
     "aks": true,
     "acr": true,
@@ -24,9 +22,11 @@
     "maintenanceVm": true,
     "cosmosDatabase": false,
     "redis": false,
-    "federatedCredential": true,
-    "agicController": true,
-    "kedaController": true
+    "agicController": false,
+    "kedaController": false
+  },
+  "logAnalytics": {
+    "dailyQuotaGb": -1
   },
   "network": {
     "enableFirewallIdps": false,
@@ -53,15 +53,6 @@
     "userPoolLabel": "user",
     "podCidr": "10.189.0.0/17",
     "serviceCidr": "10.47.0.0/24"
-  },
-  "keyVault": {
-    "enableWorkloadIdentityRbac": true
-  },
-  "serviceBus": {
-    "enableWorkloadIdentityRbac": true
-  },
-  "storage": {
-    "enableWorkloadIdentityRbac": true
   },
   "postgres": {
     "skuTier": "Burstable",

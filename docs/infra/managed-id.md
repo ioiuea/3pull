@@ -17,7 +17,8 @@ AKS 上の workload とコントローラ（AGIC/KEDA）が、接続文字列を
 
 ## 作成タイミング
 
-- `infra/bicep/main.aks.bicep` で AKS と同時に作成
+- `infra/bicep/main.managed-ids.bicep` で作成
+- デプロイ順は `Managed IDs -> Application Gateway -> Application Gateway RBAC -> AKS`
 
 ## RBAC 方針（最小権限）
 

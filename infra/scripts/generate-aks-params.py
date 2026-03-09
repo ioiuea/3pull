@@ -169,7 +169,6 @@ lines = [
     f"param managedAad = {'true' if bool(config.get('managedAad', True)) else 'false'}",
     f"param enablePrivateCluster = {'true' if bool(config.get('enablePrivateCluster', True)) else 'false'}",
     f"param enablePrivateClusterPublicFqdn = {'true' if bool(config.get('enablePrivateClusterPublicFqdn', False)) else 'false'}",
-    f"param enableLowLatencyApplicationGatewaySubnet = {'true' if bool(network_values.get('enableLowLatencyApplicationGatewaySubnet', False)) else 'false'}",
     "",
 ]
 params_file.write_text("\n".join(lines), encoding="utf-8")

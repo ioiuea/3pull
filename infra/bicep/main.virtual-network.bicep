@@ -63,7 +63,7 @@ resource ddosProtectionPlanDeleteLock 'Microsoft.Authorization/locks@2020-05-01'
 
 var ddosProtectionPlanIdEffective = !enableDdosProtection ? '' : (empty(ddosProtectionPlanId) ? ddosProtectionPlan.id : ddosProtectionPlanId)
 
-resource virtualNetwork 'Microsoft.Network/virtualNetworks@2024-07-01' = {
+resource virtualNetwork 'Microsoft.Network/virtualNetworks@2025-05-01' = {
   name: vnetName
   location: location
   tags: modulesTags

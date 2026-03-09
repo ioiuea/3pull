@@ -46,6 +46,10 @@ application_gateway_rbac_config_file="$infra_root/config/application-gateway-rba
 application_gateway_rbac_script="$infra_root/scripts/generate-application-gateway-rbac-params.py"
 application_gateway_rbac_meta_file="$params_dir/application-gateway-rbac-meta.json"
 
+managed_ids_config_file="$infra_root/config/managed-ids.json"
+managed_ids_script="$infra_root/scripts/generate-managed-ids-params.py"
+managed_ids_meta_file="$params_dir/managed-ids-meta.json"
+
 key_vault_config_file="$infra_root/config/key-vault.json"
 key_vault_script="$infra_root/scripts/generate-key-vault-params.py"
 key_vault_meta_file="$params_dir/key-vault-meta.json"
@@ -187,6 +191,16 @@ if [[ ! -f "$application_gateway_rbac_script" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$managed_ids_config_file" ]]; then
+  echo "managed ids config file が見つかりません: $managed_ids_config_file" >&2
+  exit 1
+fi
+
+if [[ ! -f "$managed_ids_script" ]]; then
+  echo "managed ids script が見つかりません: $managed_ids_script" >&2
+  exit 1
+fi
+
 if [[ ! -f "$key_vault_config_file" ]]; then
   echo "key vault config file が見つかりません: $key_vault_config_file" >&2
   exit 1
@@ -323,6 +337,13 @@ TIMESTAMP="$timestamp" \
 "$firewall_script"
 
 COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$managed_ids_config_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$managed_ids_meta_file" \
+TIMESTAMP="$timestamp" \
+"$managed_ids_script"
+
+COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$application_gateway_config_file" \
 SUBNETS_CONFIG_FILE="$subnets_config_file" \
 PARAMS_DIR="$params_dir" \
@@ -370,7 +391,7 @@ TIMESTAMP="$timestamp" \
 
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$application_gateway_rbac_config_file" \
-AKS_META_FILE="$aks_meta_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
 APPLICATION_GATEWAY_META_FILE="$application_gateway_meta_file" \
 APPLICATION_GATEWAY_LOW_LATENCY_META_FILE="$application_gateway_low_latency_meta_file" \
 PARAMS_DIR="$params_dir" \
@@ -388,7 +409,7 @@ TIMESTAMP="$timestamp" \
 
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$key_vault_config_file" \
-AKS_META_FILE="$aks_meta_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
 PARAMS_DIR="$params_dir" \
 OUT_META_FILE="$key_vault_meta_file" \
 TIMESTAMP="$timestamp" \
@@ -396,7 +417,7 @@ TIMESTAMP="$timestamp" \
 
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$service_bus_config_file" \
-AKS_META_FILE="$aks_meta_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
 PARAMS_DIR="$params_dir" \
 OUT_META_FILE="$service_bus_meta_file" \
 TIMESTAMP="$timestamp" \
@@ -404,7 +425,7 @@ TIMESTAMP="$timestamp" \
 
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$storage_config_file" \
-AKS_META_FILE="$aks_meta_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
 PARAMS_DIR="$params_dir" \
 OUT_META_FILE="$storage_meta_file" \
 TIMESTAMP="$timestamp" \
@@ -489,6 +510,16 @@ PY
 )"
 
 firewall_resource_group_name="$(META_FILE="$firewall_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("resourceGroupName", ""))
+PY
+)"
+
+managed_ids_resource_group_name="$(META_FILE="$managed_ids_meta_file" python - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -664,6 +695,11 @@ if [[ -z "$firewall_resource_group_name" ]]; then
   exit 1
 fi
 
+if [[ -z "$managed_ids_resource_group_name" ]]; then
+  echo "managed ids resourceGroupName が取得できませんでした。config を確認してください。" >&2
+  exit 1
+fi
+
 if [[ -z "$application_gateway_resource_group_name" ]]; then
   echo "application gateway resourceGroupName が取得できませんでした。config を確認してください。" >&2
   exit 1
@@ -766,6 +802,13 @@ if [[ "$firewall_resource_group_name" != "$vnet_resource_group_name" && "$firewa
   echo "==> Ensure Resource Group: $firewall_resource_group_name"
   az group create \
     --name "$firewall_resource_group_name" \
+    --location "$location" >/dev/null
+fi
+
+if [[ "$managed_ids_resource_group_name" != "$vnet_resource_group_name" && "$managed_ids_resource_group_name" != "$subnets_resource_group_name" && "$managed_ids_resource_group_name" != "$firewall_resource_group_name" ]]; then
+  echo "==> Ensure Resource Group: $managed_ids_resource_group_name"
+  az group create \
+    --name "$managed_ids_resource_group_name" \
     --location "$location" >/dev/null
 fi
 
@@ -1485,19 +1528,52 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# Application Gateway / AKS / ACR / Key Vault / Service Bus / Storage / PostgreSQL / Maintenance VM / Cosmos DB / Redis
+# Managed IDs / Application Gateway / AKS / ACR / Key Vault / Service Bus / Storage / PostgreSQL / Maintenance VM / Cosmos DB / Redis
 # -----------------------------------------------------------------------------
 # 依存順:
-# 1) Application Gateway
-# 2) AKS (AGIC 連携先が先に必要)
-# 3) ACR (ACR RG スコープで AKS kubelet へ AcrPull を付与)
-# 4) Key Vault (Private Endpoint 用サブネットが先に必要)
-# 5) Service Bus (Private Endpoint 用サブネットが先に必要)
-# 6) Storage Account (Private Endpoint 用サブネットが先に必要)
-# 7) PostgreSQL Flexible Server (Private Endpoint 用サブネットが先に必要)
-# 8) Maintenance VM
-# 9) Cosmos DB (Private Endpoint 用サブネットが先に必要)
-# 10) Redis (Private Endpoint 用サブネットが先に必要)
+# 1) Managed IDs
+# 2) Application Gateway
+# 3) Application Gateway RBAC (Managed IDs に App Gateway 更新権限を付与)
+# 4) AKS
+# 5) ACR (ACR RG スコープで AKS kubelet へ AcrPull を付与)
+# 6) Key Vault (Private Endpoint 用サブネットが先に必要)
+# 7) Service Bus (Private Endpoint 用サブネットが先に必要)
+# 8) Storage Account (Private Endpoint 用サブネットが先に必要)
+# 9) PostgreSQL Flexible Server (Private Endpoint 用サブネットが先に必要)
+# 10) Maintenance VM
+# 11) Cosmos DB (Private Endpoint 用サブネットが先に必要)
+# 12) Redis (Private Endpoint 用サブネットが先に必要)
+managed_ids_deploy="$(META_FILE="$managed_ids_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+managed_ids_params_file="$(META_FILE="$managed_ids_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
+if [[ "$managed_ids_deploy" == "true" ]]; then
+  echo "==> Deploy Managed IDs"
+  az deployment group create \
+    --name "main-service-managed-ids-${timestamp}" \
+    --resource-group "$managed_ids_resource_group_name" \
+    --parameters "$managed_ids_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip Managed IDs (resourceToggles.managedIds=false)"
+fi
+
 if [[ "$application_gateway_deploy" == "true" ]]; then
   echo "==> Deploy Application Gateway"
   az deployment group create \
@@ -1518,6 +1594,47 @@ if [[ "$application_gateway_low_latency_deploy" == "true" ]]; then
     ${what_if:+$what_if}
 else
   echo "==> Skip Application Gateway (Low Latency)"
+fi
+
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$application_gateway_rbac_config_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
+APPLICATION_GATEWAY_META_FILE="$application_gateway_meta_file" \
+APPLICATION_GATEWAY_LOW_LATENCY_META_FILE="$application_gateway_low_latency_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$application_gateway_rbac_meta_file" \
+TIMESTAMP="$timestamp" \
+"$application_gateway_rbac_script"
+
+application_gateway_rbac_deploy="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(str(bool(meta.get("deploy", True))).lower())
+PY
+)"
+
+application_gateway_rbac_params_file="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
+print(meta.get("paramsFile", ""))
+PY
+)"
+
+if [[ "$application_gateway_rbac_deploy" == "true" ]]; then
+  echo "==> Deploy Application Gateway RBAC"
+  az deployment group create \
+    --name "main-service-application-gateway-rbac-${timestamp}" \
+    --resource-group "$application_gateway_rbac_resource_group_name" \
+    --parameters "$application_gateway_rbac_params_file" \
+    ${what_if:+$what_if}
+else
+  echo "==> Skip Application Gateway RBAC (resourceToggles.applicationGateway=false or required managed identities not found)"
 fi
 
 aks_deploy="$(META_FILE="$aks_meta_file" python - <<'PY'
@@ -1551,7 +1668,20 @@ else
   echo "==> Skip AKS (resourceToggles.aks=false)"
 fi
 
-application_gateway_rbac_deploy="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
+federated_credential_deploy="false"
+if [[ "$aks_deploy" == "true" ]]; then
+  if [[ -n "$what_if" ]]; then
+    echo "==> Skip Federated Credential (--what-if)"
+  else
+    COMMON_FILE="$common_file" \
+    RESOURCE_CONFIG_FILE="$federated_credential_config_file" \
+    AKS_META_FILE="$aks_meta_file" \
+    PARAMS_DIR="$params_dir" \
+    OUT_META_FILE="$federated_credential_meta_file" \
+    TIMESTAMP="$timestamp" \
+    "$federated_credential_script"
+
+    federated_credential_deploy="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -1561,7 +1691,7 @@ print(str(bool(meta.get("deploy", True))).lower())
 PY
 )"
 
-application_gateway_rbac_params_file="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
+    federated_credential_params_file="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
 import json
 import os
 from pathlib import Path
@@ -1571,15 +1701,18 @@ print(meta.get("paramsFile", ""))
 PY
 )"
 
-if [[ "$application_gateway_rbac_deploy" == "true" ]]; then
-  echo "==> Deploy Application Gateway RBAC"
-  az deployment group create \
-    --name "main-service-application-gateway-rbac-${timestamp}" \
-    --resource-group "$application_gateway_rbac_resource_group_name" \
-    --parameters "$application_gateway_rbac_params_file" \
-    ${what_if:+$what_if}
+    if [[ "$federated_credential_deploy" == "true" ]]; then
+      echo "==> Deploy Federated Credential"
+      az deployment group create \
+        --name "main-service-federated-credential-${timestamp}" \
+        --resource-group "$aks_resource_group_name" \
+        --parameters "$federated_credential_params_file"
+    else
+      echo "==> Skip Federated Credential (required managed identities not found or resourceToggles.aks=false or config.enabled=false)"
+    fi
+  fi
 else
-  echo "==> Skip Application Gateway RBAC (resourceToggles.aks=false)"
+  echo "==> Skip Federated Credential (requires resourceToggles.aks=true)"
 fi
 
 acr_deploy="$(META_FILE="$acr_meta_file" python - <<'PY'
@@ -1613,6 +1746,14 @@ else
   echo "==> Skip ACR (resourceToggles.acr=false)"
 fi
 
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$key_vault_config_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$key_vault_meta_file" \
+TIMESTAMP="$timestamp" \
+"$key_vault_script"
+
 key_vault_deploy="$(META_FILE="$key_vault_meta_file" python - <<'PY'
 import json
 import os
@@ -1644,6 +1785,14 @@ else
   echo "==> Skip Key Vault (resourceToggles.keyVault=false)"
 fi
 
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$service_bus_config_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$service_bus_meta_file" \
+TIMESTAMP="$timestamp" \
+"$service_bus_script"
+
 service_bus_deploy="$(META_FILE="$service_bus_meta_file" python - <<'PY'
 import json
 import os
@@ -1674,6 +1823,14 @@ if [[ "$service_bus_deploy" == "true" ]]; then
 else
   echo "==> Skip Service Bus (resourceToggles.serviceBus=false)"
 fi
+
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$storage_config_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$storage_meta_file" \
+TIMESTAMP="$timestamp" \
+"$storage_script"
 
 storage_deploy="$(META_FILE="$storage_meta_file" python - <<'PY'
 import json
@@ -1952,62 +2109,23 @@ fi
 if [[ -z "$existing_aks_name" ]]; then
   cat <<'EOF'
 ------------------------------------------------------------
-NOTICE: Skip Federated / Helm Values Export
+NOTICE: Skip Helm / Values Export
 [EN] AKS is not found in the target resource group.
-     Federated Credential deployment, AGIC/KEDA Helm deployment, and Helm values export are skipped.
+     AGIC/KEDA Helm deployment and Helm values export are skipped.
      Create/deploy AKS first, then run this script again.
 
 [JA] 対象リソースグループに AKS が存在しないため、
-     Federated Credential デプロイ、AGIC/KEDA Helm デプロイ、および Helm values エクスポートをスキップします。
+     AGIC/KEDA Helm デプロイ、および Helm values エクスポートをスキップします。
      先に AKS を作成/デプロイしてから、このスクリプトを再実行してください。
 ------------------------------------------------------------
 EOF
 else
   if [[ -n "$what_if" ]]; then
-    echo "==> Skip Federated Credential (--what-if)"
     echo "==> Skip Deploy AGIC Helm releases (--what-if)"
     echo "==> Skip Deploy KEDA Helm release (--what-if)"
     echo "==> Skip Generate frontend Helm values file (--what-if)"
     echo "==> Skip Generate backend Helm values file (--what-if)"
   else
-    COMMON_FILE="$common_file" \
-    RESOURCE_CONFIG_FILE="$federated_credential_config_file" \
-    AKS_META_FILE="$aks_meta_file" \
-    PARAMS_DIR="$params_dir" \
-    OUT_META_FILE="$federated_credential_meta_file" \
-    TIMESTAMP="$timestamp" \
-    "$federated_credential_script"
-
-    federated_credential_deploy="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-    federated_credential_params_file="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-    if [[ "$federated_credential_deploy" == "true" ]]; then
-      echo "==> Deploy Federated Credential"
-      az deployment group create \
-        --name "main-service-federated-credential-${timestamp}" \
-        --resource-group "$aks_resource_group_name" \
-        --parameters "$federated_credential_params_file"
-    else
-      echo "==> Skip Federated Credential (resourceToggles.federatedCredential=false or config.enabled=false)"
-    fi
-
     agic_controller_deploy="$(COMMON_FILE="$common_file" python - <<'PY'
 import json
 import os

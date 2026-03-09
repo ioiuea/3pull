@@ -23,6 +23,30 @@ def run_az(cmd: list[str]) -> str:
     return result.stdout.strip()
 
 
+def identity_exists(resource_group_name: str, identity_name: str) -> bool:
+    """Managed Identity の存在有無を判定する。"""
+    result = subprocess.run(
+        [
+            "az",
+            "identity",
+            "show",
+            "--resource-group",
+            resource_group_name,
+            "--name",
+            identity_name,
+            "--query",
+            "id",
+            "-o",
+            "tsv",
+            "--only-show-errors",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
 common_path = Path(os.environ["COMMON_FILE"])
 config_path = Path(os.environ["RESOURCE_CONFIG_FILE"])
 aks_meta_path = Path(os.environ["AKS_META_FILE"])
@@ -43,8 +67,8 @@ if not environment_name or not system_name:
         "common.parameter.json の common.environmentName / common.systemName を設定してください"
     )
 
-deploy = bool(toggles.get("federatedCredential", True)) and bool(config.get("enabled", True))
-if not deploy:
+base_deploy = bool(toggles.get("aks", True)) and bool(config.get("enabled", True))
+if not base_deploy:
     meta = {
         "resourceGroupName": str(aks_meta.get("resourceGroupName", "")).strip(),
         "deploy": False,
@@ -57,6 +81,40 @@ resource_group_name = str(aks_meta.get("resourceGroupName", "")).strip()
 aks_name = str(aks_meta.get("aksName", "")).strip()
 if not resource_group_name or not aks_name:
     raise SystemExit("AKS meta の resourceGroupName / aksName が取得できません")
+
+api_managed_identity_name = f"mi-{environment_name}-{system_name}-api"
+worker_managed_identity_name = f"mi-{environment_name}-{system_name}-worker"
+cleanup_managed_identity_name = f"mi-{environment_name}-{system_name}-cleanup"
+keda_operator_managed_identity_name = f"mi-{environment_name}-{system_name}-keda-operator"
+agic_standard_managed_identity_name = f"mi-{environment_name}-{system_name}-agic-standard"
+agic_low_latency_managed_identity_name = f"mi-{environment_name}-{system_name}-agic-lowlatency"
+enable_low_latency_application_gateway_subnet = bool(
+    network_values.get("enableLowLatencyApplicationGatewaySubnet", False)
+)
+
+deploy = all(
+    [
+        identity_exists(resource_group_name, api_managed_identity_name),
+        identity_exists(resource_group_name, worker_managed_identity_name),
+        identity_exists(resource_group_name, cleanup_managed_identity_name),
+        identity_exists(resource_group_name, keda_operator_managed_identity_name),
+        identity_exists(resource_group_name, agic_standard_managed_identity_name),
+        (
+            identity_exists(resource_group_name, agic_low_latency_managed_identity_name)
+            if enable_low_latency_application_gateway_subnet
+            else True
+        ),
+    ]
+)
+
+if not deploy:
+    meta = {
+        "resourceGroupName": resource_group_name,
+        "deploy": False,
+        "paramsFile": "",
+    }
+    out_meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    raise SystemExit(0)
 
 oidc_issuer_url = run_az(
     [
@@ -79,11 +137,6 @@ if not oidc_issuer_url:
         "AKS の OIDC issuer / Workload Identity が有効か確認してください。"
     )
 
-api_managed_identity_name = f"mi-{environment_name}-{system_name}-api"
-worker_managed_identity_name = f"mi-{environment_name}-{system_name}-worker"
-cleanup_managed_identity_name = f"mi-{environment_name}-{system_name}-cleanup"
-keda_operator_managed_identity_name = f"mi-{environment_name}-{system_name}-keda-operator"
-
 app_namespace = str(config.get("appNamespace", system_name)).strip() or system_name
 keda_namespace = str(config.get("kedaNamespace", "keda")).strip() or "keda"
 keda_operator_service_account_name = (
@@ -96,9 +149,6 @@ agic_standard_service_account_name = (
 agic_low_latency_service_account_name = (
     str(config.get("agicLowLatencyServiceAccountName", "sa-agic-lowlatency")).strip() or "sa-agic-lowlatency"
 )
-enable_low_latency_application_gateway_subnet = bool(
-    network_values.get("enableLowLatencyApplicationGatewaySubnet", False)
-)
 
 api_service_account_name = f"sa-{environment_name}-{system_name}-api"
 worker_service_account_name = f"sa-{environment_name}-{system_name}-worker"
@@ -108,8 +158,6 @@ api_federated_credential_name = f"fic-{environment_name}-{system_name}-api"
 worker_federated_credential_name = f"fic-{environment_name}-{system_name}-worker"
 cleanup_federated_credential_name = f"fic-{environment_name}-{system_name}-cleanup"
 keda_operator_federated_credential_name = f"fic-{environment_name}-{system_name}-keda-operator"
-agic_standard_managed_identity_name = f"mi-{environment_name}-{system_name}-agic-standard"
-agic_low_latency_managed_identity_name = f"mi-{environment_name}-{system_name}-agic-lowlatency"
 agic_standard_federated_credential_name = f"fic-{environment_name}-{system_name}-agic-standard"
 agic_low_latency_federated_credential_name = f"fic-{environment_name}-{system_name}-agic-lowlatency"
 

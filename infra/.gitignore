@@ -8,3 +8,5 @@ params/*
 # Python bytecode caches
 scripts/__pycache__
 scripts/**/*.pyc
+
+logs/*
