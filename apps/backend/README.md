@@ -76,11 +76,7 @@ apps/backend
 │       └── health.py                     # ヘルスチェックユースケース
 ├── alembic/                              # マイグレーション管理層
 │   └── versions/                         # 生成されたリビジョンファイル
-├── scripts/                              # 初期構築・運用補助スクリプト群
-│   ├── postgres/                         # PostgreSQL 初期構築スクリプト群
-│   │   ├── run_all.sh                    # DB/Schema/Roleセットアップ実行
-│   │   ├── README.md                     # PostgreSQL 初期構築手順
-│   │   └── scripts/                      # 個別セットアップスクリプト
+├── scripts/                              # 運用補助スクリプト群
 │   └── storage/                          # Storage 初期構築スクリプト群
 │       ├── create_blob_container.py      # Blob コンテナ作成 CLI
 │       └── README.md                     # Storage 初期構築手順

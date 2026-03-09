@@ -21,9 +21,7 @@
     "postgresDatabase": true,
     "maintenanceVm": true,
     "cosmosDatabase": false,
-    "redis": false,
-    "agicController": false,
-    "kedaController": false
+    "redis": false
   },
   "logAnalytics": {
     "dailyQuotaGb": -1

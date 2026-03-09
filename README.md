@@ -49,7 +49,7 @@
    フロントエンド/バックエンドの依存関係をまとめてセットアップします。
 
 3. PostgreSQL 初期セットアップを行う
-   `apps/backend/scripts/postgres/README.md` を参照して、データベース/スキーマ/ロール/`search_path` を作成します。
+   `scripts/init/postgres/README.md` を参照して、データベース/スキーマ/ロール/`search_path` を作成します。
 
 4. 非同期ジョブ用の Blob コンテナを作成する
    `apps/backend/scripts/storage/README.md` を参照して、非同期ジョブ成果物の保存先となる Blob コンテナを作成します。
