@@ -15,6 +15,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 infra_root="$repo_root/infra"
 common_file="$infra_root/common.parameter.json"
 params_dir="$infra_root/params"
+logs_dir="$infra_root/logs"
 common_validation_script="$infra_root/scripts/validate-common-params.py"
 
 log_config_file="$infra_root/config/log-analytics.json"
@@ -127,6 +128,15 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+run_bicep_deployment() {
+  local log_key="$1"
+  shift
+  local log_file
+  log_file="$logs_dir/${timestamp}-${log_key}.log"
+
+  "$@" >"$log_file" 2> >(tee -a "$log_file" >&2)
+}
+
 # -----------------------------------------------------------------------------
 # Pre-flight checks
 # -----------------------------------------------------------------------------
@@ -144,6 +154,8 @@ fi
 
 echo "==> Validate common parameters"
 "$common_validation_script" "$common_file"
+
+mkdir -p "$logs_dir"
 
 # 各リソースの固定設定ファイルが欠けていないかを先に検証する。
 if [[ ! -f "$log_config_file" ]]; then
@@ -949,7 +961,7 @@ PY
 
 if [[ "$log_deploy" == "true" ]]; then
   echo "==> Deploy Log Analytics"
-  az deployment group create \
+  run_bicep_deployment "log-analytics" az deployment group create \
     --name "main-monitor-log-analytics-${timestamp}" \
     --resource-group "$resource_group_name" \
     --parameters "$log_params_file" \
@@ -960,7 +972,7 @@ fi
 
 if [[ "$appi_deploy" == "true" ]]; then
   echo "==> Deploy Application Insights"
-  az deployment group create \
+  run_bicep_deployment "application-insights" az deployment group create \
     --name "main-monitor-application-insights-${timestamp}" \
     --resource-group "$resource_group_name" \
     --parameters "$appi_params_file" \
@@ -1077,7 +1089,7 @@ NOTICE: Virtual Network
 EOF
   else
     echo "==> Deploy Virtual Network"
-    az deployment group create \
+    run_bicep_deployment "virtual-network" az deployment group create \
       --name "main-network-virtual-network-${timestamp}" \
       --resource-group "$vnet_resource_group_name" \
       --parameters "$vnet_params_file" \
@@ -1130,7 +1142,7 @@ PY
 
 if [[ "$subnets_deploy" == "true" ]]; then
   echo "==> Deploy Subnets (without NSG/RouteTable)"
-  az deployment group create \
+  run_bicep_deployment "subnets" az deployment group create \
     --name "main-network-subnets-${timestamp}" \
     --resource-group "$subnets_resource_group_name" \
     --parameters "$subnets_params_file" \
@@ -1255,7 +1267,7 @@ EOF
     if [[ -n "${what_if:-}" ]]; then
       firewall_deploy_cmd+=("$what_if")
     fi
-    "${firewall_deploy_cmd[@]}"
+    run_bicep_deployment "firewall" "${firewall_deploy_cmd[@]}"
   else
     echo "==> Deploy Firewall"
     firewall_deploy_cmd=(
@@ -1267,7 +1279,7 @@ EOF
     if [[ -n "${what_if:-}" ]]; then
       firewall_deploy_cmd+=("$what_if")
     fi
-    "${firewall_deploy_cmd[@]}"
+    run_bicep_deployment "firewall" "${firewall_deploy_cmd[@]}"
   fi
 else
   echo "==> Skip Firewall (resourceToggles.firewall=false)"
@@ -1456,7 +1468,7 @@ PY
   fi
 
   echo "==> Deploy Route Tables (UDR)"
-  az deployment group create \
+  run_bicep_deployment "route-tables" az deployment group create \
     --name "main-network-route-tables-${timestamp}" \
     --resource-group "$route_tables_resource_group_name" \
     --parameters "$route_tables_params_file" \
@@ -1487,7 +1499,7 @@ PY
 
 if [[ "$nsgs_deploy" == "true" ]]; then
   echo "==> Deploy NSGs"
-  az deployment group create \
+  run_bicep_deployment "nsgs" az deployment group create \
     --name "main-network-nsgs-${timestamp}" \
     --resource-group "$nsgs_resource_group_name" \
     --parameters "$nsgs_params_file" \
@@ -1518,7 +1530,7 @@ PY
 
 if [[ "$subnet_attachments_deploy" == "true" ]]; then
   echo "==> Attach Route Tables / NSGs to Subnets"
-  az deployment group create \
+  run_bicep_deployment "subnet-attachments" az deployment group create \
     --name "main-network-subnet-attachments-${timestamp}" \
     --resource-group "$subnet_attachments_resource_group_name" \
     --parameters "$subnet_attachments_params_file" \
@@ -1565,7 +1577,7 @@ PY
 
 if [[ "$managed_ids_deploy" == "true" ]]; then
   echo "==> Deploy Managed IDs"
-  az deployment group create \
+  run_bicep_deployment "managed-ids" az deployment group create \
     --name "main-service-managed-ids-${timestamp}" \
     --resource-group "$managed_ids_resource_group_name" \
     --parameters "$managed_ids_params_file" \
@@ -1576,7 +1588,7 @@ fi
 
 if [[ "$application_gateway_deploy" == "true" ]]; then
   echo "==> Deploy Application Gateway"
-  az deployment group create \
+  run_bicep_deployment "application-gateway" az deployment group create \
     --name "main-network-application-gateway-${timestamp}" \
     --resource-group "$application_gateway_resource_group_name" \
     --parameters "$application_gateway_params_file" \
@@ -1587,7 +1599,7 @@ fi
 
 if [[ "$application_gateway_low_latency_deploy" == "true" ]]; then
   echo "==> Deploy Application Gateway (Low Latency)"
-  az deployment group create \
+  run_bicep_deployment "application-gateway-low-latency" az deployment group create \
     --name "main-network-application-gateway-low-latency-${timestamp}" \
     --resource-group "$application_gateway_resource_group_name" \
     --parameters "$application_gateway_low_latency_params_file" \
@@ -1628,7 +1640,7 @@ PY
 
 if [[ "$application_gateway_rbac_deploy" == "true" ]]; then
   echo "==> Deploy Application Gateway RBAC"
-  az deployment group create \
+  run_bicep_deployment "application-gateway-rbac" az deployment group create \
     --name "main-service-application-gateway-rbac-${timestamp}" \
     --resource-group "$application_gateway_rbac_resource_group_name" \
     --parameters "$application_gateway_rbac_params_file" \
@@ -1659,7 +1671,7 @@ PY
 
 if [[ "$aks_deploy" == "true" ]]; then
   echo "==> Deploy AKS"
-  az deployment group create \
+  run_bicep_deployment "aks" az deployment group create \
     --name "main-service-aks-${timestamp}" \
     --resource-group "$aks_resource_group_name" \
     --parameters "$aks_params_file" \
@@ -1703,7 +1715,7 @@ PY
 
     if [[ "$federated_credential_deploy" == "true" ]]; then
       echo "==> Deploy Federated Credential"
-      az deployment group create \
+      run_bicep_deployment "federated-credential" az deployment group create \
         --name "main-service-federated-credential-${timestamp}" \
         --resource-group "$aks_resource_group_name" \
         --parameters "$federated_credential_params_file"
@@ -1737,7 +1749,7 @@ PY
 
 if [[ "$acr_deploy" == "true" ]]; then
   echo "==> Deploy ACR"
-  az deployment group create \
+  run_bicep_deployment "acr" az deployment group create \
     --name "main-service-acr-${timestamp}" \
     --resource-group "$acr_resource_group_name" \
     --parameters "$acr_params_file" \
@@ -1776,7 +1788,7 @@ PY
 
 if [[ "$key_vault_deploy" == "true" ]]; then
   echo "==> Deploy Key Vault"
-  az deployment group create \
+  run_bicep_deployment "key-vault" az deployment group create \
     --name "main-service-key-vault-${timestamp}" \
     --resource-group "$key_vault_resource_group_name" \
     --parameters "$key_vault_params_file" \
@@ -1815,7 +1827,7 @@ PY
 
 if [[ "$service_bus_deploy" == "true" ]]; then
   echo "==> Deploy Service Bus"
-  az deployment group create \
+  run_bicep_deployment "service-bus" az deployment group create \
     --name "main-service-service-bus-${timestamp}" \
     --resource-group "$service_bus_resource_group_name" \
     --parameters "$service_bus_params_file" \
@@ -1854,7 +1866,7 @@ PY
 
 if [[ "$storage_deploy" == "true" ]]; then
   echo "==> Deploy Storage Account"
-  az deployment group create \
+  run_bicep_deployment "storage" az deployment group create \
     --name "main-service-storage-${timestamp}" \
     --resource-group "$storage_resource_group_name" \
     --parameters "$storage_params_file" \
@@ -1891,7 +1903,7 @@ if [[ "$postgres_deploy" == "true" ]]; then
   fi
 
   echo "==> Deploy PostgreSQL Flexible Server"
-  az deployment group create \
+  run_bicep_deployment "postgres-database" az deployment group create \
     --name "main-service-postgres-database-${timestamp}" \
     --resource-group "$postgres_resource_group_name" \
     --parameters "$postgres_params_file" \
@@ -1929,7 +1941,7 @@ if [[ "$maintenance_vm_deploy" == "true" ]]; then
   fi
 
   echo "==> Deploy Maintenance VM"
-  az deployment group create \
+  run_bicep_deployment "maintenance-vm" az deployment group create \
     --name "main-service-maintenance-vm-${timestamp}" \
     --resource-group "$maintenance_vm_resource_group_name" \
     --parameters "$maintenance_vm_params_file" \
@@ -1961,7 +1973,7 @@ PY
 
 if [[ "$cosmos_deploy" == "true" ]]; then
   echo "==> Deploy Cosmos DB (NoSQL)"
-  az deployment group create \
+  run_bicep_deployment "cosmos-database" az deployment group create \
     --name "main-service-cosmos-database-${timestamp}" \
     --resource-group "$cosmos_resource_group_name" \
     --parameters "$cosmos_params_file" \
@@ -1992,7 +2004,7 @@ PY
 
 if [[ "$redis_deploy" == "true" ]]; then
   echo "==> Deploy Redis"
-  az deployment group create \
+  run_bicep_deployment "redis" az deployment group create \
     --name "main-service-redis-${timestamp}" \
     --resource-group "$redis_resource_group_name" \
     --parameters "$redis_params_file" \

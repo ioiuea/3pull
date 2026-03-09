@@ -51,7 +51,7 @@
 
 | 対象 | ServiceAccount 作成 | annotation 設定 | federated credential 作成 |
 | --- | --- | --- | --- |
-| API / worker / cleanup | backend Helm chart | backend Helm chart (`azure.workload.identity/client-id`) | Bicep (`main.federated-credential.bicep`) |
+| API / worker / schedulers | backend Helm chart | backend Helm chart (`azure.workload.identity/client-id`) | Bicep (`main.federated-credential.bicep`) |
 | AGIC standard / lowlatency | `infra/main.sh` の AGIC Helm | `infra/main.sh` の AGIC Helm `--set serviceAccount.annotations...` | Bicep (`main.federated-credential.bicep`) |
 | KEDA operator | `infra/main.sh` の KEDA Helm | `infra/main.sh` の KEDA Helm `--set serviceAccount.operator.annotations...` | Bicep (`main.federated-credential.bicep`) |
 

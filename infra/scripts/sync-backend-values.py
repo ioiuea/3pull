@@ -122,8 +122,8 @@ def add_guidance_comments(content: str) -> str:
             "# KEDA 設定\n# workloadIdentity.clientId は keda-operator Managed Identity で自動更新されます。",
         ),
         (
-            "cleanup:",
-            "# Cleanup CronJob 設定\n# image.tag は CI で毎回置き換えてください。",
+            "schedulers:",
+            "# Schedulers CronJob 設定\n# image.tag は CI で毎回置き換えてください。",
         ),
         (
             "keyVault:",
@@ -222,7 +222,7 @@ if not template_path.exists():
 
 api_identity_name = f"mi-{environment_name}-{system_name}-api"
 worker_identity_name = f"mi-{environment_name}-{system_name}-worker"
-cleanup_identity_name = f"mi-{environment_name}-{system_name}-cleanup"
+schedulers_identity_name = f"mi-{environment_name}-{system_name}-schedulers"
 keda_operator_identity_name = f"mi-{environment_name}-{system_name}-keda-operator"
 
 api_client_id = run_az(
@@ -257,7 +257,7 @@ worker_client_id = run_az(
     ]
 )
 
-cleanup_client_id = run_az(
+schedulers_client_id = run_az(
     [
         "az",
         "identity",
@@ -265,7 +265,7 @@ cleanup_client_id = run_az(
         "--resource-group",
         managed_identity_resource_group_name,
         "--name",
-        cleanup_identity_name,
+        schedulers_identity_name,
         "--query",
         "clientId",
         "-o",
@@ -309,8 +309,8 @@ replacements = {
     "api.image.tag": yaml_quote("__IMAGE_TAG__"),
     "workers.*.image.repository": yaml_quote(f"{image_prefix}/{system_image_name}-worker"),
     "workers.*.image.tag": yaml_quote("__IMAGE_TAG__"),
-    "cleanup.image.repository": yaml_quote(f"{image_prefix}/{system_image_name}-cleanup"),
-    "cleanup.image.tag": yaml_quote("__IMAGE_TAG__"),
+    "schedulers.image.repository": yaml_quote(f"{image_prefix}/{system_image_name}-schedulers"),
+    "schedulers.image.tag": yaml_quote("__IMAGE_TAG__"),
     "keda.workloadIdentity.clientId": yaml_quote(keda_operator_client_id),
     "keyVault.vaultName": yaml_quote(f"kv-{environment_name}-{system_name}"),
     "keyVault.tenantId": yaml_quote(tenant_id),
@@ -318,8 +318,8 @@ replacements = {
     "serviceAccounts.api.clientId": yaml_quote(api_client_id),
     "serviceAccounts.worker.name": yaml_quote(f"sa-{environment_name}-{system_name}-worker"),
     "serviceAccounts.worker.clientId": yaml_quote(worker_client_id),
-    "serviceAccounts.cleanup.name": yaml_quote(f"sa-{environment_name}-{system_name}-cleanup"),
-    "serviceAccounts.cleanup.clientId": yaml_quote(cleanup_client_id),
+    "serviceAccounts.schedulers.name": yaml_quote(f"sa-{environment_name}-{system_name}-schedulers"),
+    "serviceAccounts.schedulers.clientId": yaml_quote(schedulers_client_id),
     "config.env.SERVICE_NAME": yaml_quote(f"{system_image_name}-api"),
     "config.env.SERVICE_BUS_NAMESPACE_FQDN": yaml_quote(f"sb-{environment_name}-{system_name}.servicebus.windows.net"),
     "config.env.AZURE_BLOB_ACCOUNT_URL": yaml_quote(f"https://{storage_account_name}.blob.core.windows.net/"),

@@ -36,8 +36,8 @@ param apiManagedIdentityName string
 @description('worker 用 Managed Identity 名')
 param workerManagedIdentityName string
 
-@description('cleanup 用 Managed Identity 名')
-param cleanupManagedIdentityName string
+@description('schedulers 用 Managed Identity 名')
+param schedulersManagedIdentityName string
 
 @description('Workload Identity 用 RBAC 付与を有効化')
 param enableWorkloadIdentityRbac bool = true
@@ -159,9 +159,9 @@ resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities
   name: workerManagedIdentityName
 }
 
-resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+resource schedulersManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   scope: resourceGroup(managedIdentityResourceGroupName)
-  name: cleanupManagedIdentityName
+  name: schedulersManagedIdentityName
 }
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -403,12 +403,12 @@ resource storageBlobDataContributorForWorker 'Microsoft.Authorization/roleAssign
   }
 }
 
-resource storageBlobDataContributorForCleanup 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
-  name: guid(storageAccount.id, cleanupManagedIdentity.id, 'StorageBlobDataContributor')
+resource storageBlobDataContributorForSchedulers 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(storageAccount.id, schedulersManagedIdentity.id, 'StorageBlobDataContributor')
   scope: storageAccount
   properties: {
     roleDefinitionId: storageBlobDataContributorRoleDefinitionId
-    principalId: cleanupManagedIdentity.properties.principalId
+    principalId: schedulersManagedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }

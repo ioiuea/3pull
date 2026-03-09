@@ -35,8 +35,8 @@ resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities
   tags: modulesTags
 }
 
-resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: 'mi-${environmentName}-${systemName}-cleanup'
+resource schedulersManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-schedulers'
   location: location
   tags: modulesTags
 }
@@ -61,7 +61,7 @@ resource agicLowLatencyManagedIdentity 'Microsoft.ManagedIdentity/userAssignedId
 
 output apiManagedIdentityName string = apiManagedIdentity.name
 output workerManagedIdentityName string = workerManagedIdentity.name
-output cleanupManagedIdentityName string = cleanupManagedIdentity.name
+output schedulersManagedIdentityName string = schedulersManagedIdentity.name
 output kedaOperatorManagedIdentityName string = kedaOperatorManagedIdentity.name
 output agicStandardManagedIdentityName string = agicStandardManagedIdentity.name
 output agicLowLatencyManagedIdentityName string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.name : ''

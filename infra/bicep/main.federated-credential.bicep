@@ -9,8 +9,8 @@ param apiManagedIdentityName string
 @description('worker 用 Managed Identity 名')
 param workerManagedIdentityName string
 
-@description('cleanup 用 Managed Identity 名')
-param cleanupManagedIdentityName string
+@description('schedulers 用 Managed Identity 名')
+param schedulersManagedIdentityName string
 
 @description('KEDA Operator 用 Managed Identity 名')
 param kedaOperatorManagedIdentityName string
@@ -30,8 +30,8 @@ param apiServiceAccountName string
 @description('worker 用 ServiceAccount 名')
 param workerServiceAccountName string
 
-@description('cleanup 用 ServiceAccount 名')
-param cleanupServiceAccountName string
+@description('schedulers 用 ServiceAccount 名')
+param schedulersServiceAccountName string
 
 @description('AGIC Namespace')
 param agicNamespace string = 'ingress'
@@ -59,8 +59,8 @@ param apiFederatedCredentialName string
 @description('worker 用 Federated Credential 名')
 param workerFederatedCredentialName string
 
-@description('cleanup 用 Federated Credential 名')
-param cleanupFederatedCredentialName string
+@description('schedulers 用 Federated Credential 名')
+param schedulersFederatedCredentialName string
 
 @description('KEDA Operator 用 Federated Credential 名')
 param kedaOperatorFederatedCredentialName string
@@ -82,8 +82,8 @@ resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities
   name: workerManagedIdentityName
 }
 
-resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
-  name: cleanupManagedIdentityName
+resource schedulersManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  name: schedulersManagedIdentityName
 }
 
 resource kedaOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
@@ -118,12 +118,12 @@ resource workerFederatedCredential 'Microsoft.ManagedIdentity/userAssignedIdenti
   }
 }
 
-resource cleanupFederatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
-  parent: cleanupManagedIdentity
-  name: cleanupFederatedCredentialName
+resource schedulersFederatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
+  parent: schedulersManagedIdentity
+  name: schedulersFederatedCredentialName
   properties: {
     issuer: oidcIssuerUrl
-    subject: 'system:serviceaccount:${appNamespace}:${cleanupServiceAccountName}'
+    subject: 'system:serviceaccount:${appNamespace}:${schedulersServiceAccountName}'
     audiences: audiences
   }
 }
@@ -160,7 +160,7 @@ resource agicLowLatencyFederatedCredential 'Microsoft.ManagedIdentity/userAssign
 
 output apiFederatedCredentialId string = apiFederatedCredential.id
 output workerFederatedCredentialId string = workerFederatedCredential.id
-output cleanupFederatedCredentialId string = cleanupFederatedCredential.id
+output schedulersFederatedCredentialId string = schedulersFederatedCredential.id
 output kedaOperatorFederatedCredentialId string = kedaOperatorFederatedCredential.id
 output agicStandardFederatedCredentialId string = agicStandardFederatedCredential.id
 output agicLowLatencyFederatedCredentialId string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyFederatedCredential!.id : ''

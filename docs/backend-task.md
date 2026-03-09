@@ -427,15 +427,15 @@
 
 - `docker/api.Dockerfile` を追加
 - `docker/worker.Dockerfile` を追加
-- `docker/cleanup.Dockerfile` を追加
+- `docker/schedulers.Dockerfile` を追加
 - `docker/web.Dockerfile` を追加
 - `docker/frontend-nginx.conf` を追加
 - `.dockerignore` を追加
 - `docker/README.md` を作成し、build / run 手順を整理
 - `Makefile` に Docker build / run ターゲットを追加
-- `api / worker / cleanup / web` の build を確認
-- `api / worker / cleanup / web` の最低限の起動確認を実施
-- `api / worker / cleanup` の `CMD` を `exec` 化し、`--init` 前提で停止しやすい形に調整
+- `api / worker / schedulers / web` の build を確認
+- `api / worker / schedulers / web` の最低限の起動確認を実施
+- `api / worker / schedulers` の `CMD` を `exec` 化し、`--init` 前提で停止しやすい形に調整
 
 未完:
 

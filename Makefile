@@ -49,7 +49,7 @@ frontend-ci: frontend-format frontend-lint frontend-typecheck frontend-test
 # ------------------------------
 # Backend targets
 # ------------------------------
-.PHONY: backend-install alembic-revision alembic-upgrade cleanup-sessions cleanup-sessions-dry-run cleanup-audit cleanup-audit-dry-run cleanup-jobs cleanup-jobs-dry-run
+.PHONY: backend-install alembic-revision alembic-upgrade schedulers-sessions schedulers-sessions-dry-run schedulers-audit schedulers-audit-dry-run schedulers-jobs schedulers-jobs-dry-run
 
 backend-install:
 	cd $(BACKEND_DIR) && uv sync --frozen
@@ -81,22 +81,22 @@ alembic-revision:
 alembic-upgrade:
 	cd $(BACKEND_DIR) && uv run alembic upgrade head
 
-cleanup-sessions:
+schedulers-sessions:
 	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup sessions
 
-cleanup-sessions-dry-run:
+schedulers-sessions-dry-run:
 	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup sessions --dry-run
 
-cleanup-audit:
+schedulers-audit:
 	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup audit
 
-cleanup-audit-dry-run:
+schedulers-audit-dry-run:
 	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup audit --dry-run
 
-cleanup-jobs:
+schedulers-jobs:
 	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup jobs
 
-cleanup-jobs-dry-run:
+schedulers-jobs-dry-run:
 	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup jobs --dry-run
 
 # ------------------------------
@@ -107,11 +107,11 @@ cleanup-jobs-dry-run:
 # ------------------------------
 # Docker targets
 # ------------------------------
-.PHONY: docker-build docker-build-api docker-build-worker docker-build-cleanup docker-build-web docker-run-api docker-run-worker-auth-audit-export docker-run-worker-sample-wait-blob docker-run-cleanup-sessions docker-run-cleanup-audit docker-run-cleanup-jobs-dry-run docker-run-web
+.PHONY: docker-build docker-build-api docker-build-worker docker-build-schedulers docker-build-web docker-run-api docker-run-worker-auth-audit-export docker-run-worker-sample-wait-blob docker-run-schedulers-sessions docker-run-schedulers-audit docker-run-schedulers-jobs-dry-run docker-run-web
 
 DOCKER_API_IMAGE ?= 3pull-api:local
 DOCKER_WORKER_IMAGE ?= 3pull-worker:local
-DOCKER_CLEANUP_IMAGE ?= 3pull-cleanup:local
+DOCKER_SCHEDULERS_IMAGE ?= 3pull-schedulers:local
 DOCKER_WEB_IMAGE ?= 3pull-web:local
 
 docker-build-api:
@@ -120,13 +120,13 @@ docker-build-api:
 docker-build-worker:
 	docker build -f docker/worker.Dockerfile -t $(DOCKER_WORKER_IMAGE) .
 
-docker-build-cleanup:
-	docker build -f docker/cleanup.Dockerfile -t $(DOCKER_CLEANUP_IMAGE) .
+docker-build-schedulers:
+	docker build -f docker/schedulers.Dockerfile -t $(DOCKER_SCHEDULERS_IMAGE) .
 
 docker-build-web:
 	docker build -f docker/web.Dockerfile -t $(DOCKER_WEB_IMAGE) .
 
-docker-build: docker-build-api docker-build-worker docker-build-cleanup docker-build-web
+docker-build: docker-build-api docker-build-worker docker-build-schedulers docker-build-web
 
 docker-run-api:
 	docker run --rm --init -p 8000:8000 --env-file $(BACKEND_DIR)/.env $(DOCKER_API_IMAGE)
@@ -141,20 +141,20 @@ docker-run-worker-sample-wait-blob:
 		-e WORKER_MODULE=app.workers.entrypoints.sample_wait_blob \
 		$(DOCKER_WORKER_IMAGE)
 
-docker-run-cleanup-sessions:
+docker-run-schedulers-sessions:
 	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
-		-e CLEANUP_COMMAND=sessions \
-		$(DOCKER_CLEANUP_IMAGE)
+		-e SCHEDULERS_COMMAND=sessions \
+		$(DOCKER_SCHEDULERS_IMAGE)
 
-docker-run-cleanup-audit:
+docker-run-schedulers-audit:
 	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
-		-e CLEANUP_COMMAND=audit \
-		$(DOCKER_CLEANUP_IMAGE)
+		-e SCHEDULERS_COMMAND=audit \
+		$(DOCKER_SCHEDULERS_IMAGE)
 
-docker-run-cleanup-jobs-dry-run:
+docker-run-schedulers-jobs-dry-run:
 	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
-		-e CLEANUP_COMMAND="jobs --dry-run" \
-		$(DOCKER_CLEANUP_IMAGE)
+		-e SCHEDULERS_COMMAND="jobs --dry-run" \
+		$(DOCKER_SCHEDULERS_IMAGE)
 
 docker-run-web:
 	docker run --rm -p 3000:3000 $(DOCKER_WEB_IMAGE)

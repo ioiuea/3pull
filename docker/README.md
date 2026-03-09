@@ -6,8 +6,8 @@
   - FastAPI を `gunicorn + uvicorn worker` で起動する API 用イメージ
 - [worker.Dockerfile](/Users/hiroki.ueda/Dev/3pull/docker/worker.Dockerfile)
   - `WORKER_MODULE` で対象ジョブを切り替える常駐 worker 用イメージ
-- [cleanup.Dockerfile](/Users/hiroki.ueda/Dev/3pull/docker/cleanup.Dockerfile)
-  - `CLEANUP_COMMAND` で対象 cleanup を切り替える都度実行型イメージ
+- [schedulers.Dockerfile](/Users/hiroki.ueda/Dev/3pull/docker/schedulers.Dockerfile)
+  - `SCHEDULERS_COMMAND` で対象ジョブを切り替える都度実行型イメージ
 - [web.Dockerfile](/Users/hiroki.ueda/Dev/3pull/docker/web.Dockerfile)
   - frontend の静的成果物を `nginx` で配信する web 用イメージ
 - [frontend-nginx.conf](/Users/hiroki.ueda/Dev/3pull/docker/frontend-nginx.conf)
@@ -28,7 +28,7 @@ make docker-build
 ```bash
 docker build -f docker/api.Dockerfile -t 3pull-api:local .
 docker build -f docker/worker.Dockerfile -t 3pull-worker:local .
-docker build -f docker/cleanup.Dockerfile -t 3pull-cleanup:local .
+docker build -f docker/schedulers.Dockerfile -t 3pull-schedulers:local .
 docker build --build-arg VITE_BACKEND_BASE_URL=http://localhost:8000 --build-arg VITE_PRODUCT_NAME=3pull-web -f docker/web.Dockerfile -t 3pull-web:local .
 ```
 
@@ -82,40 +82,40 @@ docker run --rm --init --env-file apps/backend/.env \
   3pull-worker:local
 ```
 
-### Cleanup
+### Schedulers
 
-cleanup は 1 回だけ実行して終了します。`CLEANUP_COMMAND` で対象を切り替えます。
+schedulers は 1 回だけ実行して終了します。`SCHEDULERS_COMMAND` で対象を切り替えます。
 
 Makefile を使う場合:
 
 ```bash
-make docker-run-cleanup-sessions
+make docker-run-schedulers-sessions
 ```
 
 ```bash
-make docker-run-cleanup-audit
+make docker-run-schedulers-audit
 ```
 
 ```bash
-make docker-run-cleanup-jobs-dry-run
-```
-
-```bash
-docker run --rm --init --env-file apps/backend/.env \
-  -e CLEANUP_COMMAND=sessions \
-  3pull-cleanup:local
+make docker-run-schedulers-jobs-dry-run
 ```
 
 ```bash
 docker run --rm --init --env-file apps/backend/.env \
-  -e CLEANUP_COMMAND=audit \
-  3pull-cleanup:local
+  -e SCHEDULERS_COMMAND=sessions \
+  3pull-schedulers:local
 ```
 
 ```bash
 docker run --rm --init --env-file apps/backend/.env \
-  -e CLEANUP_COMMAND="jobs --dry-run" \
-  3pull-cleanup:local
+  -e SCHEDULERS_COMMAND=audit \
+  3pull-schedulers:local
+```
+
+```bash
+docker run --rm --init --env-file apps/backend/.env \
+  -e SCHEDULERS_COMMAND="jobs --dry-run" \
+  3pull-schedulers:local
 ```
 
 ### Web
@@ -138,7 +138,7 @@ Docker コンテナ内では、ホストの `az login` 状態はそのまま使�
 
 - backend API
   - 起動自体はできますが、Azure リソースへ接続するエンドポイントでは認証設定が必要です
-- worker / cleanup
+- worker / schedulers
   - `DefaultAzureCredential` を使う処理は、そのままではコンテナ内で失敗しやすいです
 
 ローカル Docker 検証では、以下のいずれかで認証を与えます。

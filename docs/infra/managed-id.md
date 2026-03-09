@@ -10,7 +10,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）が、接続文字列を
 | --- | --- |
 | API | `mi-[common.environmentName]-[common.systemName]-api` |
 | worker | `mi-[common.environmentName]-[common.systemName]-worker` |
-| cleanup | `mi-[common.environmentName]-[common.systemName]-cleanup` |
+| schedulers | `mi-[common.environmentName]-[common.systemName]-schedulers` |
 | keda-operator | `mi-[common.environmentName]-[common.systemName]-keda-operator` |
 | AGIC通常系 | `mi-[common.environmentName]-[common.systemName]-agic-standard` |
 | AGIC低遅延系 | `mi-[common.environmentName]-[common.systemName]-agic-lowlatency`（低遅延オプション有効時） |
@@ -26,7 +26,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）が、接続文字列を
 | --- | --- | --- | --- | --- |
 | API | Secrets User | Data Sender | Blob Data Contributor | - |
 | worker | Secrets User | Data Receiver | Blob Data Contributor | - |
-| cleanup | Secrets User | - | Blob Data Contributor | - |
+| schedulers | Secrets User | - | Blob Data Contributor | - |
 | keda-operator | - | Data Receiver | - | - |
 | agic-standard | - | - | - | AppGateway Contributor（通常系） |
 | agic-lowlatency | - | - | - | AppGateway Contributor（低遅延系） |
@@ -38,7 +38,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）が、接続文字列を
 
 ## ServiceAccount / Federated Credential との対応
 
-- アプリ SA（`sa-[env]-[system]-api|worker|cleanup`）は backend Helm で作成
+- アプリ SA（`sa-[env]-[system]-api|worker|schedulers`）は backend Helm で作成
 - AGIC/KEDA SA（`sa-agic-standard`, `sa-agic-lowlatency`, `keda-operator`）は `infra/main.sh` の Helm で作成
 - federated credential は `infra/bicep/main.federated-credential.bicep` で一括作成
 

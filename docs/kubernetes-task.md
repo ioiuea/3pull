@@ -56,7 +56,7 @@
 | 5 | worker 配備（job_type別 Deployment） | 完了 | worker Pod 起動確認済み |
 | 6 | frontend 配備（Deployment/Service） | 完了 | web Pod 起動・アクセス確認済み |
 | 7 | KEDA 実装（ScaledObject/TriggerAuthentication） | 進行中 | テンプレート実装済み、認証でエラー発生 |
-| 8 | Workload Identity 検証（API/worker/cleanup） | 進行中 | API/worker/cleanup SA 注釈は実装済み、KEDA連携の詰めが必要 |
+| 8 | Workload Identity 検証（API/worker/schedulers） | 進行中 | API/worker/schedulers SA 注釈は実装済み、KEDA連携の詰めが必要 |
 | 9 | Ingress / App Gateway 連携 | 保留 | フェーズ分離済み |
 | 10 | Staging 運用検証（queue/blob/cron/DLQ） | 未着手 | KEDA解消後に本格着手 |
 | 11 | Runbook / 本番切替手順 | 未着手 | 運用検証完了後に整備 |
@@ -123,7 +123,7 @@
 
 完了内容:
 
-- `cleanup-cronjobs.yaml` 実装済み。
+- `schedulers-cronjobs.yaml` 実装済み。
 - schedule / suspend / concurrencyPolicy の values 化済み。
 
 残課題:
@@ -191,7 +191,7 @@
 
 目的:
 
-- API / worker / cleanup が Managed Identity で必要リソースへアクセスできることを担保する。
+- API / worker / schedulers が Managed Identity で必要リソースへアクセスできることを担保する。
 
 完了内容:
 
@@ -258,7 +258,7 @@
 
 1. KEDA の clientId 連携修正（最優先）
 2. KEDA 正常化後の worker スケール検証（0→N→0）
-3. Staging 運用検証（queue / blob / cleanup / DLQ）
+3. Staging 運用検証（queue / blob / schedulers / DLQ）
 4. Ingress / App Gateway 方針確定と実装
 5. Runbook / 本番切替手順の整備
 
@@ -358,13 +358,13 @@
 8. Workload Identity 用の User Assigned Managed Identity を作成する
    - API 用
    - worker 用
-   - cleanup 用
+   - schedulers 用
    - 技術的には AKS より前でもよいが、初期導入では AKS 作成後の方が整理しやすい
    - Portal では `Managed Identity` の `ユーザー割り当て` を選んで 3 つ作成する
    - 推奨の命名例
      - `mi-3pull-api`
      - `mi-3pull-worker`
-     - `mi-3pull-cleanup`
+     - `mi-3pull-schedulers`
    - 配置先
      - サブスクリプション: 今回の検証用サブスクリプション
      - リソース グループ: `3pull-app`
@@ -379,24 +379,24 @@
    - 後続の用途
      - API 用: Service Bus 送信、Blob 読み取り、Key Vault 読み取り
      - worker 用: Service Bus 受信、Blob 読み書き、Key Vault 読み取り
-     - cleanup 用: Blob 削除、Key Vault 読み取り
+     - schedulers 用: Blob 削除、Key Vault 読み取り
    - CLI で作る場合の例
      - `az identity create --resource-group 3pull-app --name mi-3pull-api --location japaneast`
      - `az identity create --resource-group 3pull-app --name mi-3pull-worker --location japaneast`
-     - `az identity create --resource-group 3pull-app --name mi-3pull-cleanup --location japaneast`
+     - `az identity create --resource-group 3pull-app --name mi-3pull-schedulers --location japaneast`
 9. Azure リソース側の RBAC を付与する
    - Service Bus
      - API: `Azure Service Bus Data Sender`
      - worker: `Azure Service Bus Data Receiver`
-     - cleanup: 原則不要
+     - schedulers: 原則不要
    - Storage
      - worker: `Storage Blob Data Contributor`
-     - cleanup: `Storage Blob Data Contributor`
+     - schedulers: `Storage Blob Data Contributor`
      - API: 現行実装では Blob download もあるため、初期導入では `Storage Blob Data Contributor` を基本にする
    - Key Vault
      - API: `Key Vault Secrets User`
      - worker: `Key Vault Secrets User`
-     - cleanup: `Key Vault Secrets User`
+     - schedulers: `Key Vault Secrets User`
 10. Key Vault に Secret を投入する
    - Key Vault の secret 名は `_` を使えないため、`-` 区切りで作成する
    - アプリ側の env var 名は従来どおり大文字スネークケースのまま扱う
@@ -424,17 +424,17 @@
    - ServiceAccount 名は values で役割単位に固定する
      - API 用: `serviceAccounts.api.name`（例: `sa-3pull-api`）
      - worker 用: `serviceAccounts.worker.name`（例: `sa-3pull-worker`）
-     - cleanup 用: `serviceAccounts.cleanup.name`（例: `sa-3pull-cleanup`）
+     - schedulers 用: `serviceAccounts.schedulers.name`（例: `sa-3pull-schedulers`）
      - KEDA operator 用: `keda` namespace の `keda-operator`（KEDA chart 側で作成）
    - この段階で確定・記録する値
      - Helm release namespace（例: `3pull`）
      - API 用 ServiceAccount 名
      - worker 用 ServiceAccount 名
-     - cleanup 用 ServiceAccount 名
+     - schedulers 用 ServiceAccount 名
    - federated credential で使う subject は上記 values から組み立てる
      - API: `system:serviceaccount:<namespace>:<serviceAccounts.api.name>`
      - worker: `system:serviceaccount:<namespace>:<serviceAccounts.worker.name>`
-     - cleanup: `system:serviceaccount:<namespace>:<serviceAccounts.cleanup.name>`
+     - schedulers: `system:serviceaccount:<namespace>:<serviceAccounts.schedulers.name>`
      - KEDA operator: `system:serviceaccount:keda:keda-operator`
    - このステップでの具体作業
      - `k8s/charts/backend/values.yaml` の `serviceAccounts.*.name` を最終確定する
@@ -452,8 +452,8 @@
        `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-api --name fic-3pull-api --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:<namespace>:<serviceAccounts.api.name>" --audience "api://AzureADTokenExchange"`
      - worker:
        `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-worker --name fic-3pull-worker --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:<namespace>:<serviceAccounts.worker.name>" --audience "api://AzureADTokenExchange"`
-     - cleanup:
-       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-cleanup --name fic-3pull-cleanup --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:<namespace>:<serviceAccounts.cleanup.name>" --audience "api://AzureADTokenExchange"`
+     - schedulers:
+       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-3pull-schedulers --name fic-3pull-schedulers --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:<namespace>:<serviceAccounts.schedulers.name>" --audience "api://AzureADTokenExchange"`
     - KEDA operator（専用 Managed Identity を利用する場合）:
       `az identity federated-credential create --resource-group 3pull-app --identity-name mi-<ENV>-3pull-keda-operator --name fic-<ENV>-3pull-keda-operator --issuer "<OIDC_ISSUER_URL>" --subject "system:serviceaccount:keda:keda-operator" --audience "api://AzureADTokenExchange"`
   - 現在の実装では、KEDA の `keda-operator` ServiceAccount annotation と Pod の Workload Identity 設定は `infra/main.sh` の KEDA Helm デプロイ時に自動設定する
@@ -463,7 +463,7 @@
    - 作成後は各 Managed Identity ごとに一覧確認する
      - `az identity federated-credential list --resource-group 3pull-app --identity-name mi-3pull-api`
      - `az identity federated-credential list --resource-group 3pull-app --identity-name mi-3pull-worker`
-     - `az identity federated-credential list --resource-group 3pull-app --identity-name mi-3pull-cleanup`
+     - `az identity federated-credential list --resource-group 3pull-app --identity-name mi-3pull-schedulers`
      - KEDA operator 用を別 Managed Identity で運用する場合は、その identity でも同様に確認する
 13. Helm デプロイ前提の最終確認を行う
    - 目的は、Helm chart を作り始める前に Azure / Kubernetes 側の前提が揃っていることを確認すること
@@ -473,14 +473,14 @@
    - AKS から ACR pull できることを確認する
      - 例: `az aks check-acr --resource-group 3pull-app --name <AKS_CLUSTER_NAME> --acr <ACR_NAME>`
      - `attach-acr` 済みでも、ここで明示的に疎通確認しておく
-   - API / worker / cleanup の各 Managed Identity に必要な RBAC が付いていることを確認する
+   - API / worker / schedulers の各 Managed Identity に必要な RBAC が付いていることを確認する
      - `az role assignment list --assignee <API_MI_PRINCIPAL_ID> --all`
      - `az role assignment list --assignee <WORKER_MI_PRINCIPAL_ID> --all`
      - `az role assignment list --assignee <CLEANUP_MI_PRINCIPAL_ID> --all`
      - 少なくとも以下が含まれることを確認する
        - API: `Azure Service Bus Data Sender` / `Storage Blob Data Contributor` / `Key Vault Secrets User`
        - worker: `Azure Service Bus Data Receiver` / `Storage Blob Data Contributor` / `Key Vault Secrets User`
-       - cleanup: `Storage Blob Data Contributor` / `Key Vault Secrets User`
+       - schedulers: `Storage Blob Data Contributor` / `Key Vault Secrets User`
    - Key Vault に必要な Secret が入っていることを確認する
      - 例: `az keyvault secret list --vault-name <KEY_VAULT_NAME> -o table`
      - 少なくとも以下の 4 つがあることを確認する
@@ -491,12 +491,12 @@
    - Helm values に載せる Workload Identity 用 client ID を控える
      - `az identity show --resource-group 3pull-app --name mi-3pull-api --query clientId -o tsv`
      - `az identity show --resource-group 3pull-app --name mi-3pull-worker --query clientId -o tsv`
-     - `az identity show --resource-group 3pull-app --name mi-3pull-cleanup --query clientId -o tsv`
+     - `az identity show --resource-group 3pull-app --name mi-3pull-schedulers --query clientId -o tsv`
      - 取得した client ID は、後続の `ServiceAccount` annotation に使う
    - Kubernetes 側で namespace / ServiceAccount が揃っていることを確認する
      - `kubectl get namespace 3pull`
      - `kubectl get serviceaccount -n 3pull`
-     - `sa-3pull-api` / `sa-3pull-worker` / `sa-3pull-cleanup` が存在することを確認する
+     - `sa-3pull-api` / `sa-3pull-worker` / `sa-3pull-schedulers` が存在することを確認する
 14. ネットワーク / App Gateway は後続フェーズとして扱う
    - VNet
    - private endpoint
@@ -517,8 +517,8 @@
      - `docker buildx build --platform linux/amd64,linux/arm64 -f docker/api.Dockerfile -t cr3pulltest.azurecr.io/3pull-api:20260303-01 --push .`
    - worker イメージ例
      - `docker buildx build --platform linux/amd64,linux/arm64 -f docker/worker.Dockerfile -t cr3pulltest.azurecr.io/3pull-worker:20260303-01 --push .`
-   - cleanup イメージ例
-     - `docker buildx build --platform linux/amd64,linux/arm64 -f docker/cleanup.Dockerfile -t cr3pulltest.azurecr.io/3pull-cleanup:20260303-01 --push .`
+   - schedulers イメージ例
+     - `docker buildx build --platform linux/amd64,linux/arm64 -f docker/schedulers.Dockerfile -t cr3pulltest.azurecr.io/3pull-schedulers:20260303-01 --push .`
    - frontend イメージ例
      - `docker buildx build --platform linux/amd64,linux/arm64 --build-arg VITE_BACKEND_BASE_URL=http://localhost:8000 --build-arg VITE_PRODUCT_NAME=3pull-web -f docker/web.Dockerfile -t cr3pulltest.azurecr.io/3pull-web:20260303-01 --push .`
      - `VITE_BACKEND_BASE_URL` と `VITE_PRODUCT_NAME` は必須。未指定なら build を失敗させる
@@ -526,7 +526,7 @@
    - `az acr repository list --name cr3pulltest -o table`
    - `az acr repository show-tags --name cr3pulltest --repository 3pull-api -o table`
    - `az acr repository show-tags --name cr3pulltest --repository 3pull-worker -o table`
-   - `az acr repository show-tags --name cr3pulltest --repository 3pull-cleanup -o table`
+   - `az acr repository show-tags --name cr3pulltest --repository 3pull-schedulers -o table`
    - `az acr repository show-tags --name cr3pulltest --repository 3pull-web -o table`
 17. API Pod: Helm 準備からデプロイまで
    - values を更新する
@@ -558,7 +558,7 @@
      - `helm template 3pull-backend ./k8s/charts/backend -n 3pull -f ./k8s/charts/backend/values.yaml -f ./k8s/charts/backend/values.staging.yaml`
      - `helm upgrade --install 3pull-backend ./k8s/charts/backend -n 3pull --create-namespace -f ./k8s/charts/backend/values.yaml -f ./k8s/charts/backend/values.staging.yaml --dry-run`
    - 既存の手動作成済み `ServiceAccount` がある場合は、先に削除して Helm 管理へ切り替える
-     - `kubectl delete serviceaccount -n 3pull sa-3pull-api sa-3pull-worker sa-3pull-cleanup`
+     - `kubectl delete serviceaccount -n 3pull sa-3pull-api sa-3pull-worker sa-3pull-schedulers`
    - デプロイする
      - `helm upgrade --install 3pull-backend ./k8s/charts/backend -n 3pull --create-namespace -f ./k8s/charts/backend/values.yaml -f ./k8s/charts/backend/values.staging.yaml`
 18. Frontend Pod: Helm 準備からデプロイまで
@@ -582,7 +582,7 @@
      - `helm upgrade --install 3pull-frontend ./k8s/charts/frontend -n 3pull --create-namespace -f ./k8s/charts/frontend/values.yaml -f ./k8s/charts/frontend/values.staging.yaml`
 19. Worker / Cleanup Pod: Helm 準備からデプロイまで
    - worker 用 `Deployment` は実装済み
-   - cleanup 用 `CronJob` は実装済み
+   - schedulers 用 `CronJob` は実装済み
    - `KEDA ScaledObject` は未実装
    - API と同じ順番で進める
      - values を更新する
@@ -597,14 +597,14 @@
      - queue 名
      - `workers.*.workerModule`
    - cleanup で最終的に必要になる値
-     - `cleanup.image.repository` / `tag`
-     - `serviceAccounts.cleanup.create`
-     - `serviceAccounts.cleanup.name`
-     - `serviceAccounts.cleanup.clientId`
-     - `cleanup.jobs.sessions.schedule`
-     - `cleanup.jobs.audit.schedule`
-     - `cleanup.jobs.jobs.schedule`
-     - `cleanup.jobs.*.command`
+     - `schedulers.image.repository` / `tag`
+     - `serviceAccounts.schedulers.create`
+     - `serviceAccounts.schedulers.name`
+     - `serviceAccounts.schedulers.clientId`
+     - `schedulers.jobs.sessions.schedule`
+     - `schedulers.jobs.audit.schedule`
+     - `schedulers.jobs.jobs.schedule`
+     - `schedulers.jobs.*.command`
 20. デプロイ後の動作確認を行う
    - `kubectl get all -n 3pull`
    - `kubectl describe pod -n 3pull <POD_NAME>`
@@ -621,8 +621,8 @@
        - 確認先: `http://localhost:3000`
      - frontend から backend を呼ぶ検証では、frontend image の build 時点で `VITE_BACKEND_BASE_URL=http://localhost:8000` を埋め込んだ image を使う
    - `ImagePullBackOff` が出た場合は ACR 名、tag、アーキテクチャ、AKS の ACR 参照権限を見直す
-21. worker / cleanup / frontend を段階的に追加する
-   - worker / cleanup / frontend の最小実装は完了済み
+21. worker / schedulers / frontend を段階的に追加する
+   - worker / schedulers / frontend の最小実装は完了済み
    - 現時点でこのステップで追加対象になるのは、主に KEDA / Ingress / App Gateway
    - KEDA を実装する手順
      - 1. KEDA 本体を AKS にインストールする
@@ -663,7 +663,7 @@
      - 9. 通常系/低遅延系を分離して監視・アラートを設定する
    - 追加後の確認観点
      - worker: queue 投入時だけ Pod が起動 / 増減する
-     - cleanup: CronJob が定刻実行される
+     - schedulers: CronJob が定刻実行される
      - frontend: 外部 URL からログイン画面表示、API 呼び出し、Entra callback が成立する
 
 ### 7.4 Staging / 本番検証タスク

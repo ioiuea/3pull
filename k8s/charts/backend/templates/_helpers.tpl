@@ -23,8 +23,8 @@
 {{- printf "r-%s-worker" (include "backend.systemName" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
-{{- define "backend.cleanupName" -}}
-{{- printf "r-%s-cleanup" (include "backend.systemName" .) | trunc 63 | trimSuffix "-" -}}
+{{- define "backend.schedulersName" -}}
+{{- printf "r-%s-schedulers" (include "backend.systemName" .) | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
 {{- define "backend.chart" -}}

@@ -25,7 +25,7 @@
 | --- | --- | --- | --- |
 | `mi-[env]-[system]-api` | `Storage Blob Data Contributor` | Storage Account | API の作成/更新/参照 |
 | `mi-[env]-[system]-worker` | `Storage Blob Data Contributor` | Storage Account | worker の作成/更新/参照 |
-| `mi-[env]-[system]-cleanup` | `Storage Blob Data Contributor` | Storage Account | cleanup の削除含むメンテ |
+| `mi-[env]-[system]-schedulers` | `Storage Blob Data Contributor` | Storage Account | schedulers の削除含むメンテ |
 
 補足:
 

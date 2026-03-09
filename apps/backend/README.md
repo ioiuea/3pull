@@ -594,14 +594,14 @@ else:
 ### 実行コマンド
 
 - sessions cleanup:
-- `make cleanup-sessions`
-- `make cleanup-sessions-dry-run`
+- `make schedulers-sessions`
+- `make schedulers-sessions-dry-run`
 - audit retention cleanup:
-- `make cleanup-audit`
-- `make cleanup-audit-dry-run`
+- `make schedulers-audit`
+- `make schedulers-audit-dry-run`
 - async jobs artifacts cleanup:
-- `make cleanup-jobs`
-- `make cleanup-jobs-dry-run`
+- `make schedulers-jobs`
+- `make schedulers-jobs-dry-run`
 
 - 直接実行:
 - `uv --directory apps/backend run python -m app.schedulers.scheduler_cleanup sessions`

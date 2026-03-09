@@ -1,28 +1,28 @@
 {{- $root := . -}}
-{{- range $name, $job := .Values.cleanup.jobs }}
+{{- range $name, $job := .Values.schedulers.jobs }}
 {{- if $job.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: {{ include "backend.cleanupName" $root }}-{{ $name | kebabcase }}
+  name: {{ include "backend.schedulersName" $root }}-{{ $name | kebabcase }}
   namespace: {{ include "backend.namespace" $root }}
   labels:
     {{- include "backend.labels" $root | nindent 4 }}
-    app.kubernetes.io/component: cleanup
+    app.kubernetes.io/component: schedulers
     app.kubernetes.io/part-of: {{ $name | kebabcase }}
 spec:
   schedule: {{ $job.schedule | quote }}
   suspend: {{ $job.suspend }}
   concurrencyPolicy: {{ $job.concurrencyPolicy }}
-  successfulJobsHistoryLimit: {{ $root.Values.cleanup.successfulJobsHistoryLimit }}
-  failedJobsHistoryLimit: {{ $root.Values.cleanup.failedJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ $root.Values.schedulers.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ $root.Values.schedulers.failedJobsHistoryLimit }}
   jobTemplate:
     spec:
       template:
         metadata:
           labels:
             {{- include "backend.selectorLabels" $root | nindent 12 }}
-            app.kubernetes.io/component: cleanup
+            app.kubernetes.io/component: schedulers
             app.kubernetes.io/part-of: {{ $name | kebabcase }}
             azure.workload.identity/use: "true"
           {{- with $job.podAnnotations }}
@@ -31,13 +31,13 @@ spec:
           {{- end }}
         spec:
           restartPolicy: OnFailure
-          serviceAccountName: {{ $root.Values.serviceAccounts.cleanup.name }}
+          serviceAccountName: {{ $root.Values.serviceAccounts.schedulers.name }}
           containers:
             - name: {{ $name | kebabcase }}
-              image: "{{ $root.Values.cleanup.image.repository }}:{{ $root.Values.cleanup.image.tag }}"
-              imagePullPolicy: {{ $root.Values.cleanup.image.pullPolicy }}
+              image: "{{ $root.Values.schedulers.image.repository }}:{{ $root.Values.schedulers.image.tag }}"
+              imagePullPolicy: {{ $root.Values.schedulers.image.pullPolicy }}
               env:
-                - name: CLEANUP_COMMAND
+                - name: SCHEDULERS_COMMAND
                   value: {{ $job.command | quote }}
               envFrom:
                 - configMapRef:

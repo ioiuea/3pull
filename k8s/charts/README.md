@@ -3,8 +3,8 @@
 `k8s/charts/` 配下には、AKS へデプロイするための Helm chart を置きます。
 
 - `backend/`
-  - FastAPI API / worker / cleanup を載せるための chart
-  - 現時点では API 用 `Deployment` / `Service`、worker 用 `Deployment`、cleanup 用 `CronJob` まで実装済み
+  - FastAPI API / worker / schedulers を載せるための chart
+  - 現時点では API 用 `Deployment` / `Service`、worker 用 `Deployment`、schedulers 用 `CronJob` まで実装済み
 - `frontend/`
   - frontend web を載せるための chart
   - `Deployment` / `Service` の最小構成を実装済み
@@ -98,7 +98,7 @@ Kubernetes manifest のテンプレートです。
   - backend chart のメタ情報
 - `values.yaml`
   - backend の既定値
-  - 現時点では API / worker / cleanup 用 values、共通 ConfigMap、Key Vault 連携、Secret 参照、ServiceAccount 設定を持つ
+  - 現時点では API / worker / schedulers 用 values、共通 ConfigMap、Key Vault 連携、Secret 参照、ServiceAccount 設定を持つ
 - `values.staging.yaml`
   - staging 用の差分値
 - `values.prod.yaml`
@@ -117,8 +117,8 @@ Kubernetes manifest のテンプレートです。
   - API 用 `Service` を生成
 - `templates/worker-deployments.yaml`
   - worker 用 `Deployment` を生成
-- `templates/cleanup-cronjobs.yaml`
-  - cleanup 用 `CronJob` を生成
+- `templates/schedulers-cronjobs.yaml`
+  - schedulers 用 `CronJob` を生成
 - `templates/keda-triggerauthentication.yaml`
   - KEDA が Azure Service Bus を読むための `TriggerAuthentication` を生成
 - `templates/keda-scaledobjects.yaml`
@@ -126,7 +126,7 @@ Kubernetes manifest のテンプレートです。
 
 未実装の主な対象:
 
-- worker / cleanup 用の個別スケール調整値の詳細化
+- worker / schedulers 用の個別スケール調整値の詳細化
 
 ## frontend chart の各ファイル
 
@@ -273,7 +273,7 @@ helm upgrade --install 3pull-frontend ./k8s/charts/frontend \
 
 ## このプロジェクトでの注意点
 
-- backend chart は API / worker / cleanup / KEDA `ScaledObject` までは実装済み
+- backend chart は API / worker / schedulers / KEDA `ScaledObject` までは実装済み
 - `serviceAccounts.*.create=true` を既定とし、`ServiceAccount` も Helm 管理を正とする
   - すでに手動作成済みの同名 `ServiceAccount` がある場合は、Helm 再適用前に削除して切り替える
 - `keyVault.enabled=true` の場合は、AKS 側で `azure-keyvault-secrets-provider` add-on が有効であることが前提

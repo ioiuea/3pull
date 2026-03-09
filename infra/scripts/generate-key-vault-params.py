@@ -70,13 +70,13 @@ if not managed_identity_resource_group_name:
     raise SystemExit("managed ids meta の resourceGroupName が取得できません")
 api_managed_identity_name = f"mi-{environment_name}-{system_name}-api"
 worker_managed_identity_name = f"mi-{environment_name}-{system_name}-worker"
-cleanup_managed_identity_name = f"mi-{environment_name}-{system_name}-cleanup"
+schedulers_managed_identity_name = f"mi-{environment_name}-{system_name}-schedulers"
 toggle_enabled = bool(common.get("resourceToggles", {}).get("keyVault", True))
 enable_workload_identity_rbac = toggle_enabled and all(
     [
         identity_exists(managed_identity_resource_group_name, api_managed_identity_name),
         identity_exists(managed_identity_resource_group_name, worker_managed_identity_name),
-        identity_exists(managed_identity_resource_group_name, cleanup_managed_identity_name),
+        identity_exists(managed_identity_resource_group_name, schedulers_managed_identity_name),
     ]
 )
 
@@ -109,7 +109,7 @@ lines = [
     f"param managedIdentityResourceGroupName = {quote(managed_identity_resource_group_name)}",
     f"param apiManagedIdentityName = {quote(api_managed_identity_name)}",
     f"param workerManagedIdentityName = {quote(worker_managed_identity_name)}",
-    f"param cleanupManagedIdentityName = {quote(cleanup_managed_identity_name)}",
+    f"param schedulersManagedIdentityName = {quote(schedulers_managed_identity_name)}",
     f"param enableWorkloadIdentityRbac = {'true' if enable_workload_identity_rbac else 'false'}",
     f"param keyVaultName = {quote(key_vault_name)}",
     f"param privateEndpointName = {quote(private_endpoint_name)}",

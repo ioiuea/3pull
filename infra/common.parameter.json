@@ -3,7 +3,7 @@
     "location": "japaneast",
     "environmentName": "dev",
     "systemName": "3pull",
-    "enableResourceLock": true
+    "enableResourceLock": false
   },
   "resourceToggles": {
     "logAnalytics": true,
@@ -32,7 +32,7 @@
     "enableFirewallIdps": false,
     "enableGatewayRoutePropagation": false,
     "enableCentralizedPrivateDns": false,
-    "enableLowLatencyApplicationGatewaySubnet": false,
+    "enableLowLatencyApplicationGatewaySubnet": true,
     "enableDdosProtection": false,
     "ddosProtectionPlanId": "",
     "vnetAddressPrefixes": [

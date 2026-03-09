@@ -18,7 +18,7 @@
 | 作業項目 | 推奨実行方式 | 実装ステータス | 補足 |
 | --- | --- | --- | --- |
 | AKS 構築 | Bicep | 実装済み | `infra` で管理 |
-| Managed Identity 作成（api/worker/cleanup） | Bicep | 実装済み | AKS 構築タイミングで同時作成 |
+| Managed Identity 作成（api/worker/schedulers） | Bicep | 実装済み | AKS 構築タイミングで同時作成 |
 | OIDC / Workload Identity / Key Vault CSI 有効化 | Bicep | 実装済み | AKS プロパティで固定化 |
 | Key Vault / Service Bus / Storage の RBAC 付与 | Bicep | 実装済み | `roleAssignments` で冪等化可能 |
 | Storage Account コンテナ作成 | Bicep | 実装済み | `blobServices/containers` で作成可能 |

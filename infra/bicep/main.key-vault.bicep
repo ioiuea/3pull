@@ -36,8 +36,8 @@ param apiManagedIdentityName string
 @description('worker 用 Managed Identity 名')
 param workerManagedIdentityName string
 
-@description('cleanup 用 Managed Identity 名')
-param cleanupManagedIdentityName string
+@description('schedulers 用 Managed Identity 名')
+param schedulersManagedIdentityName string
 
 @description('Workload Identity 用 RBAC 付与を有効化')
 param enableWorkloadIdentityRbac bool = true
@@ -122,9 +122,9 @@ resource workerManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities
   name: workerManagedIdentityName
 }
 
-resource cleanupManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+resource schedulersManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   scope: resourceGroup(managedIdentityResourceGroupName)
-  name: cleanupManagedIdentityName
+  name: schedulersManagedIdentityName
 }
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
@@ -214,12 +214,12 @@ resource keyVaultSecretsUserForWorker 'Microsoft.Authorization/roleAssignments@2
   }
 }
 
-resource keyVaultSecretsUserForCleanup 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
-  name: guid(keyVault.id, cleanupManagedIdentity.id, 'KeyVaultSecretsUser')
+resource keyVaultSecretsUserForSchedulers 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(keyVault.id, schedulersManagedIdentity.id, 'KeyVaultSecretsUser')
   scope: keyVault
   properties: {
     roleDefinitionId: keyVaultSecretsUserRoleDefinitionId
-    principalId: cleanupManagedIdentity.properties.principalId
+    principalId: schedulersManagedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }

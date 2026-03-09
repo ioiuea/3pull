@@ -21,7 +21,7 @@
 | --- | --- | --- | --- |
 | `mi-[env]-[system]-api` | `Key Vault Secrets User` | Key Vault | API 実行時のSecret参照 |
 | `mi-[env]-[system]-worker` | `Key Vault Secrets User` | Key Vault | worker 実行時のSecret参照 |
-| `mi-[env]-[system]-cleanup` | `Key Vault Secrets User` | Key Vault | cleanup 実行時のSecret参照 |
+| `mi-[env]-[system]-schedulers` | `Key Vault Secrets User` | Key Vault | schedulers 実行時のSecret参照 |
 | bootstrap/CI principal | `Key Vault Secrets Officer` | Key Vault | Secret 登録/更新 |
 
 補足:

@@ -84,7 +84,7 @@ if not resource_group_name or not aks_name:
 
 api_managed_identity_name = f"mi-{environment_name}-{system_name}-api"
 worker_managed_identity_name = f"mi-{environment_name}-{system_name}-worker"
-cleanup_managed_identity_name = f"mi-{environment_name}-{system_name}-cleanup"
+schedulers_managed_identity_name = f"mi-{environment_name}-{system_name}-schedulers"
 keda_operator_managed_identity_name = f"mi-{environment_name}-{system_name}-keda-operator"
 agic_standard_managed_identity_name = f"mi-{environment_name}-{system_name}-agic-standard"
 agic_low_latency_managed_identity_name = f"mi-{environment_name}-{system_name}-agic-lowlatency"
@@ -96,7 +96,7 @@ deploy = all(
     [
         identity_exists(resource_group_name, api_managed_identity_name),
         identity_exists(resource_group_name, worker_managed_identity_name),
-        identity_exists(resource_group_name, cleanup_managed_identity_name),
+        identity_exists(resource_group_name, schedulers_managed_identity_name),
         identity_exists(resource_group_name, keda_operator_managed_identity_name),
         identity_exists(resource_group_name, agic_standard_managed_identity_name),
         (
@@ -152,11 +152,11 @@ agic_low_latency_service_account_name = (
 
 api_service_account_name = f"sa-{environment_name}-{system_name}-api"
 worker_service_account_name = f"sa-{environment_name}-{system_name}-worker"
-cleanup_service_account_name = f"sa-{environment_name}-{system_name}-cleanup"
+schedulers_service_account_name = f"sa-{environment_name}-{system_name}-schedulers"
 
 api_federated_credential_name = f"fic-{environment_name}-{system_name}-api"
 worker_federated_credential_name = f"fic-{environment_name}-{system_name}-worker"
-cleanup_federated_credential_name = f"fic-{environment_name}-{system_name}-cleanup"
+schedulers_federated_credential_name = f"fic-{environment_name}-{system_name}-schedulers"
 keda_operator_federated_credential_name = f"fic-{environment_name}-{system_name}-keda-operator"
 agic_standard_federated_credential_name = f"fic-{environment_name}-{system_name}-agic-standard"
 agic_low_latency_federated_credential_name = f"fic-{environment_name}-{system_name}-agic-lowlatency"
@@ -169,12 +169,12 @@ lines = [
     f"param oidcIssuerUrl = {quote(oidc_issuer_url)}",
     f"param apiManagedIdentityName = {quote(api_managed_identity_name)}",
     f"param workerManagedIdentityName = {quote(worker_managed_identity_name)}",
-    f"param cleanupManagedIdentityName = {quote(cleanup_managed_identity_name)}",
+    f"param schedulersManagedIdentityName = {quote(schedulers_managed_identity_name)}",
     f"param kedaOperatorManagedIdentityName = {quote(keda_operator_managed_identity_name)}",
     f"param appNamespace = {quote(app_namespace)}",
     f"param apiServiceAccountName = {quote(api_service_account_name)}",
     f"param workerServiceAccountName = {quote(worker_service_account_name)}",
-    f"param cleanupServiceAccountName = {quote(cleanup_service_account_name)}",
+    f"param schedulersServiceAccountName = {quote(schedulers_service_account_name)}",
     f"param agicNamespace = {quote(agic_namespace)}",
     f"param agicStandardServiceAccountName = {quote(agic_standard_service_account_name)}",
     f"param agicLowLatencyServiceAccountName = {quote(agic_low_latency_service_account_name)}",
@@ -185,7 +185,7 @@ lines = [
     f"param enableLowLatencyApplicationGatewaySubnet = {'true' if enable_low_latency_application_gateway_subnet else 'false'}",
     f"param apiFederatedCredentialName = {quote(api_federated_credential_name)}",
     f"param workerFederatedCredentialName = {quote(worker_federated_credential_name)}",
-    f"param cleanupFederatedCredentialName = {quote(cleanup_federated_credential_name)}",
+    f"param schedulersFederatedCredentialName = {quote(schedulers_federated_credential_name)}",
     f"param kedaOperatorFederatedCredentialName = {quote(keda_operator_federated_credential_name)}",
     f"param agicStandardFederatedCredentialName = {quote(agic_standard_federated_credential_name)}",
     f"param agicLowLatencyFederatedCredentialName = {quote(agic_low_latency_federated_credential_name)}",

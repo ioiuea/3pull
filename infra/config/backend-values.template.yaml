@@ -77,9 +77,9 @@ keda:
   workloadIdentity:
     clientId: "00000000-0000-0000-0000-000000000000"
 
-cleanup:
+schedulers:
   image:
-    repository: example.azurecr.io/sample-system-cleanup
+    repository: example.azurecr.io/sample-system-schedulers
     tag: __IMAGE_TAG__
     pullPolicy: IfNotPresent
   successfulJobsHistoryLimit: 1
@@ -141,9 +141,9 @@ serviceAccounts:
     name: sa-sample-system-worker
     clientId: "00000000-0000-0000-0000-000000000000"
     annotations: {}
-  cleanup:
+  schedulers:
     create: true
-    name: sa-sample-system-cleanup
+    name: sa-sample-system-schedulers
     clientId: "00000000-0000-0000-0000-000000000000"
     annotations: {}
 
