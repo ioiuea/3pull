@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# このスクリプトは infra 配下の設定を読み込み、各 generate スクリプトで
+# .bicepparam と meta.json を生成したうえで、依存順に az deployment を実行する。
 if [[ -z "${BASH_VERSION:-}" ]]; then
   echo "This script must be run with bash. Use: bash ./main.sh" >&2
   exit 1
@@ -7,40 +9,63 @@ fi
 set -euo pipefail
 
 # -----------------------------------------------------------------------------
-# Path / file definitions
+# ファイルパス設定
 # -----------------------------------------------------------------------------
-# このスクリプトは infra 配下の設定を読み込み、各 generate スクリプトで
-# .bicepparam と meta.json を生成したうえで、依存順に az deployment を実行する。
+# infraルートパス
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 infra_root="$repo_root/infra"
-init_scripts_root="$repo_root/scripts/init"
-agic_controller_init_dir="$init_scripts_root/agicController"
-keda_controller_init_dir="$init_scripts_root/kedaController"
+
+# 共通入力・生成物・ログの基本パス
 common_file="$infra_root/common.parameter.json"
 params_dir="$infra_root/params"
 logs_dir="$infra_root/logs"
+
+# 共通パラメータの事前検証スクリプト
 common_validation_script="$infra_root/scripts/validate-common-params.py"
 
+# 監視系リソース（Log Analytics）
 log_config_file="$infra_root/config/log-analytics.json"
 log_script="$infra_root/scripts/generate-log-analytics-params.py"
 log_meta_file="$params_dir/log-analytics-meta.json"
 
+# 監視系リソース（Application Insights）
 appi_config_file="$infra_root/config/application-insights.json"
 appi_script="$infra_root/scripts/generate-application-insights-params.py"
 appi_meta_file="$params_dir/application-insights-meta.json"
 
+# ネットワーク基盤（Virtual Network）
 vnet_config_file="$infra_root/config/virtual-network.json"
 vnet_script="$infra_root/scripts/generate-virtual-network-params.py"
 vnet_meta_file="$params_dir/virtual-network-meta.json"
 
+# ネットワーク基盤（Subnets）
 subnets_config_file="$infra_root/config/subnets.json"
 subnets_script="$infra_root/scripts/generate-subnets-params.py"
 subnets_meta_file="$params_dir/subnets-meta.json"
 
+# ネットワーク基盤（Firewall）
 firewall_config_file="$infra_root/config/firewall.json"
 firewall_script="$infra_root/scripts/generate-firewall-params.py"
 firewall_meta_file="$params_dir/firewall-meta.json"
 
+# ネットワーク制御（Route Tables）
+route_tables_config_file="$infra_root/config/route-tables.json"
+route_tables_script="$infra_root/scripts/generate-route-tables-params.py"
+route_tables_meta_file="$params_dir/route-tables-meta.json"
+
+# ネットワーク制御（NSGs / Subnet Attachments）
+nsgs_config_file="$infra_root/config/nsgs.json"
+nsgs_script="$infra_root/scripts/generate-nsgs-params.py"
+nsgs_meta_file="$params_dir/nsgs-meta.json"
+subnet_attachments_script="$infra_root/scripts/generate-subnet-attachments-params.py"
+subnet_attachments_meta_file="$params_dir/subnet-attachments-meta.json"
+
+# 共通マネージド ID
+managed_ids_config_file="$infra_root/config/managed-ids.json"
+managed_ids_script="$infra_root/scripts/generate-managed-ids-params.py"
+managed_ids_meta_file="$params_dir/managed-ids-meta.json"
+
+# ネットワーク公開（Application Gateway / 低遅延 / RBAC）
 application_gateway_config_file="$infra_root/config/application-gateway.json"
 application_gateway_script="$infra_root/scripts/generate-application-gateway-params.py"
 application_gateway_meta_file="$params_dir/application-gateway-meta.json"
@@ -50,130 +75,222 @@ application_gateway_rbac_config_file="$infra_root/config/application-gateway-rba
 application_gateway_rbac_script="$infra_root/scripts/generate-application-gateway-rbac-params.py"
 application_gateway_rbac_meta_file="$params_dir/application-gateway-rbac-meta.json"
 
-managed_ids_config_file="$infra_root/config/managed-ids.json"
-managed_ids_script="$infra_root/scripts/generate-managed-ids-params.py"
-managed_ids_meta_file="$params_dir/managed-ids-meta.json"
-
-key_vault_config_file="$infra_root/config/key-vault.json"
-key_vault_script="$infra_root/scripts/generate-key-vault-params.py"
-key_vault_meta_file="$params_dir/key-vault-meta.json"
-
-service_bus_config_file="$infra_root/config/service-bus.json"
-service_bus_script="$infra_root/scripts/generate-service-bus-params.py"
-service_bus_meta_file="$params_dir/service-bus-meta.json"
-
-acr_config_file="$infra_root/config/acr.json"
-acr_script="$infra_root/scripts/generate-acr-params.py"
-acr_meta_file="$params_dir/acr-meta.json"
-
-storage_config_file="$infra_root/config/storage.json"
-storage_script="$infra_root/scripts/generate-storage-params.py"
-storage_meta_file="$params_dir/storage-meta.json"
-
-redis_config_file="$infra_root/config/redis.json"
-redis_script="$infra_root/scripts/generate-redis-params.py"
-redis_meta_file="$params_dir/redis-meta.json"
-
-postgres_config_file="$infra_root/config/postgres-database.json"
-postgres_script="$infra_root/scripts/generate-postgres-database-params.py"
-postgres_meta_file="$params_dir/postgres-database-meta.json"
-
-cosmos_config_file="$infra_root/config/cosmos-database.json"
-cosmos_script="$infra_root/scripts/generate-cosmos-database-params.py"
-cosmos_meta_file="$params_dir/cosmos-database-meta.json"
-
+# コンテナ実行基盤（AKS）
 aks_config_file="$infra_root/config/aks.json"
 aks_runtime_config_file="$aks_config_file"
 aks_script="$infra_root/scripts/generate-aks-params.py"
 aks_meta_file="$params_dir/aks-meta.json"
 
-route_tables_config_file="$infra_root/config/route-tables.json"
-route_tables_script="$infra_root/scripts/generate-route-tables-params.py"
-route_tables_meta_file="$params_dir/route-tables-meta.json"
-
-nsgs_config_file="$infra_root/config/nsgs.json"
-nsgs_script="$infra_root/scripts/generate-nsgs-params.py"
-nsgs_meta_file="$params_dir/nsgs-meta.json"
-subnet_attachments_script="$infra_root/scripts/generate-subnet-attachments-params.py"
-subnet_attachments_meta_file="$params_dir/subnet-attachments-meta.json"
-
-maintenance_vm_config_file="$infra_root/config/maintenance-vm.json"
-maintenance_vm_script="$infra_root/scripts/generate-maintenance-vm-params.py"
-maintenance_vm_meta_file="$params_dir/maintenance-vm-meta.json"
-
+# Workload Identity 用 Federated Credential
 federated_credential_config_file="$infra_root/config/federated-credential.json"
 federated_credential_script="$infra_root/scripts/generate-federated-credential-params.py"
 federated_credential_meta_file="$params_dir/federated-credential-meta.json"
 
+# コンテナレジストリ（ACR）
+acr_config_file="$infra_root/config/acr.json"
+acr_script="$infra_root/scripts/generate-acr-params.py"
+acr_meta_file="$params_dir/acr-meta.json"
+
+# シークレット情報管理（Key Vault）
+key_vault_config_file="$infra_root/config/key-vault.json"
+key_vault_script="$infra_root/scripts/generate-key-vault-params.py"
+key_vault_meta_file="$params_dir/key-vault-meta.json"
+
+# メッセージング（Service Bus）
+service_bus_config_file="$infra_root/config/service-bus.json"
+service_bus_script="$infra_root/scripts/generate-service-bus-params.py"
+service_bus_meta_file="$params_dir/service-bus-meta.json"
+
+# ストレージ（Storage Account）
+storage_config_file="$infra_root/config/storage.json"
+storage_script="$infra_root/scripts/generate-storage-params.py"
+storage_meta_file="$params_dir/storage-meta.json"
+
+# RDB（PostgreSQL）
+postgres_config_file="$infra_root/config/postgres-database.json"
+postgres_script="$infra_root/scripts/generate-postgres-database-params.py"
+postgres_meta_file="$params_dir/postgres-database-meta.json"
+
+# メンテナンス環境（VM）
+maintenance_vm_config_file="$infra_root/config/maintenance-vm.json"
+maintenance_vm_script="$infra_root/scripts/generate-maintenance-vm-params.py"
+maintenance_vm_meta_file="$params_dir/maintenance-vm-meta.json"
+
+# NoSQL（Cosmos DB）
+cosmos_config_file="$infra_root/config/cosmos-database.json"
+cosmos_script="$infra_root/scripts/generate-cosmos-database-params.py"
+cosmos_meta_file="$params_dir/cosmos-database-meta.json"
+
+# キャッシュ（Redis）
+redis_config_file="$infra_root/config/redis.json"
+redis_script="$infra_root/scripts/generate-redis-params.py"
+redis_meta_file="$params_dir/redis-meta.json"
+
+# AKS デプロイ後に生成する初期化スクリプトの出力先
+init_scripts_root="$repo_root/scripts/init"
+agic_controller_init_dir="$init_scripts_root/agicController"
+keda_controller_init_dir="$init_scripts_root/kedaController"
+
+# Helm values 生成（backend chart）
 backend_values_template_file="$infra_root/config/backend-values.template.yaml"
 backend_values_generated_file="$repo_root/k8s/charts/backend/values.yaml"
 backend_values_sync_script="$infra_root/scripts/sync-backend-values.py"
 
+# Helm values 生成（frontend chart）
 frontend_values_template_file="$infra_root/config/frontend-values.template.yaml"
 frontend_values_generated_file="$repo_root/k8s/charts/frontend/values.yaml"
 frontend_values_sync_script="$infra_root/scripts/sync-frontend-values.py"
 
-# -----------------------------------------------------------------------------
-# CLI option parsing
-# -----------------------------------------------------------------------------
-# --what-if 指定時は Azure へ実変更せず、差分確認のみ行う。
-what_if=""
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --what-if)
-      what_if="--what-if"
-      shift
-      ;;
-    *)
-      echo "許可されていない引数です: $1" >&2
-      echo "利用可能な引数: --what-if" >&2
-      exit 1
-      ;;
-  esac
-done
+# helper モジュール
+meta_access_lib="$infra_root/lib/meta-access.sh"
+deploy_helpers_lib="$infra_root/lib/deploy-helpers.sh"
+network_deployment_lib="$infra_root/lib/network-deployment.sh"
+post_actions_lib="$infra_root/lib/post-actions.sh"
 
-run_bicep_deployment() {
-  local log_key="$1"
-  shift
-  local log_file
-  log_file="$logs_dir/${timestamp}-${log_key}.log"
+# -----------------------------------------------------------------------------
+# 共通ヘルパー
+# -----------------------------------------------------------------------------
+# 必須値の空チェックを行い、未設定なら即時終了する。
+# 引数:
+#   $1: value_name
+#       - エラーメッセージに出す項目名。例: "location", "resourceGroupName"
+#   $2: value
+#       - 検証対象の値（空文字かどうかを判定）。
+#   $3: hint
+#       - 補足メッセージ。どのファイル/設定を確認すべきかを示す文言。
+# 挙動:
+#   - value が非空なら何もせず return する。
+#   - value が空なら標準エラーへメッセージを出力し、exit 1 で処理を停止する。
+# 用途:
+#   - Meta 読み出し結果など、後続処理で必須になる値の fail-fast 検証に使う。
+require_non_empty() {
+  local value_name="$1"
+  local value="$2"
+  local hint="$3"
 
-  "$@" >"$log_file" 2> >(tee -a "$log_file" >&2)
+  if [[ -n "$value" ]]; then
+    return
+  fi
+
+  echo "$value_name が取得できませんでした。$hint" >&2
+  exit 1
 }
 
-get_subscription_available_zones_json() {
+# Resource Group を重複排除しながら作成（存在時は noop）する。
+# 引数:
+#   $1: location
+#       - `az group create --location` に渡す Azure リージョン名。
+#   $2 以降: resource group 名の可変長リスト
+#       - 重複を含んで渡してよい。関数内で一意化して処理する。
+# 挙動:
+#   - 渡された順序で走査し、同名 RG は 2 回目以降をスキップする。
+#   - 一意な RG ごとに `az group create` を実行する。
+# 出力/副作用:
+#   - 各 RG について "==> Ensure Resource Group: <name>" を標準出力へ表示する。
+#   - Azure 側に RG 作成 API を呼ぶ（既存 RG の場合は実質 no-op）。
+# 実装メモ:
+#   - Bash 3.2 互換のため連想配列は使わず、`|name|` 形式の文字列で重複判定する。
+ensure_resource_groups() {
   local location="$1"
-  local vm_size="$2"
+  shift
 
-  az vm list-skus \
-    --location "$location" \
-    --resource-type virtualMachines \
-    --all \
-    --query "[?name=='$vm_size'] | [0].{zones:locationInfo[0].zones,restrictions:restrictions}" \
-    -o json \
-    --only-show-errors 2>/dev/null | python - <<'PY'
-import json
-import sys
+  local rg_name
+  local seen_names="|"
+  for rg_name in "$@"; do
+    if [[ "$seen_names" == *"|$rg_name|"* ]]; then
+      continue
+    fi
+    seen_names+="${rg_name}|"
 
-try:
-    data = json.load(sys.stdin)
-except Exception:
-    print("[]")
-    raise SystemExit(0)
-
-all_zones = set(data.get("zones") or [])
-deny_zones = set()
-for restriction in data.get("restrictions") or []:
-    if restriction.get("reasonCode") != "NotAvailableForSubscription":
-        continue
-    info = restriction.get("restrictionInfo") or {}
-    for zone in info.get("zones") or restriction.get("values") or []:
-        deny_zones.add(zone)
-
-print(json.dumps(sorted(all_zones - deny_zones)))
-PY
+    echo "==> Ensure Resource Group: $rg_name"
+    az group create \
+      --name "$rg_name" \
+      --location "$location" >/dev/null
+  done
 }
 
+# manifest 配列を順に解釈し、複数のパラメータ生成スクリプトを実行する。
+# 引数:
+#   $1 以降: manifest エントリの可変長リスト
+#       - 各要素は `"script|out_meta_file|extra_envs"` 形式を想定する。
+#       - extra_envs は省略可（空文字可）。
+# 解析ルール:
+#   - `|` 区切りで 3 要素に分解し、`run_param_generator` へ引き渡す。
+#   - IFS を一時的に `|` に変更し、分解後に元へ戻す。
+# 挙動:
+#   - 配列順に直列実行する（依存順の制御は manifest の並びで表現する）。
+#   - 途中の生成で失敗した場合は、その時点で全体を停止する（set -e）。
+run_param_generation_manifest() {
+  local entry
+  local script
+  local out_meta_file
+  local extra_envs
+  local previous_ifs
+
+  for entry in "$@"; do
+    previous_ifs="$IFS"
+    IFS='|'
+    read -r script out_meta_file extra_envs <<<"$entry"
+    IFS="$previous_ifs"
+
+    run_param_generator "$script" "$out_meta_file" "$extra_envs"
+  done
+}
+
+# 1リソース分のパラメータ生成スクリプトを、共通環境変数付きで実行する。
+# 引数:
+#   $1: script
+#       - 実行する generate スクリプトのパス。
+#   $2: out_meta_file
+#       - 生成スクリプトへ渡す `OUT_META_FILE` の出力先パス。
+#   $3: extra_envs（省略可）
+#       - 追加で渡す環境変数の連結文字列。
+#       - 形式: "KEY1=VAL1;KEY2=VAL2;..."
+#       - 区切りは `;`、空要素は無視する。
+# 挙動:
+#   - 共通環境変数（COMMON_FILE / PARAMS_DIR / OUT_META_FILE / TIMESTAMP）を必ず付与する。
+#   - extra_envs を分解して追加し、`env ... "$script"` 形式で実行する。
+# 出力/副作用:
+#   - 生成スクリプト側の標準出力/標準エラーはそのまま親プロセスへ流れる。
+#   - 生成スクリプトの終了コードをそのまま返す（set -e により失敗時は全体停止）。
+run_param_generator() {
+  local script="$1"
+  local out_meta_file="$2"
+  local extra_envs="${3:-}"
+  local -a env_args
+  local env_kv
+
+  env_args=(
+    "COMMON_FILE=$common_file"
+    "PARAMS_DIR=$params_dir"
+    "OUT_META_FILE=$out_meta_file"
+    "TIMESTAMP=$timestamp"
+  )
+
+  if [[ -n "$extra_envs" ]]; then
+    local previous_ifs="$IFS"
+    IFS=';'
+    for env_kv in $extra_envs; do
+      [[ -n "$env_kv" ]] && env_args+=("$env_kv")
+    done
+    IFS="$previous_ifs"
+  fi
+
+  env "${env_args[@]}" "$script"
+}
+
+# AKS 構成ファイルを実行時に補正し、利用可能な AZ を runtime config へ反映する。
+# 入力:
+#   - common.parameter.json から location / aks.userPoolVmSize
+#   - infra/config/aks.json から agentPoolVmSize
+# 挙動:
+#   - 必須値が欠ける場合は自動補正をスキップし、元設定を維持する。
+#   - get_subscription_available_zones_json を使って agent/user pool の可用ゾーンを解決する。
+#   - 解決できた pool のみ `agentPoolAvailabilityZones` / `userPoolAvailabilityZones` を上書きする。
+# 出力/副作用:
+#   - `${params_dir}/aks-runtime-config.json` を生成/更新する。
+#   - `aks_runtime_config_file` を runtime ファイルに差し替え、
+#     以降の AKS パラメータ生成でこちらを参照する。
 update_aks_availability_zones() {
   local location
   local agent_pool_vm_size
@@ -258,11 +375,76 @@ PY
   aks_runtime_config_file="$runtime_aks_config_file"
 }
 
+# 指定 VM SKU について、サブスクリプションで実際に利用可能な AZ 一覧を JSON 配列で返す。
+# 引数:
+#   $1: location
+#       - Azure リージョン名。例: japaneast
+#   $2: vm_size
+#       - VM SKU 名。例: Standard_D4s_v5
+# 出力:
+#   - 例: ["1","2","3"] の JSON 文字列を標準出力へ出力する。
+#   - SKU 情報を取得できない場合や解析失敗時は [] を返す。
+# 判定ロジック:
+#   - az vm list-skus の zones から候補を取得。
+#   - restrictions.reasonCode == NotAvailableForSubscription の zone を除外。
+#   - 差集合をソートして返す。
+get_subscription_available_zones_json() {
+  local location="$1"
+  local vm_size="$2"
+
+  az vm list-skus \
+    --location "$location" \
+    --resource-type virtualMachines \
+    --all \
+    --query "[?name=='$vm_size'] | [0].{zones:locationInfo[0].zones,restrictions:restrictions}" \
+    -o json \
+    --only-show-errors 2>/dev/null | python - <<'PY'
+import json
+import sys
+
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    print("[]")
+    raise SystemExit(0)
+
+all_zones = set(data.get("zones") or [])
+deny_zones = set()
+for restriction in data.get("restrictions") or []:
+    if restriction.get("reasonCode") != "NotAvailableForSubscription":
+        continue
+    info = restriction.get("restrictionInfo") or {}
+    for zone in info.get("zones") or restriction.get("values") or []:
+        deny_zones.add(zone)
+
+print(json.dumps(sorted(all_zones - deny_zones)))
+PY
+}
+
 # -----------------------------------------------------------------------------
-# Pre-flight checks
+# 事前チェック
 # -----------------------------------------------------------------------------
-# 1) 共通パラメータファイルと validator の存在確認
-# 2) 共通パラメータの型・値検証
+# 1) 実行オプションを解析する。
+#    - 入力: スクリプト引数 ($@)
+#    - 出力: 変数 what_if ("--what-if" または空文字)
+# 現在は --what-if のみ受け付け、未知の引数は即時エラーにする。
+what_if=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --what-if)
+      what_if="--what-if"
+      shift
+      ;;
+    *)
+      echo "許可されていない引数です: $1" >&2
+      echo "利用可能な引数: --what-if" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# 2) 共通入力ファイルを検証する。
+#    common.parameter.json と validator スクリプトがそろっていることを確認する。
 if [[ ! -f "$common_file" ]]; then
   echo "common parameter file が見つかりません: $common_file" >&2
   exit 1
@@ -273,12 +455,16 @@ if [[ ! -f "$common_validation_script" ]]; then
   exit 1
 fi
 
+# 3) common.parameter.json の内容を検証する。
+#    必須キー不足や型不整合を、この時点で明示的に失敗させる。
 echo "==> Validate common parameters"
 "$common_validation_script" "$common_file"
 
+# 4) ログ出力先ディレクトリを作成する（既存の場合は何もしない）。
 mkdir -p "$logs_dir"
 
-# 各リソースの固定設定ファイルが欠けていないかを先に検証する。
+# 5) 各リソースの固定設定 / 生成スクリプト / テンプレートの存在確認。
+#    途中で missing file により処理が止まらないよう、ここで一括検証する。
 if [[ ! -f "$log_config_file" ]]; then
   echo "log analytics config file が見つかりません: $log_config_file" >&2
   exit 1
@@ -419,491 +605,148 @@ if [[ ! -f "$frontend_values_template_file" ]]; then
   exit 1
 fi
 
+# 6) 実行環境の必須コマンド確認。
+#    このスクリプトは az CLI に依存するため、未インストール時は継続不可。
 if ! command -v az >/dev/null 2>&1; then
   echo "Azure CLI (az) が見つかりません。" >&2
   exit 1
 fi
 
+# 7) ライブラリファイルの存在確認。
+#    source 前にファイル有無をチェックし、読み込みエラーを分かりやすくする。
+if [[ ! -f "$meta_access_lib" ]]; then
+  echo "meta access helper script が見つかりません: $meta_access_lib" >&2
+  exit 1
+fi
+
+if [[ ! -f "$deploy_helpers_lib" ]]; then
+  echo "deploy helper script が見つかりません: $deploy_helpers_lib" >&2
+  exit 1
+fi
+
+if [[ ! -f "$network_deployment_lib" ]]; then
+  echo "network deployment helper script が見つかりません: $network_deployment_lib" >&2
+  exit 1
+fi
+
+if [[ ! -f "$post_actions_lib" ]]; then
+  echo "post actions helper script が見つかりません: $post_actions_lib" >&2
+  exit 1
+fi
+
 # -----------------------------------------------------------------------------
-# Parameter generation phase
+# 共通ライブラリ読み込み
+# -----------------------------------------------------------------------------
+# 後続フェーズで利用する関数群を有効化する。
+# meta.json 参照ヘルパー（meta_get / meta_bool / meta_get_stripped）
+source "$meta_access_lib"
+# Bicep デプロイ実行ヘルパー（deploy_group_if_enabled / run_bicep_deployment）
+source "$deploy_helpers_lib"
+# ネットワーク関連デプロイ処理（VNET/Subnets/Firewall/RouteTables/NSG など）
+source "$network_deployment_lib"
+# デプロイ後処理ヘルパー（Helm values 同期、追加構成処理）
+source "$post_actions_lib"
+
+# -----------------------------------------------------------------------------
+# パラメータ生成
 # -----------------------------------------------------------------------------
 # 各 Python スクリプトが以下を出力する:
 # - params/*.bicepparam (Bicep 実行引数)
 # - params/*-meta.json  (deploy 可否、RG 名などの制御情報)
+
+# 生成ログのファイル名に使う実行時刻（例: 20260310T123456）
 timestamp="$(date +'%Y%m%dT%H%M%S')"
+
+# パラメータ出力先ディレクトリを作成（既存の場合はそのまま）
 mkdir -p "$params_dir"
+
+# AKS 設定の availability zones を、サブスクリプション実態に合わせて事前補正する。
 update_aks_availability_zones
 
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$log_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$log_meta_file" \
-TIMESTAMP="$timestamp" \
-"$log_script"
+# 生成対象と依存関係の manifest。
+# 1要素の形式: "generator_script|meta_output_file|ENV1=...;ENV2=..."
+# run_param_generation_manifest が先頭から順に実行し、必要な環境変数を渡す。
+param_generation_manifest=(
+  "$log_script|$log_meta_file|RESOURCE_CONFIG_FILE=$log_config_file"
+  "$appi_script|$appi_meta_file|RESOURCE_CONFIG_FILE=$appi_config_file"
+  "$vnet_script|$vnet_meta_file|RESOURCE_CONFIG_FILE=$vnet_config_file"
+  "$subnets_script|$subnets_meta_file|RESOURCE_CONFIG_FILE=$subnets_config_file"
+  "$firewall_script|$firewall_meta_file|RESOURCE_CONFIG_FILE=$firewall_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
+  "$managed_ids_script|$managed_ids_meta_file|RESOURCE_CONFIG_FILE=$managed_ids_config_file"
+  "$application_gateway_script|$application_gateway_meta_file|RESOURCE_CONFIG_FILE=$application_gateway_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
+  "$application_gateway_low_latency_script|$application_gateway_low_latency_meta_file|RESOURCE_CONFIG_FILE=$application_gateway_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
+  "$redis_script|$redis_meta_file|RESOURCE_CONFIG_FILE=$redis_config_file"
+  "$postgres_script|$postgres_meta_file|RESOURCE_CONFIG_FILE=$postgres_config_file"
+  "$cosmos_script|$cosmos_meta_file|RESOURCE_CONFIG_FILE=$cosmos_config_file"
+  "$aks_script|$aks_meta_file|RESOURCE_CONFIG_FILE=$aks_runtime_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file;APPLICATION_GATEWAY_META_FILE=$application_gateway_meta_file"
+  "$application_gateway_rbac_script|$application_gateway_rbac_meta_file|RESOURCE_CONFIG_FILE=$application_gateway_rbac_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file;APPLICATION_GATEWAY_META_FILE=$application_gateway_meta_file;APPLICATION_GATEWAY_LOW_LATENCY_META_FILE=$application_gateway_low_latency_meta_file"
+  "$acr_script|$acr_meta_file|RESOURCE_CONFIG_FILE=$acr_config_file;AKS_META_FILE=$aks_meta_file"
+  "$key_vault_script|$key_vault_meta_file|RESOURCE_CONFIG_FILE=$key_vault_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file"
+  "$service_bus_script|$service_bus_meta_file|RESOURCE_CONFIG_FILE=$service_bus_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file"
+  "$storage_script|$storage_meta_file|RESOURCE_CONFIG_FILE=$storage_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file"
+  "$route_tables_script|$route_tables_meta_file|RESOURCE_CONFIG_FILE=$route_tables_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file;FIREWALL_META_FILE=$firewall_meta_file"
+  "$nsgs_script|$nsgs_meta_file|RESOURCE_CONFIG_FILE=$nsgs_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
+  "$subnet_attachments_script|$subnet_attachments_meta_file|SUBNETS_CONFIG_FILE=$subnets_config_file;ROUTE_TABLES_CONFIG_FILE=$route_tables_config_file;NSGS_CONFIG_FILE=$nsgs_config_file"
+  "$maintenance_vm_script|$maintenance_vm_meta_file|RESOURCE_CONFIG_FILE=$maintenance_vm_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
+)
 
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$appi_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$appi_meta_file" \
-TIMESTAMP="$timestamp" \
-"$appi_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$vnet_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$vnet_meta_file" \
-TIMESTAMP="$timestamp" \
-"$vnet_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$subnets_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$subnets_meta_file" \
-TIMESTAMP="$timestamp" \
-"$subnets_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$firewall_config_file" \
-SUBNETS_CONFIG_FILE="$subnets_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$firewall_meta_file" \
-TIMESTAMP="$timestamp" \
-"$firewall_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$managed_ids_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$managed_ids_meta_file" \
-TIMESTAMP="$timestamp" \
-"$managed_ids_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$application_gateway_config_file" \
-SUBNETS_CONFIG_FILE="$subnets_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$application_gateway_meta_file" \
-TIMESTAMP="$timestamp" \
-"$application_gateway_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$application_gateway_config_file" \
-SUBNETS_CONFIG_FILE="$subnets_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$application_gateway_low_latency_meta_file" \
-TIMESTAMP="$timestamp" \
-"$application_gateway_low_latency_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$redis_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$redis_meta_file" \
-TIMESTAMP="$timestamp" \
-"$redis_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$postgres_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$postgres_meta_file" \
-TIMESTAMP="$timestamp" \
-"$postgres_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$cosmos_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$cosmos_meta_file" \
-TIMESTAMP="$timestamp" \
-"$cosmos_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$aks_runtime_config_file" \
-SUBNETS_CONFIG_FILE="$subnets_config_file" \
-APPLICATION_GATEWAY_META_FILE="$application_gateway_meta_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$aks_meta_file" \
-TIMESTAMP="$timestamp" \
-"$aks_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$application_gateway_rbac_config_file" \
-MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
-APPLICATION_GATEWAY_META_FILE="$application_gateway_meta_file" \
-APPLICATION_GATEWAY_LOW_LATENCY_META_FILE="$application_gateway_low_latency_meta_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$application_gateway_rbac_meta_file" \
-TIMESTAMP="$timestamp" \
-"$application_gateway_rbac_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$acr_config_file" \
-AKS_META_FILE="$aks_meta_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$acr_meta_file" \
-TIMESTAMP="$timestamp" \
-"$acr_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$key_vault_config_file" \
-MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$key_vault_meta_file" \
-TIMESTAMP="$timestamp" \
-"$key_vault_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$service_bus_config_file" \
-MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$service_bus_meta_file" \
-TIMESTAMP="$timestamp" \
-"$service_bus_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$storage_config_file" \
-MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$storage_meta_file" \
-TIMESTAMP="$timestamp" \
-"$storage_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$route_tables_config_file" \
-SUBNETS_CONFIG_FILE="$subnets_config_file" \
-FIREWALL_META_FILE="$firewall_meta_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$route_tables_meta_file" \
-TIMESTAMP="$timestamp" \
-"$route_tables_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$nsgs_config_file" \
-SUBNETS_CONFIG_FILE="$subnets_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$nsgs_meta_file" \
-TIMESTAMP="$timestamp" \
-"$nsgs_script"
-
-COMMON_FILE="$common_file" \
-SUBNETS_CONFIG_FILE="$subnets_config_file" \
-ROUTE_TABLES_CONFIG_FILE="$route_tables_config_file" \
-NSGS_CONFIG_FILE="$nsgs_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$subnet_attachments_meta_file" \
-TIMESTAMP="$timestamp" \
-"$subnet_attachments_script"
-
-COMMON_FILE="$common_file" \
-RESOURCE_CONFIG_FILE="$maintenance_vm_config_file" \
-SUBNETS_CONFIG_FILE="$subnets_config_file" \
-PARAMS_DIR="$params_dir" \
-OUT_META_FILE="$maintenance_vm_meta_file" \
-TIMESTAMP="$timestamp" \
-"$maintenance_vm_script"
+# manifest 定義に従って .bicepparam / meta.json を一括生成する。
+run_param_generation_manifest "${param_generation_manifest[@]}"
 
 # -----------------------------------------------------------------------------
-# Meta loading phase
+# メタ情報読み込みと検証
 # -----------------------------------------------------------------------------
-# 生成済み meta.json から、以降で使う実行情報（location / RG / paramsFile）を取得する。
-location="$(META_FILE="$log_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+# 1) 生成済み meta.json から、デプロイ全体で使う location を取得する。
+#    ここでは log analytics の meta を基準値として扱う。
+location="$(meta_get "$log_meta_file" "location")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("location", ""))
-PY
-)"
+# 2) 各リソース用の resourceGroupName を meta.json から読み込む。
+#    後続の RG 作成とデプロイ実行で利用するため、ここで一括取得する。
+resource_group_name="$(meta_get "$log_meta_file" "resourceGroupName")"
+vnet_resource_group_name="$(meta_get "$vnet_meta_file" "resourceGroupName")"
+subnets_resource_group_name="$(meta_get "$subnets_meta_file" "resourceGroupName")"
+firewall_resource_group_name="$(meta_get "$firewall_meta_file" "resourceGroupName")"
+managed_ids_resource_group_name="$(meta_get "$managed_ids_meta_file" "resourceGroupName")"
+application_gateway_resource_group_name="$(meta_get "$application_gateway_meta_file" "resourceGroupName")"
+application_gateway_rbac_resource_group_name="$(meta_get "$application_gateway_rbac_meta_file" "resourceGroupName")"
+key_vault_resource_group_name="$(meta_get "$key_vault_meta_file" "resourceGroupName")"
+service_bus_resource_group_name="$(meta_get "$service_bus_meta_file" "resourceGroupName")"
+acr_resource_group_name="$(meta_get "$acr_meta_file" "resourceGroupName")"
+storage_resource_group_name="$(meta_get "$storage_meta_file" "resourceGroupName")"
+redis_resource_group_name="$(meta_get "$redis_meta_file" "resourceGroupName")"
+postgres_resource_group_name="$(meta_get "$postgres_meta_file" "resourceGroupName")"
+cosmos_resource_group_name="$(meta_get "$cosmos_meta_file" "resourceGroupName")"
+aks_resource_group_name="$(meta_get "$aks_meta_file" "resourceGroupName")"
+route_tables_resource_group_name="$(meta_get "$route_tables_meta_file" "resourceGroupName")"
+nsgs_resource_group_name="$(meta_get "$nsgs_meta_file" "resourceGroupName")"
+subnet_attachments_resource_group_name="$(meta_get "$subnet_attachments_meta_file" "resourceGroupName")"
+maintenance_vm_resource_group_name="$(meta_get "$maintenance_vm_meta_file" "resourceGroupName")"
 
-resource_group_name="$(META_FILE="$log_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+# 3) 必須メタ情報の空チェック。
+#    ここで失敗させることで、後続フェーズの az コマンド失敗を未然に防ぐ。
+require_non_empty "location" "$location" "infra/common.parameter.json を確認してください。"
+require_non_empty "resourceGroupName" "$resource_group_name" "config を確認してください。"
+require_non_empty "vnet resourceGroupName" "$vnet_resource_group_name" "config を確認してください。"
+require_non_empty "subnets resourceGroupName" "$subnets_resource_group_name" "config を確認してください。"
+require_non_empty "firewall resourceGroupName" "$firewall_resource_group_name" "config を確認してください。"
+require_non_empty "managed ids resourceGroupName" "$managed_ids_resource_group_name" "config を確認してください。"
+require_non_empty "application gateway resourceGroupName" "$application_gateway_resource_group_name" "config を確認してください。"
+require_non_empty "application gateway rbac resourceGroupName" "$application_gateway_rbac_resource_group_name" "config を確認してください。"
+require_non_empty "key vault resourceGroupName" "$key_vault_resource_group_name" "config を確認してください。"
+require_non_empty "service bus resourceGroupName" "$service_bus_resource_group_name" "config を確認してください。"
+require_non_empty "acr resourceGroupName" "$acr_resource_group_name" "config を確認してください。"
+require_non_empty "storage resourceGroupName" "$storage_resource_group_name" "config を確認してください。"
+require_non_empty "redis resourceGroupName" "$redis_resource_group_name" "config を確認してください。"
+require_non_empty "postgres resourceGroupName" "$postgres_resource_group_name" "config を確認してください。"
+require_non_empty "cosmos resourceGroupName" "$cosmos_resource_group_name" "config を確認してください。"
+require_non_empty "aks resourceGroupName" "$aks_resource_group_name" "config を確認してください。"
+require_non_empty "route tables resourceGroupName" "$route_tables_resource_group_name" "config を確認してください。"
+require_non_empty "nsgs resourceGroupName" "$nsgs_resource_group_name" "config を確認してください。"
+require_non_empty "subnet attachments resourceGroupName" "$subnet_attachments_resource_group_name" "config を確認してください。"
+require_non_empty "maintenance vm resourceGroupName" "$maintenance_vm_resource_group_name" "config を確認してください。"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-vnet_resource_group_name="$(META_FILE="$vnet_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-subnets_resource_group_name="$(META_FILE="$subnets_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-firewall_resource_group_name="$(META_FILE="$firewall_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-managed_ids_resource_group_name="$(META_FILE="$managed_ids_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-application_gateway_resource_group_name="$(META_FILE="$application_gateway_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-application_gateway_rbac_resource_group_name="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-key_vault_resource_group_name="$(META_FILE="$key_vault_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-service_bus_resource_group_name="$(META_FILE="$service_bus_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-acr_resource_group_name="$(META_FILE="$acr_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-storage_resource_group_name="$(META_FILE="$storage_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-redis_resource_group_name="$(META_FILE="$redis_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-postgres_resource_group_name="$(META_FILE="$postgres_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-cosmos_resource_group_name="$(META_FILE="$cosmos_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-aks_resource_group_name="$(META_FILE="$aks_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-route_tables_resource_group_name="$(META_FILE="$route_tables_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-nsgs_resource_group_name="$(META_FILE="$nsgs_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-subnet_attachments_resource_group_name="$(META_FILE="$subnet_attachments_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-maintenance_vm_resource_group_name="$(META_FILE="$maintenance_vm_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("resourceGroupName", ""))
-PY
-)"
-
-# 取得必須のメタ情報を検証する。ここで失敗させることで後続の実行時エラーを防ぐ。
-if [[ -z "$location" ]]; then
-  echo "location が取得できませんでした。infra/common.parameter.json を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$resource_group_name" ]]; then
-  echo "resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$vnet_resource_group_name" ]]; then
-  echo "vnet resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$subnets_resource_group_name" ]]; then
-  echo "subnets resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$firewall_resource_group_name" ]]; then
-  echo "firewall resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$managed_ids_resource_group_name" ]]; then
-  echo "managed ids resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$application_gateway_resource_group_name" ]]; then
-  echo "application gateway resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$application_gateway_rbac_resource_group_name" ]]; then
-  echo "application gateway rbac resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$key_vault_resource_group_name" ]]; then
-  echo "key vault resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$service_bus_resource_group_name" ]]; then
-  echo "service bus resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$acr_resource_group_name" ]]; then
-  echo "acr resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$storage_resource_group_name" ]]; then
-  echo "storage resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$redis_resource_group_name" ]]; then
-  echo "redis resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$postgres_resource_group_name" ]]; then
-  echo "postgres resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$cosmos_resource_group_name" ]]; then
-  echo "cosmos resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$aks_resource_group_name" ]]; then
-  echo "aks resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$route_tables_resource_group_name" ]]; then
-  echo "route tables resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$nsgs_resource_group_name" ]]; then
-  echo "nsgs resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$subnet_attachments_resource_group_name" ]]; then
-  echo "subnet attachments resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-if [[ -z "$maintenance_vm_resource_group_name" ]]; then
-  echo "maintenance vm resourceGroupName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
+# 4) location が Azure で有効なリージョン名かを検証する。
+#    タイポや廃止リージョン指定を早期に検知するため、az の一覧と突き合わせる。
 available_locations="$(az account list-locations --query "[].name" -o tsv)"
 if ! printf '%s\n' "$available_locations" | grep -qx "$location"; then
   echo "location が Azure のリージョン名ではありません: $location" >&2
@@ -911,758 +754,72 @@ if ! printf '%s\n' "$available_locations" | grep -qx "$location"; then
 fi
 
 # -----------------------------------------------------------------------------
-# Resource group ensure phase
+# リソースグループ準備
 # -----------------------------------------------------------------------------
-# 各リソースが利用する RG を作成(存在する場合は noop)する。
-# 同名 RG への重複作成を避けるため、条件分岐で重複呼び出しを抑制している。
-echo "==> Ensure Resource Group: $resource_group_name"
-az group create \
-  --name "$resource_group_name" \
-  --location "$location" >/dev/null
-
-echo "==> Ensure Resource Group: $vnet_resource_group_name"
-az group create \
-  --name "$vnet_resource_group_name" \
-  --location "$location" >/dev/null
-
-if [[ "$subnets_resource_group_name" != "$vnet_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $subnets_resource_group_name"
-  az group create \
-    --name "$subnets_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$firewall_resource_group_name" != "$vnet_resource_group_name" && "$firewall_resource_group_name" != "$subnets_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $firewall_resource_group_name"
-  az group create \
-    --name "$firewall_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$managed_ids_resource_group_name" != "$vnet_resource_group_name" && "$managed_ids_resource_group_name" != "$subnets_resource_group_name" && "$managed_ids_resource_group_name" != "$firewall_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $managed_ids_resource_group_name"
-  az group create \
-    --name "$managed_ids_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$application_gateway_resource_group_name" != "$vnet_resource_group_name" && "$application_gateway_resource_group_name" != "$subnets_resource_group_name" && "$application_gateway_resource_group_name" != "$firewall_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $application_gateway_resource_group_name"
-  az group create \
-    --name "$application_gateway_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$key_vault_resource_group_name" != "$vnet_resource_group_name" && "$key_vault_resource_group_name" != "$subnets_resource_group_name" && "$key_vault_resource_group_name" != "$firewall_resource_group_name" && "$key_vault_resource_group_name" != "$application_gateway_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $key_vault_resource_group_name"
-  az group create \
-    --name "$key_vault_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$acr_resource_group_name" != "$vnet_resource_group_name" && "$acr_resource_group_name" != "$subnets_resource_group_name" && "$acr_resource_group_name" != "$firewall_resource_group_name" && "$acr_resource_group_name" != "$application_gateway_resource_group_name" && "$acr_resource_group_name" != "$key_vault_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $acr_resource_group_name"
-  az group create \
-    --name "$acr_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$service_bus_resource_group_name" != "$vnet_resource_group_name" && "$service_bus_resource_group_name" != "$subnets_resource_group_name" && "$service_bus_resource_group_name" != "$firewall_resource_group_name" && "$service_bus_resource_group_name" != "$application_gateway_resource_group_name" && "$service_bus_resource_group_name" != "$key_vault_resource_group_name" && "$service_bus_resource_group_name" != "$acr_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $service_bus_resource_group_name"
-  az group create \
-    --name "$service_bus_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$storage_resource_group_name" != "$vnet_resource_group_name" && "$storage_resource_group_name" != "$subnets_resource_group_name" && "$storage_resource_group_name" != "$firewall_resource_group_name" && "$storage_resource_group_name" != "$application_gateway_resource_group_name" && "$storage_resource_group_name" != "$key_vault_resource_group_name" && "$storage_resource_group_name" != "$acr_resource_group_name" && "$storage_resource_group_name" != "$service_bus_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $storage_resource_group_name"
-  az group create \
-    --name "$storage_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$redis_resource_group_name" != "$vnet_resource_group_name" && "$redis_resource_group_name" != "$subnets_resource_group_name" && "$redis_resource_group_name" != "$firewall_resource_group_name" && "$redis_resource_group_name" != "$application_gateway_resource_group_name" && "$redis_resource_group_name" != "$key_vault_resource_group_name" && "$redis_resource_group_name" != "$acr_resource_group_name" && "$redis_resource_group_name" != "$service_bus_resource_group_name" && "$redis_resource_group_name" != "$storage_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $redis_resource_group_name"
-  az group create \
-    --name "$redis_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$postgres_resource_group_name" != "$vnet_resource_group_name" && "$postgres_resource_group_name" != "$subnets_resource_group_name" && "$postgres_resource_group_name" != "$firewall_resource_group_name" && "$postgres_resource_group_name" != "$application_gateway_resource_group_name" && "$postgres_resource_group_name" != "$key_vault_resource_group_name" && "$postgres_resource_group_name" != "$acr_resource_group_name" && "$postgres_resource_group_name" != "$service_bus_resource_group_name" && "$postgres_resource_group_name" != "$storage_resource_group_name" && "$postgres_resource_group_name" != "$redis_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $postgres_resource_group_name"
-  az group create \
-    --name "$postgres_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$cosmos_resource_group_name" != "$vnet_resource_group_name" && "$cosmos_resource_group_name" != "$subnets_resource_group_name" && "$cosmos_resource_group_name" != "$firewall_resource_group_name" && "$cosmos_resource_group_name" != "$application_gateway_resource_group_name" && "$cosmos_resource_group_name" != "$key_vault_resource_group_name" && "$cosmos_resource_group_name" != "$acr_resource_group_name" && "$cosmos_resource_group_name" != "$service_bus_resource_group_name" && "$cosmos_resource_group_name" != "$storage_resource_group_name" && "$cosmos_resource_group_name" != "$redis_resource_group_name" && "$cosmos_resource_group_name" != "$postgres_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $cosmos_resource_group_name"
-  az group create \
-    --name "$cosmos_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$aks_resource_group_name" != "$vnet_resource_group_name" && "$aks_resource_group_name" != "$subnets_resource_group_name" && "$aks_resource_group_name" != "$firewall_resource_group_name" && "$aks_resource_group_name" != "$application_gateway_resource_group_name" && "$aks_resource_group_name" != "$key_vault_resource_group_name" && "$aks_resource_group_name" != "$acr_resource_group_name" && "$aks_resource_group_name" != "$service_bus_resource_group_name" && "$aks_resource_group_name" != "$storage_resource_group_name" && "$aks_resource_group_name" != "$redis_resource_group_name" && "$aks_resource_group_name" != "$postgres_resource_group_name" && "$aks_resource_group_name" != "$cosmos_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $aks_resource_group_name"
-  az group create \
-    --name "$aks_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$route_tables_resource_group_name" != "$vnet_resource_group_name" && "$route_tables_resource_group_name" != "$subnets_resource_group_name" && "$route_tables_resource_group_name" != "$firewall_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $route_tables_resource_group_name"
-  az group create \
-    --name "$route_tables_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$nsgs_resource_group_name" != "$vnet_resource_group_name" && "$nsgs_resource_group_name" != "$subnets_resource_group_name" && "$nsgs_resource_group_name" != "$firewall_resource_group_name" && "$nsgs_resource_group_name" != "$route_tables_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $nsgs_resource_group_name"
-  az group create \
-    --name "$nsgs_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$subnet_attachments_resource_group_name" != "$vnet_resource_group_name" && "$subnet_attachments_resource_group_name" != "$subnets_resource_group_name" && "$subnet_attachments_resource_group_name" != "$firewall_resource_group_name" && "$subnet_attachments_resource_group_name" != "$route_tables_resource_group_name" && "$subnet_attachments_resource_group_name" != "$nsgs_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $subnet_attachments_resource_group_name"
-  az group create \
-    --name "$subnet_attachments_resource_group_name" \
-    --location "$location" >/dev/null
-fi
-
-if [[ "$maintenance_vm_resource_group_name" != "$vnet_resource_group_name" && "$maintenance_vm_resource_group_name" != "$subnets_resource_group_name" && "$maintenance_vm_resource_group_name" != "$firewall_resource_group_name" && "$maintenance_vm_resource_group_name" != "$application_gateway_resource_group_name" && "$maintenance_vm_resource_group_name" != "$key_vault_resource_group_name" && "$maintenance_vm_resource_group_name" != "$acr_resource_group_name" && "$maintenance_vm_resource_group_name" != "$service_bus_resource_group_name" && "$maintenance_vm_resource_group_name" != "$storage_resource_group_name" && "$maintenance_vm_resource_group_name" != "$redis_resource_group_name" && "$maintenance_vm_resource_group_name" != "$postgres_resource_group_name" && "$maintenance_vm_resource_group_name" != "$cosmos_resource_group_name" && "$maintenance_vm_resource_group_name" != "$aks_resource_group_name" && "$maintenance_vm_resource_group_name" != "$route_tables_resource_group_name" && "$maintenance_vm_resource_group_name" != "$nsgs_resource_group_name" && "$maintenance_vm_resource_group_name" != "$subnet_attachments_resource_group_name" ]]; then
-  echo "==> Ensure Resource Group: $maintenance_vm_resource_group_name"
-  az group create \
-    --name "$maintenance_vm_resource_group_name" \
-    --location "$location" >/dev/null
-fi
+# 各リソースが利用する Resource Group を事前作成する。
+# - 第1引数: location（RG 作成リージョン）
+# - 第2引数以降: 作成対象の RG 名一覧
+# 既存 RG がある場合は `az group create` が冪等に処理するため、そのまま継続する。
+ensure_resource_groups "$location" \
+  "$resource_group_name" \
+  "$vnet_resource_group_name" \
+  "$subnets_resource_group_name" \
+  "$firewall_resource_group_name" \
+  "$managed_ids_resource_group_name" \
+  "$application_gateway_resource_group_name" \
+  "$key_vault_resource_group_name" \
+  "$acr_resource_group_name" \
+  "$service_bus_resource_group_name" \
+  "$storage_resource_group_name" \
+  "$redis_resource_group_name" \
+  "$postgres_resource_group_name" \
+  "$cosmos_resource_group_name" \
+  "$aks_resource_group_name" \
+  "$route_tables_resource_group_name" \
+  "$nsgs_resource_group_name" \
+  "$subnet_attachments_resource_group_name" \
+  "$maintenance_vm_resource_group_name"
 
 # -----------------------------------------------------------------------------
 # Monitor resources
 # -----------------------------------------------------------------------------
 # Log Analytics -> Application Insights の順で実行する。
-log_deploy="$(META_FILE="$log_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+log_deploy="$(meta_bool "$log_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
+log_params_file="$(meta_get "$log_meta_file" "paramsFile")"
 
-log_params_file="$(META_FILE="$log_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+appi_deploy="$(meta_bool "$appi_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
+appi_params_file="$(meta_get "$appi_meta_file" "paramsFile")"
 
-appi_deploy="$(META_FILE="$appi_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+deploy_group_if_enabled \
+  "$log_deploy" \
+  "Deploy Log Analytics" \
+  "log-analytics" \
+  "main-monitor-log-analytics-${timestamp}" \
+  "$resource_group_name" \
+  "$log_params_file" \
+  "Skip Log Analytics (resourceToggles.logAnalytics=false)"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-appi_params_file="$(META_FILE="$appi_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$log_deploy" == "true" ]]; then
-  echo "==> Deploy Log Analytics"
-  run_bicep_deployment "log-analytics" az deployment group create \
-    --name "main-monitor-log-analytics-${timestamp}" \
-    --resource-group "$resource_group_name" \
-    --parameters "$log_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Log Analytics (resourceToggles.logAnalytics=false)"
-fi
-
-if [[ "$appi_deploy" == "true" ]]; then
-  echo "==> Deploy Application Insights"
-  run_bicep_deployment "application-insights" az deployment group create \
-    --name "main-monitor-application-insights-${timestamp}" \
-    --resource-group "$resource_group_name" \
-    --parameters "$appi_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Application Insights (resourceToggles.applicationInsights=false)"
-fi
+deploy_group_if_enabled \
+  "$appi_deploy" \
+  "Deploy Application Insights" \
+  "application-insights" \
+  "main-monitor-application-insights-${timestamp}" \
+  "$resource_group_name" \
+  "$appi_params_file" \
+  "Skip Application Insights (resourceToggles.applicationInsights=false)"
 
 # -----------------------------------------------------------------------------
-# Virtual Network (existing check aware)
+# Network (VNET/Subnets/Firewall/UDR/NSG)
 # -----------------------------------------------------------------------------
-# 既存 VNET がある環境では peering 等の手動設定を壊さないため、
-# 既存検出時は VNET の apply/update をスキップする。
-vnet_deploy="$(META_FILE="$vnet_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-vnet_params_file="$(META_FILE="$vnet_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-vnet_apply_skipped_existing=false
-vnet_created_in_this_run=false
-
-if [[ "$vnet_deploy" == "true" ]]; then
-  vnet_name="$(PARAMS_FILE="$vnet_params_file" python - <<'PY'
-import os
-import re
-from pathlib import Path
-
-content = Path(os.environ["PARAMS_FILE"]).read_text(encoding="utf-8")
-match = re.search(r"^param vnetName = '([^']*)'$", content, flags=re.MULTILINE)
-print(match.group(1) if match else "")
-PY
-)"
-
-  if [[ -z "$vnet_name" ]]; then
-    echo "vnetName が取得できませんでした: $vnet_params_file" >&2
-    exit 1
-  fi
-
-  echo "==> Check existing Virtual Network: $vnet_name"
-  existing_vnet_name="$(VNET_RG_NAME="$vnet_resource_group_name" VNET_NAME="$vnet_name" SUBSCRIPTION_ID="$(az account show --query id -o tsv)" python - <<'PY'
-import os
-import subprocess
-import sys
-
-vnet_id = (
-    f"/subscriptions/{os.environ['SUBSCRIPTION_ID']}"
-    f"/resourceGroups/{os.environ['VNET_RG_NAME']}"
-    f"/providers/Microsoft.Network/virtualNetworks/{os.environ['VNET_NAME']}"
-)
-
-cmd = [
-    "az",
-    "resource",
-    "show",
-    "--ids",
-    vnet_id,
-    "--query",
-    "name",
-    "--output",
-    "tsv",
-    "--only-show-errors",
-]
-
-for _ in range(3):
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
-    except subprocess.TimeoutExpired:
-        continue
-
-    if result.returncode == 0:
-        print(result.stdout.strip())
-        sys.exit(0)
-    if result.returncode != 0 and "was not found" in (result.stderr or ""):
-        print("")
-        sys.exit(0)
-
-print("__CHECK_FAILED__")
-PY
-)"
-
-  if [[ "$existing_vnet_name" == "__CHECK_FAILED__" ]]; then
-    echo "==> エラー: 既存 Virtual Network の存在確認に失敗しました（タイムアウト/リトライ上限）。" >&2
-    echo "==> Error: Failed to check existing Virtual Network state (timeout/retry exhausted)." >&2
-    echo "==> Azure CLI のログイン状態・セッション・ネットワークを確認して再実行してください。" >&2
-    echo "==> Please verify Azure CLI login/session/network and retry." >&2
-    exit 1
-  fi
-
-  if [[ -n "$existing_vnet_name" ]]; then
-    vnet_apply_skipped_existing=true
-    cat <<EOF
-------------------------------------------------------------
-NOTICE: Virtual Network
-[JA] 既存の Virtual Network を検出したため、Virtual Network の適用/更新をスキップします。
-     VNET 名: $existing_vnet_name
-[EN] Existing Virtual Network detected. Skipping Virtual Network apply/update.
-     VNET Name: $existing_vnet_name
-------------------------------------------------------------
-EOF
-  else
-    echo "==> Deploy Virtual Network"
-    run_bicep_deployment "virtual-network" az deployment group create \
-      --name "main-network-virtual-network-${timestamp}" \
-      --resource-group "$vnet_resource_group_name" \
-      --parameters "$vnet_params_file" \
-      ${what_if:+$what_if}
-    vnet_created_in_this_run=true
-
-    cat <<'EOF'
-------------------------------------------------------------
-NOTICE: Initial VNET Provisioning
-[EN] A new VNET has been created for the initial run.
-     If you specify egressNextHopIp individually, implement VNET peering first so that
-     outbound communication to external networks is available before deployment.
-     After VNET peering is completed, run this script again.
-
-[JA] 初回実行のため新規VNETを作成しました。
-     egressNextHopIpを個別指定している場合は、デプロイ前に外部への通信が可能になるように
-     VNETピアリングを先に実装してください。
-     VNETピアリング完了後に再度このスクリプトを実行してください。
-------------------------------------------------------------
-EOF
-    exit 0
-  fi
-else
-  echo "==> Skip Virtual Network (resourceToggles.virtualNetwork=false)"
-fi
+run_virtual_network_deployment
+run_subnets_base_deployment
+run_firewall_deployment
+run_route_tables_nsgs_subnet_attachments
 
 # -----------------------------------------------------------------------------
-# Subnets (base creation)
-# -----------------------------------------------------------------------------
-# まずは NSG / UDR を付けずにサブネットだけ作成する。
-subnets_deploy="$(META_FILE="$subnets_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-subnets_params_file="$(META_FILE="$subnets_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$subnets_deploy" == "true" ]]; then
-  echo "==> Deploy Subnets (without NSG/RouteTable)"
-  run_bicep_deployment "subnets" az deployment group create \
-    --name "main-network-subnets-${timestamp}" \
-    --resource-group "$subnets_resource_group_name" \
-    --parameters "$subnets_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Subnets (resourceToggles.subnets=false)"
-fi
-
-# -----------------------------------------------------------------------------
-# Firewall (policy existing check aware)
-# -----------------------------------------------------------------------------
-# Firewall Policy が既存の場合、既存ポリシーを維持するため
-# ポリシー更新だけスキップして Firewall リソース本体を実行する。
-firewall_deploy="$(META_FILE="$firewall_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-firewall_params_file="$(META_FILE="$firewall_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-firewall_policy_apply_skipped=false
-
-if [[ "$firewall_deploy" == "true" ]]; then
-  firewall_policy_name="$(PARAMS_FILE="$firewall_params_file" python - <<'PY'
-import os
-import re
-from pathlib import Path
-
-content = Path(os.environ["PARAMS_FILE"]).read_text(encoding="utf-8")
-match = re.search(r"^param firewallPolicyName = '([^']*)'$", content, flags=re.MULTILINE)
-print(match.group(1) if match else "")
-PY
-)"
-
-  if [[ -z "$firewall_policy_name" ]]; then
-    echo "firewallPolicyName が取得できませんでした: $firewall_params_file" >&2
-    exit 1
-  fi
-
-  echo "==> Check existing Firewall Policy: $firewall_policy_name"
-  existing_firewall_policy_name="$(FIREWALL_RG_NAME="$firewall_resource_group_name" FIREWALL_POLICY_NAME="$firewall_policy_name" SUBSCRIPTION_ID="$(az account show --query id -o tsv)" python - <<'PY'
-import os
-import subprocess
-import sys
-
-policy_id = (
-    f"/subscriptions/{os.environ['SUBSCRIPTION_ID']}"
-    f"/resourceGroups/{os.environ['FIREWALL_RG_NAME']}"
-    f"/providers/Microsoft.Network/firewallPolicies/{os.environ['FIREWALL_POLICY_NAME']}"
-)
-
-cmd = [
-    "az",
-    "resource",
-    "show",
-    "--ids",
-    policy_id,
-    "--query",
-    "name",
-    "--output",
-    "tsv",
-    "--only-show-errors",
-]
-
-for _ in range(3):
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
-    except subprocess.TimeoutExpired:
-        continue
-
-    if result.returncode == 0:
-        print(result.stdout.strip())
-        sys.exit(0)
-    if result.returncode != 0 and "was not found" in (result.stderr or ""):
-        print("")
-        sys.exit(0)
-
-print("__CHECK_FAILED__")
-PY
-)"
-
-  if [[ "$existing_firewall_policy_name" == "__CHECK_FAILED__" ]]; then
-    echo "==> Error: Failed to check existing Firewall Policy state (timeout/retry exhausted)." >&2
-    echo "==> エラー: 既存 Firewall Policy の存在確認に失敗しました（タイムアウト/リトライ上限）。" >&2
-    echo "==> Please verify Azure CLI login/session/network and retry." >&2
-    echo "==> Azure CLI のログイン状態・セッション・ネットワークを確認して再実行してください。" >&2
-    exit 1
-  fi
-
-  if [[ -n "$existing_firewall_policy_name" ]]; then
-    firewall_policy_apply_skipped=true
-    cat <<EOF
-------------------------------------------------------------
-NOTICE: Firewall Policy
-[EN] Existing Firewall Policy detected. Skipping policy apply/update.
-     Policy Name: $existing_firewall_policy_name
-[JA] 既存の Firewall Policy を検出したため、Policy の適用/更新をスキップします。
-     Policy 名: $existing_firewall_policy_name
-------------------------------------------------------------
-EOF
-    echo "==> Deploy Firewall (use existing Firewall Policy)"
-    firewall_deploy_cmd=(
-      az deployment group create
-      --name "main-network-firewall-${timestamp}"
-      --resource-group "$firewall_resource_group_name"
-      --parameters "$firewall_params_file"
-      --parameters skipFirewallPolicyDeployment=true
-    )
-    if [[ -n "${what_if:-}" ]]; then
-      firewall_deploy_cmd+=("$what_if")
-    fi
-    run_bicep_deployment "firewall" "${firewall_deploy_cmd[@]}"
-  else
-    echo "==> Deploy Firewall"
-    firewall_deploy_cmd=(
-      az deployment group create
-      --name "main-network-firewall-${timestamp}"
-      --resource-group "$firewall_resource_group_name"
-      --parameters "$firewall_params_file"
-    )
-    if [[ -n "${what_if:-}" ]]; then
-      firewall_deploy_cmd+=("$what_if")
-    fi
-    run_bicep_deployment "firewall" "${firewall_deploy_cmd[@]}"
-  fi
-else
-  echo "==> Skip Firewall (resourceToggles.firewall=false)"
-fi
-
-# -----------------------------------------------------------------------------
-# Route table / NSG / subnet attachments
-# -----------------------------------------------------------------------------
-# 注意:
-# - network.egressNextHopIp 未指定時は、実際の Firewall Private IP を Azure から再取得し、
-#   その値で route-tables.bicepparam を再生成してから適用する。
-# - これにより nextHop の古い値で UDR が適用されることを防ぐ。
-application_gateway_deploy="$(META_FILE="$application_gateway_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-application_gateway_params_file="$(META_FILE="$application_gateway_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-application_gateway_low_latency_deploy="$(META_FILE="$application_gateway_low_latency_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-application_gateway_low_latency_params_file="$(META_FILE="$application_gateway_low_latency_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-route_tables_deploy="$(META_FILE="$route_tables_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-route_tables_params_file="$(META_FILE="$route_tables_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-egress_next_hop_ip_for_routes="$(COMMON_FILE="$common_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
-print(common.get("network", {}).get("egressNextHopIp", ""))
-PY
-)"
-
-if [[ "$route_tables_deploy" == "true" ]]; then
-  if [[ -z "$egress_next_hop_ip_for_routes" ]]; then
-    firewall_name_for_routes="$(PARAMS_FILE="$firewall_params_file" python - <<'PY'
-import os
-import re
-from pathlib import Path
-
-content = Path(os.environ["PARAMS_FILE"]).read_text(encoding="utf-8")
-match = re.search(r"^param firewallName = '([^']*)'$", content, flags=re.MULTILINE)
-print(match.group(1) if match else "")
-PY
-)"
-
-    if [[ -z "$firewall_name_for_routes" ]]; then
-      echo "firewallName が取得できませんでした: $firewall_params_file" >&2
-      exit 1
-    fi
-
-    echo "==> Resolve Firewall Private IP for Route Tables: $firewall_name_for_routes"
-    actual_firewall_private_ip="$(FIREWALL_RG_NAME="$firewall_resource_group_name" FIREWALL_NAME="$firewall_name_for_routes" python - <<'PY'
-import os
-import subprocess
-import sys
-
-cmd = [
-    "az",
-    "network",
-    "firewall",
-    "show",
-    "--resource-group",
-    os.environ["FIREWALL_RG_NAME"],
-    "--name",
-    os.environ["FIREWALL_NAME"],
-    "--query",
-    "ipConfigurations[0].privateIPAddress",
-    "--output",
-    "tsv",
-    "--only-show-errors",
-]
-
-for _ in range(3):
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
-    except subprocess.TimeoutExpired:
-        continue
-
-    if result.returncode == 0:
-        print(result.stdout.strip())
-        sys.exit(0)
-    if result.returncode != 0 and "was not found" in (result.stderr or ""):
-        print("")
-        sys.exit(0)
-
-print("__CHECK_FAILED__")
-PY
-)"
-
-    if [[ "$actual_firewall_private_ip" == "__CHECK_FAILED__" ]]; then
-      echo "==> Error: Failed to resolve Firewall private IP for Route Tables (timeout/retry exhausted)." >&2
-      echo "==> エラー: Route Tables 用の Firewall プライベート IP 解決に失敗しました（タイムアウト/リトライ上限）。" >&2
-      exit 1
-    fi
-
-    if [[ -z "$actual_firewall_private_ip" ]]; then
-      if [[ -n "${what_if:-}" ]]; then
-        echo "==> WARN: Firewall private IP could not be resolved in --what-if mode. Continue with generated value."
-        echo "==> 警告: --what-if 実行のため Firewall プライベート IP を解決できませんでした。生成済み値で継続します。"
-      else
-        echo "==> Error: Firewall private IP is empty. Ensure Firewall exists before Route Tables deployment." >&2
-        echo "==> エラー: Firewall プライベート IP が空です。Route Tables 実行前に Firewall が存在することを確認してください。" >&2
-        exit 1
-      fi
-    else
-      FIREWALL_META_FILE="$firewall_meta_file" FIREWALL_PRIVATE_IP="$actual_firewall_private_ip" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta_path = Path(os.environ["FIREWALL_META_FILE"])
-meta = json.loads(meta_path.read_text(encoding="utf-8"))
-meta["firewallPrivateIp"] = os.environ["FIREWALL_PRIVATE_IP"]
-meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-PY
-
-      COMMON_FILE="$common_file" \
-      RESOURCE_CONFIG_FILE="$route_tables_config_file" \
-      SUBNETS_CONFIG_FILE="$subnets_config_file" \
-      FIREWALL_META_FILE="$firewall_meta_file" \
-      PARAMS_DIR="$params_dir" \
-      OUT_META_FILE="$route_tables_meta_file" \
-      TIMESTAMP="$timestamp" \
-      "$route_tables_script"
-
-      route_tables_params_file="$(META_FILE="$route_tables_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-    fi
-  fi
-
-  echo "==> Deploy Route Tables (UDR)"
-  run_bicep_deployment "route-tables" az deployment group create \
-    --name "main-network-route-tables-${timestamp}" \
-    --resource-group "$route_tables_resource_group_name" \
-    --parameters "$route_tables_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Route Tables (resourceToggles.subnets=false)"
-fi
-
-nsgs_deploy="$(META_FILE="$nsgs_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-nsgs_params_file="$(META_FILE="$nsgs_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$nsgs_deploy" == "true" ]]; then
-  echo "==> Deploy NSGs"
-  run_bicep_deployment "nsgs" az deployment group create \
-    --name "main-network-nsgs-${timestamp}" \
-    --resource-group "$nsgs_resource_group_name" \
-    --parameters "$nsgs_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip NSGs (resourceToggles.subnets=false)"
-fi
-
-subnet_attachments_deploy="$(META_FILE="$subnet_attachments_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-subnet_attachments_params_file="$(META_FILE="$subnet_attachments_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$subnet_attachments_deploy" == "true" ]]; then
-  echo "==> Attach Route Tables / NSGs to Subnets"
-  run_bicep_deployment "subnet-attachments" az deployment group create \
-    --name "main-network-subnet-attachments-${timestamp}" \
-    --resource-group "$subnet_attachments_resource_group_name" \
-    --parameters "$subnet_attachments_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Subnet Attachments (resourceToggles.subnets=false)"
-fi
-
-# -----------------------------------------------------------------------------
-# Managed IDs / Application Gateway / AKS / ACR / Key Vault / Service Bus / Storage / PostgreSQL / Maintenance VM / Cosmos DB / Redis
+# その他リソース
 # -----------------------------------------------------------------------------
 # 依存順:
 # 1) Managed IDs
@@ -1677,59 +834,47 @@ fi
 # 10) Maintenance VM
 # 11) Cosmos DB (Private Endpoint 用サブネットが先に必要)
 # 12) Redis (Private Endpoint 用サブネットが先に必要)
-managed_ids_deploy="$(META_FILE="$managed_ids_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
+# -----------------------------------------------------------------------------
+# Managed IDs
+# -----------------------------------------------------------------------------
+managed_ids_deploy="$(meta_bool "$managed_ids_meta_file" "deploy")"
 
-managed_ids_params_file="$(META_FILE="$managed_ids_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+managed_ids_params_file="$(meta_get "$managed_ids_meta_file" "paramsFile")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
+deploy_group_if_enabled \
+  "$managed_ids_deploy" \
+  "Deploy Managed IDs" \
+  "managed-ids" \
+  "main-service-managed-ids-${timestamp}" \
+  "$managed_ids_resource_group_name" \
+  "$managed_ids_params_file" \
+  "Skip Managed IDs (resourceToggles.managedIds=false)"
 
-if [[ "$managed_ids_deploy" == "true" ]]; then
-  echo "==> Deploy Managed IDs"
-  run_bicep_deployment "managed-ids" az deployment group create \
-    --name "main-service-managed-ids-${timestamp}" \
-    --resource-group "$managed_ids_resource_group_name" \
-    --parameters "$managed_ids_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Managed IDs (resourceToggles.managedIds=false)"
-fi
+# -----------------------------------------------------------------------------
+# Application Gateway
+# -----------------------------------------------------------------------------
+deploy_group_if_enabled \
+  "$application_gateway_deploy" \
+  "Deploy Application Gateway" \
+  "application-gateway" \
+  "main-network-application-gateway-${timestamp}" \
+  "$application_gateway_resource_group_name" \
+  "$application_gateway_params_file" \
+  "Skip Application Gateway (resourceToggles.applicationGateway=false)"
 
-if [[ "$application_gateway_deploy" == "true" ]]; then
-  echo "==> Deploy Application Gateway"
-  run_bicep_deployment "application-gateway" az deployment group create \
-    --name "main-network-application-gateway-${timestamp}" \
-    --resource-group "$application_gateway_resource_group_name" \
-    --parameters "$application_gateway_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Application Gateway (resourceToggles.applicationGateway=false)"
-fi
+deploy_group_if_enabled \
+  "$application_gateway_low_latency_deploy" \
+  "Deploy Application Gateway (Low Latency)" \
+  "application-gateway-low-latency" \
+  "main-network-application-gateway-low-latency-${timestamp}" \
+  "$application_gateway_resource_group_name" \
+  "$application_gateway_low_latency_params_file" \
+  "Skip Application Gateway (Low Latency)"
 
-if [[ "$application_gateway_low_latency_deploy" == "true" ]]; then
-  echo "==> Deploy Application Gateway (Low Latency)"
-  run_bicep_deployment "application-gateway-low-latency" az deployment group create \
-    --name "main-network-application-gateway-low-latency-${timestamp}" \
-    --resource-group "$application_gateway_resource_group_name" \
-    --parameters "$application_gateway_low_latency_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Application Gateway (Low Latency)"
-fi
-
+# -----------------------------------------------------------------------------
+# Application Gateway RBAC
+# -----------------------------------------------------------------------------
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$application_gateway_rbac_config_file" \
 MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
@@ -1740,68 +885,38 @@ OUT_META_FILE="$application_gateway_rbac_meta_file" \
 TIMESTAMP="$timestamp" \
 "$application_gateway_rbac_script"
 
-application_gateway_rbac_deploy="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+application_gateway_rbac_deploy="$(meta_bool "$application_gateway_rbac_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
+application_gateway_rbac_params_file="$(meta_get "$application_gateway_rbac_meta_file" "paramsFile")"
 
-application_gateway_rbac_params_file="$(META_FILE="$application_gateway_rbac_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+deploy_group_if_enabled \
+  "$application_gateway_rbac_deploy" \
+  "Deploy Application Gateway RBAC" \
+  "application-gateway-rbac" \
+  "main-service-application-gateway-rbac-${timestamp}" \
+  "$application_gateway_rbac_resource_group_name" \
+  "$application_gateway_rbac_params_file" \
+  "Skip Application Gateway RBAC (resourceToggles.applicationGateway=false or required managed identities not found)"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
+# -----------------------------------------------------------------------------
+# AKS
+# -----------------------------------------------------------------------------
+aks_deploy="$(meta_bool "$aks_meta_file" "deploy")"
 
-if [[ "$application_gateway_rbac_deploy" == "true" ]]; then
-  echo "==> Deploy Application Gateway RBAC"
-  run_bicep_deployment "application-gateway-rbac" az deployment group create \
-    --name "main-service-application-gateway-rbac-${timestamp}" \
-    --resource-group "$application_gateway_rbac_resource_group_name" \
-    --parameters "$application_gateway_rbac_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Application Gateway RBAC (resourceToggles.applicationGateway=false or required managed identities not found)"
-fi
+aks_params_file="$(meta_get "$aks_meta_file" "paramsFile")"
 
-aks_deploy="$(META_FILE="$aks_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+deploy_group_if_enabled \
+  "$aks_deploy" \
+  "Deploy AKS" \
+  "aks" \
+  "main-service-aks-${timestamp}" \
+  "$aks_resource_group_name" \
+  "$aks_params_file" \
+  "Skip AKS (resourceToggles.aks=false)"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-aks_params_file="$(META_FILE="$aks_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$aks_deploy" == "true" ]]; then
-  echo "==> Deploy AKS"
-  run_bicep_deployment "aks" az deployment group create \
-    --name "main-service-aks-${timestamp}" \
-    --resource-group "$aks_resource_group_name" \
-    --parameters "$aks_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip AKS (resourceToggles.aks=false)"
-fi
-
+# -----------------------------------------------------------------------------
+# Federated Credential (AKS 関連)
+# -----------------------------------------------------------------------------
 federated_credential_deploy="false"
 if [[ "$aks_deploy" == "true" ]]; then
   if [[ -n "$what_if" ]]; then
@@ -1815,25 +930,9 @@ if [[ "$aks_deploy" == "true" ]]; then
     TIMESTAMP="$timestamp" \
     "$federated_credential_script"
 
-    federated_credential_deploy="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+    federated_credential_deploy="$(meta_bool "$federated_credential_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-    federated_credential_params_file="$(META_FILE="$federated_credential_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
+    federated_credential_params_file="$(meta_get "$federated_credential_meta_file" "paramsFile")"
 
     if [[ "$federated_credential_deploy" == "true" ]]; then
       echo "==> Deploy Federated Credential"
@@ -1849,37 +948,25 @@ else
   echo "==> Skip Federated Credential (requires resourceToggles.aks=true)"
 fi
 
-acr_deploy="$(META_FILE="$acr_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+# -----------------------------------------------------------------------------
+# ACR
+# -----------------------------------------------------------------------------
+acr_deploy="$(meta_bool "$acr_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
+acr_params_file="$(meta_get "$acr_meta_file" "paramsFile")"
 
-acr_params_file="$(META_FILE="$acr_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+deploy_group_if_enabled \
+  "$acr_deploy" \
+  "Deploy ACR" \
+  "acr" \
+  "main-service-acr-${timestamp}" \
+  "$acr_resource_group_name" \
+  "$acr_params_file" \
+  "Skip ACR (resourceToggles.acr=false)"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$acr_deploy" == "true" ]]; then
-  echo "==> Deploy ACR"
-  run_bicep_deployment "acr" az deployment group create \
-    --name "main-service-acr-${timestamp}" \
-    --resource-group "$acr_resource_group_name" \
-    --parameters "$acr_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip ACR (resourceToggles.acr=false)"
-fi
-
+# -----------------------------------------------------------------------------
+# Key Vault
+# -----------------------------------------------------------------------------
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$key_vault_config_file" \
 MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
@@ -1888,37 +975,22 @@ OUT_META_FILE="$key_vault_meta_file" \
 TIMESTAMP="$timestamp" \
 "$key_vault_script"
 
-key_vault_deploy="$(META_FILE="$key_vault_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+key_vault_deploy="$(meta_bool "$key_vault_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
+key_vault_params_file="$(meta_get "$key_vault_meta_file" "paramsFile")"
 
-key_vault_params_file="$(META_FILE="$key_vault_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+deploy_group_if_enabled \
+  "$key_vault_deploy" \
+  "Deploy Key Vault" \
+  "key-vault" \
+  "main-service-key-vault-${timestamp}" \
+  "$key_vault_resource_group_name" \
+  "$key_vault_params_file" \
+  "Skip Key Vault (resourceToggles.keyVault=false)"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$key_vault_deploy" == "true" ]]; then
-  echo "==> Deploy Key Vault"
-  run_bicep_deployment "key-vault" az deployment group create \
-    --name "main-service-key-vault-${timestamp}" \
-    --resource-group "$key_vault_resource_group_name" \
-    --parameters "$key_vault_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Key Vault (resourceToggles.keyVault=false)"
-fi
-
+# -----------------------------------------------------------------------------
+# Service Bus
+# -----------------------------------------------------------------------------
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$service_bus_config_file" \
 MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
@@ -1927,37 +999,22 @@ OUT_META_FILE="$service_bus_meta_file" \
 TIMESTAMP="$timestamp" \
 "$service_bus_script"
 
-service_bus_deploy="$(META_FILE="$service_bus_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+service_bus_deploy="$(meta_bool "$service_bus_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
+service_bus_params_file="$(meta_get "$service_bus_meta_file" "paramsFile")"
 
-service_bus_params_file="$(META_FILE="$service_bus_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+deploy_group_if_enabled \
+  "$service_bus_deploy" \
+  "Deploy Service Bus" \
+  "service-bus" \
+  "main-service-service-bus-${timestamp}" \
+  "$service_bus_resource_group_name" \
+  "$service_bus_params_file" \
+  "Skip Service Bus (resourceToggles.serviceBus=false)"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$service_bus_deploy" == "true" ]]; then
-  echo "==> Deploy Service Bus"
-  run_bicep_deployment "service-bus" az deployment group create \
-    --name "main-service-service-bus-${timestamp}" \
-    --resource-group "$service_bus_resource_group_name" \
-    --parameters "$service_bus_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Service Bus (resourceToggles.serviceBus=false)"
-fi
-
+# -----------------------------------------------------------------------------
+# Storage Account
+# -----------------------------------------------------------------------------
 COMMON_FILE="$common_file" \
 RESOURCE_CONFIG_FILE="$storage_config_file" \
 MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
@@ -1966,56 +1023,25 @@ OUT_META_FILE="$storage_meta_file" \
 TIMESTAMP="$timestamp" \
 "$storage_script"
 
-storage_deploy="$(META_FILE="$storage_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+storage_deploy="$(meta_bool "$storage_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
+storage_params_file="$(meta_get "$storage_meta_file" "paramsFile")"
 
-storage_params_file="$(META_FILE="$storage_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+deploy_group_if_enabled \
+  "$storage_deploy" \
+  "Deploy Storage Account" \
+  "storage" \
+  "main-service-storage-${timestamp}" \
+  "$storage_resource_group_name" \
+  "$storage_params_file" \
+  "Skip Storage Account (resourceToggles.storage=false)"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
+# -----------------------------------------------------------------------------
+# PostgreSQL Flexible Server
+# -----------------------------------------------------------------------------
+postgres_deploy="$(meta_bool "$postgres_meta_file" "deploy")"
 
-if [[ "$storage_deploy" == "true" ]]; then
-  echo "==> Deploy Storage Account"
-  run_bicep_deployment "storage" az deployment group create \
-    --name "main-service-storage-${timestamp}" \
-    --resource-group "$storage_resource_group_name" \
-    --parameters "$storage_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Storage Account (resourceToggles.storage=false)"
-fi
-
-postgres_deploy="$(META_FILE="$postgres_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-postgres_params_file="$(META_FILE="$postgres_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
+postgres_params_file="$(meta_get "$postgres_meta_file" "paramsFile")"
 
 if [[ "$postgres_deploy" == "true" ]]; then
   if [[ -z "${POSTGRES_ADMIN_PASSWORD:-}" ]]; then
@@ -2035,25 +1061,12 @@ else
   echo "==> Skip PostgreSQL Flexible Server (resourceToggles.postgresDatabase=false)"
 fi
 
-maintenance_vm_deploy="$(META_FILE="$maintenance_vm_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+# -----------------------------------------------------------------------------
+# Maintenance VM
+# -----------------------------------------------------------------------------
+maintenance_vm_deploy="$(meta_bool "$maintenance_vm_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-maintenance_vm_params_file="$(META_FILE="$maintenance_vm_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
+maintenance_vm_params_file="$(meta_get "$maintenance_vm_meta_file" "paramsFile")"
 
 if [[ "$maintenance_vm_deploy" == "true" ]]; then
   if [[ -z "${MAINT_VM_ADMIN_PASSWORD:-}" ]]; then
@@ -2073,447 +1086,38 @@ else
   echo "==> Skip Maintenance VM (resourceToggles.maintenanceVm=false)"
 fi
 
-cosmos_deploy="$(META_FILE="$cosmos_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
+# -----------------------------------------------------------------------------
+# Cosmos DB
+# -----------------------------------------------------------------------------
+cosmos_deploy="$(meta_bool "$cosmos_meta_file" "deploy")"
 
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
+cosmos_params_file="$(meta_get "$cosmos_meta_file" "paramsFile")"
 
-cosmos_params_file="$(META_FILE="$cosmos_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$cosmos_deploy" == "true" ]]; then
-  echo "==> Deploy Cosmos DB (NoSQL)"
-  run_bicep_deployment "cosmos-database" az deployment group create \
-    --name "main-service-cosmos-database-${timestamp}" \
-    --resource-group "$cosmos_resource_group_name" \
-    --parameters "$cosmos_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Cosmos DB (resourceToggles.cosmosDatabase=false)"
-fi
-
-redis_deploy="$(META_FILE="$redis_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(bool(meta.get("deploy", True))).lower())
-PY
-)"
-
-redis_params_file="$(META_FILE="$redis_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("paramsFile", ""))
-PY
-)"
-
-if [[ "$redis_deploy" == "true" ]]; then
-  echo "==> Deploy Redis"
-  run_bicep_deployment "redis" az deployment group create \
-    --name "main-service-redis-${timestamp}" \
-    --resource-group "$redis_resource_group_name" \
-    --parameters "$redis_params_file" \
-    ${what_if:+$what_if}
-else
-  echo "==> Skip Redis (resourceToggles.redis=false)"
-fi
+deploy_group_if_enabled \
+  "$cosmos_deploy" \
+  "Deploy Cosmos DB (NoSQL)" \
+  "cosmos-database" \
+  "main-service-cosmos-database-${timestamp}" \
+  "$cosmos_resource_group_name" \
+  "$cosmos_params_file" \
+  "Skip Cosmos DB (resourceToggles.cosmosDatabase=false)"
 
 # -----------------------------------------------------------------------------
+# Redis
+# -----------------------------------------------------------------------------
+redis_deploy="$(meta_bool "$redis_meta_file" "deploy")"
+
+redis_params_file="$(meta_get "$redis_meta_file" "paramsFile")"
+
+deploy_group_if_enabled \
+  "$redis_deploy" \
+  "Deploy Redis" \
+  "redis" \
+  "main-service-redis-${timestamp}" \
+  "$redis_resource_group_name" \
+  "$redis_params_file" \
+  "Skip Redis (resourceToggles.redis=false)"
+
 # Post-deploy notices
 # -----------------------------------------------------------------------------
-# 初期構築で見落としやすい運用作業を、条件付きでメッセージ表示する。
-egress_next_hop_ip="$(COMMON_FILE="$common_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
-print(common.get("network", {}).get("egressNextHopIp", ""))
-PY
-)"
-
-if [[ "$vnet_deploy" == "true" && "$vnet_apply_skipped_existing" != "true" && "$vnet_created_in_this_run" == "true" ]]; then
-  cat <<'EOF'
-------------------------------------------------------------
-NOTICE: Virtual Network (Initial Provisioning)
-[EN] A new Virtual Network has been created. If peering with other VNETs is required,
-     configure it from Azure Portal: https://portal.azure.com/
-
-[JA] Virtual Network を新規作成しています。別 VNET とのピアリングなどが必要な場合は、
-     Azure Portal（https://portal.azure.com/）から設定してください。
-------------------------------------------------------------
-EOF
-fi
-
-if [[ "$firewall_deploy" == "true" && -z "$egress_next_hop_ip" && "$firewall_policy_apply_skipped" != "true" ]]; then
-  cat <<'EOF'
-------------------------------------------------------------
-NOTICE: Firewall Outbound Rule (Initial Provisioning)
-[EN] Because network.egressNextHopIp is not specified, outbound traffic in Firewall Policy is temporarily allowed to Any
-     to permit required external communication during the initial Azure Kubernetes Service provisioning.
-     After provisioning, review and tighten Firewall Policy allow/deny rules according to your enterprise policy.
-     Edit Firewall Policy from Azure Portal: https://portal.azure.com/
-
-[JA] network.egressNextHopIp が未指定のため、初期構築段階では Azure Kubernetes Service の構築に必要な外部通信を許可する目的で、
-     Firewall Policy のアウトバウンド通信が宛先 Any で許可される構成になります。
-     構築完了後は、企業ポリシーに合わせて Firewall Policy の許可/遮断ルールを見直して運用してください。
-     Firewall Policy の編集は Azure Portal（https://portal.azure.com/）から実施してください。
-------------------------------------------------------------
-EOF
-fi
-
-aks_name_for_post="$(META_FILE="$aks_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(meta.get("aksName", ""))
-PY
-)"
-
-if [[ -z "$aks_name_for_post" ]]; then
-  echo "aksName が取得できませんでした。config を確認してください。" >&2
-  exit 1
-fi
-
-echo "==> Check existing AKS: $aks_name_for_post"
-existing_aks_name="$(AKS_RG_NAME="$aks_resource_group_name" AKS_NAME="$aks_name_for_post" python - <<'PY'
-import os
-import subprocess
-import sys
-
-cmd = [
-    "az",
-    "aks",
-    "show",
-    "--resource-group",
-    os.environ["AKS_RG_NAME"],
-    "--name",
-    os.environ["AKS_NAME"],
-    "--query",
-    "name",
-    "-o",
-    "tsv",
-    "--only-show-errors",
-]
-
-for _ in range(3):
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20, check=False)
-    except subprocess.TimeoutExpired:
-        continue
-
-    if result.returncode == 0:
-        print(result.stdout.strip())
-        sys.exit(0)
-    if result.returncode != 0 and "was not found" in (result.stderr or ""):
-        print("")
-        sys.exit(0)
-
-print("__CHECK_FAILED__")
-PY
-)"
-
-if [[ "$existing_aks_name" == "__CHECK_FAILED__" ]]; then
-  echo "==> エラー: AKS の存在確認に失敗しました（タイムアウト/リトライ上限）。" >&2
-  echo "==> Error: Failed to check AKS state (timeout/retry exhausted)." >&2
-  echo "==> Azure CLI のログイン状態・セッション・ネットワークを確認して再実行してください。" >&2
-  echo "==> Please verify Azure CLI login/session/network and retry." >&2
-  exit 1
-fi
-
-if [[ -z "$existing_aks_name" ]]; then
-  cat <<'EOF'
-------------------------------------------------------------
-NOTICE: Skip Helm / Values Export
-[EN] AKS is not found in the target resource group.
-     AGIC/KEDA init script generation and Helm values export are skipped.
-     Create/deploy AKS first, then run this script again.
-
-[JA] 対象リソースグループに AKS が存在しないため、
-     AGIC/KEDA 初期化スクリプト生成、および Helm values エクスポートをスキップします。
-     先に AKS を作成/デプロイしてから、このスクリプトを再実行してください。
-------------------------------------------------------------
-EOF
-else
-  if [[ -n "$what_if" ]]; then
-    echo "==> Skip Generate AGIC/KEDA init scripts (--what-if)"
-    echo "==> Skip Generate frontend Helm values file (--what-if)"
-    echo "==> Skip Generate backend Helm values file (--what-if)"
-  else
-    agic_namespace="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
-print(str(config.get("agicNamespace", "ingress")).strip() or "ingress")
-PY
-)"
-
-    agic_standard_service_account_name="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
-print(str(config.get("agicStandardServiceAccountName", "sa-agic-standard")).strip() or "sa-agic-standard")
-PY
-)"
-
-    agic_low_latency_service_account_name="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
-print(str(config.get("agicLowLatencyServiceAccountName", "sa-agic-lowlatency")).strip() or "sa-agic-lowlatency")
-PY
-)"
-
-    keda_namespace="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
-print(str(config.get("kedaNamespace", "keda")).strip() or "keda")
-PY
-)"
-
-    keda_operator_service_account_name="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-config = json.loads(Path(os.environ["RESOURCE_CONFIG_FILE"]).read_text(encoding="utf-8"))
-print(str(config.get("kedaOperatorServiceAccountName", "keda-operator")).strip() or "keda-operator")
-PY
-)"
-
-    environment_name_for_agic="$(COMMON_FILE="$common_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
-print(str(common.get("common", {}).get("environmentName", "")).strip())
-PY
-)"
-
-    system_name_for_agic="$(COMMON_FILE="$common_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
-print(str(common.get("common", {}).get("systemName", "")).strip())
-PY
-)"
-
-    standard_application_gateway_name="$(META_FILE="$application_gateway_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(meta.get("applicationGatewayName", "")).strip())
-PY
-)"
-
-    low_latency_application_gateway_name="$(META_FILE="$application_gateway_low_latency_meta_file" python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-meta = json.loads(Path(os.environ["META_FILE"]).read_text(encoding="utf-8"))
-print(str(meta.get("applicationGatewayName", "")).strip())
-PY
-)"
-
-    # AGIC/KEDA の init スクリプトは resourceToggles の値に依存させず、
-    # 必要な固有情報が取得できる場合は常に生成する。
-    agic_standard_client_id_for_init="$(az identity show \
-      --resource-group "$aks_resource_group_name" \
-      --name "mi-${environment_name_for_agic}-${system_name_for_agic}-agic-standard" \
-      --query clientId \
-      -o tsv \
-      --only-show-errors 2>/dev/null || true)"
-
-    standard_application_gateway_id_for_init=""
-    if [[ -n "$standard_application_gateway_name" ]]; then
-      standard_application_gateway_id_for_init="$(az network application-gateway show \
-        --resource-group "$application_gateway_resource_group_name" \
-        --name "$standard_application_gateway_name" \
-        --query id \
-        -o tsv \
-        --only-show-errors 2>/dev/null || true)"
-    fi
-
-    if [[ -n "$standard_application_gateway_id_for_init" && -n "$agic_standard_client_id_for_init" ]]; then
-      include_low_latency_agic_for_init="false"
-      low_latency_application_gateway_id_for_init=""
-      agic_low_latency_client_id_for_init=""
-      if [[ -n "$low_latency_application_gateway_name" ]]; then
-        low_latency_application_gateway_id_for_init="$(az network application-gateway show \
-          --resource-group "$application_gateway_resource_group_name" \
-          --name "$low_latency_application_gateway_name" \
-          --query id \
-          -o tsv \
-          --only-show-errors 2>/dev/null || true)"
-        if [[ -n "$low_latency_application_gateway_id_for_init" ]]; then
-          agic_low_latency_client_id_for_init="$(az identity show \
-            --resource-group "$aks_resource_group_name" \
-            --name "mi-${environment_name_for_agic}-${system_name_for_agic}-agic-lowlatency" \
-            --query clientId \
-            -o tsv \
-            --only-show-errors 2>/dev/null || true)"
-          if [[ -n "$agic_low_latency_client_id_for_init" ]]; then
-            include_low_latency_agic_for_init="true"
-          fi
-        fi
-      fi
-
-      mkdir -p "$agic_controller_init_dir"
-      agic_controller_init_script="$agic_controller_init_dir/deploy.sh"
-      cat >"$agic_controller_init_script" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-
-az aks get-credentials \\
-  --resource-group "$aks_resource_group_name" \\
-  --name "$aks_name_for_post" \\
-  --overwrite-existing \\
-  --only-show-errors >/dev/null
-
-helm upgrade --install agic-standard oci://mcr.microsoft.com/azure-application-gateway/charts/ingress-azure \\
-  --namespace "$agic_namespace" \\
-  --create-namespace \\
-  --set-string appgw.applicationGatewayID="$standard_application_gateway_id_for_init" \\
-  --set-string kubernetes.ingressClass="azure-application-gateway" \\
-  --set-string serviceAccount.name="$agic_standard_service_account_name" \\
-  --set serviceAccount.create=true \\
-  --set-string serviceAccount.annotations.azure\\.workload\\.identity/client-id="$agic_standard_client_id_for_init" \\
-  --set-string armAuth.type="workloadIdentity" \\
-  --set-string armAuth.identityClientID="$agic_standard_client_id_for_init" \\
-  --set-string armAuth.identityClientId="$agic_standard_client_id_for_init"
-EOF
-      if [[ "$include_low_latency_agic_for_init" == "true" ]]; then
-        cat >>"$agic_controller_init_script" <<EOF
-helm upgrade --install agic-lowlatency oci://mcr.microsoft.com/azure-application-gateway/charts/ingress-azure \\
-  --namespace "$agic_namespace" \\
-  --create-namespace \\
-  --set-string appgw.applicationGatewayID="$low_latency_application_gateway_id_for_init" \\
-  --set-string kubernetes.ingressClass="azure-application-gateway-low-latency" \\
-  --set-string serviceAccount.name="$agic_low_latency_service_account_name" \\
-  --set serviceAccount.create=true \\
-  --set-string serviceAccount.annotations.azure\\.workload\\.identity/client-id="$agic_low_latency_client_id_for_init" \\
-  --set-string armAuth.type="workloadIdentity" \\
-  --set-string armAuth.identityClientID="$agic_low_latency_client_id_for_init" \\
-  --set-string armAuth.identityClientId="$agic_low_latency_client_id_for_init"
-EOF
-      else
-        cat >>"$agic_controller_init_script" <<'EOF'
-echo "==> Skip AGIC Helm release: agic-lowlatency (required resources not found)"
-EOF
-      fi
-      chmod +x "$agic_controller_init_script"
-      echo "==> Generate init script: $agic_controller_init_script"
-    else
-      echo "==> Skip Generate init script: $agic_controller_init_dir/deploy.sh (required standard AGIC resources not found)"
-    fi
-
-    keda_operator_client_id_for_init="$(az identity show \
-      --resource-group "$aks_resource_group_name" \
-      --name "mi-${environment_name_for_agic}-${system_name_for_agic}-keda-operator" \
-      --query clientId \
-      -o tsv \
-      --only-show-errors 2>/dev/null || true)"
-    if [[ -n "$keda_operator_client_id_for_init" ]]; then
-      mkdir -p "$keda_controller_init_dir"
-      keda_controller_init_script="$keda_controller_init_dir/deploy.sh"
-      cat >"$keda_controller_init_script" <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-
-az aks get-credentials \\
-  --resource-group "$aks_resource_group_name" \\
-  --name "$aks_name_for_post" \\
-  --overwrite-existing \\
-  --only-show-errors >/dev/null
-
-helm repo add kedacore https://kedacore.github.io/charts >/dev/null
-helm repo update >/dev/null
-helm upgrade --install keda kedacore/keda \\
-  --namespace "$keda_namespace" \\
-  --create-namespace \\
-  --set serviceAccount.operator.create=true \\
-  --set-string serviceAccount.operator.name="$keda_operator_service_account_name" \\
-  --set-string serviceAccount.operator.annotations.azure\\.workload\\.identity/client-id="$keda_operator_client_id_for_init" \\
-  --set podIdentity.azureWorkload.enabled=true \\
-  --set-string podIdentity.azureWorkload.clientId="$keda_operator_client_id_for_init"
-EOF
-      chmod +x "$keda_controller_init_script"
-      echo "==> Generate init script: $keda_controller_init_script"
-    else
-      echo "==> Skip Generate init script: $keda_controller_init_dir/deploy.sh (required KEDA resources not found)"
-    fi
-
-    echo "==> Generate frontend Helm values file"
-    COMMON_FILE="$common_file" \
-    TEMPLATE_FILE="$frontend_values_template_file" \
-    OUTPUT_FILE="$frontend_values_generated_file" \
-    "$frontend_values_sync_script"
-
-    echo "==> Generate backend Helm values file"
-    COMMON_FILE="$common_file" \
-    AKS_META_FILE="$aks_meta_file" \
-    STORAGE_CONFIG_FILE="$storage_config_file" \
-    TEMPLATE_FILE="$backend_values_template_file" \
-    OUTPUT_FILE="$backend_values_generated_file" \
-    "$backend_values_sync_script"
-
-    cat <<'EOF'
-------------------------------------------------------------
-NOTICE: Backend Helm values (manual update required)
-[EN] Please review and update the following parameters in backend values before Helm deploy:
-     - ingress.standard.host
-     - ingress.lowLatency.host
-     - config.env.FRONTEND_BASE_URL
-     - config.env.CSRF_TRUSTED_ORIGINS
-     - config.env.ENTRA_TENANT_ID
-     - config.env.ENTRA_CLIENT_ID
-     - config.env.ENTRA_REDIRECT_URI
-     - config.env.ENTRA_INTERNAL_DOMAINS
-
-[JA] Helm デプロイ前に、backend values の以下パラメータを確認し、実環境値へ更新してください:
-     - ingress.standard.host
-     - ingress.lowLatency.host
-     - config.env.FRONTEND_BASE_URL
-     - config.env.CSRF_TRUSTED_ORIGINS
-     - config.env.ENTRA_TENANT_ID
-     - config.env.ENTRA_CLIENT_ID
-     - config.env.ENTRA_REDIRECT_URI
-     - config.env.ENTRA_INTERNAL_DOMAINS
-------------------------------------------------------------
-EOF
-  fi
-fi
+run_post_deploy_actions
