@@ -93,14 +93,16 @@ pod_cidr = aks_values.get("podCidr", "")
 if not pod_cidr:
     raise SystemExit("common.parameter.json の aks.podCidr が空です")
 
-user_pool_vm_size = aks_values.get("userPoolVmSize", "")
+user_pool_vm_size = str(config.get("userPoolVmSize", "")).strip()
 user_pool_count = int(aks_values.get("userPoolCount", 0))
 user_pool_min_count = int(aks_values.get("userPoolMinCount", 0))
 user_pool_max_count = int(aks_values.get("userPoolMaxCount", 0))
 user_pool_label = aks_values.get("userPoolLabel", "")
 
 if not user_pool_vm_size or not user_pool_label:
-    raise SystemExit("common.parameter.json の aks.userPoolVmSize / aks.userPoolLabel を設定してください")
+    raise SystemExit("aks config の userPoolVmSize と common.parameter.json の aks.userPoolLabel を設定してください")
+if not str(config.get("agentPoolVmSize", "")).strip():
+    raise SystemExit("aks config の agentPoolVmSize を設定してください")
 if user_pool_min_count > user_pool_count or user_pool_count > user_pool_max_count:
     raise SystemExit("aks user pool の count / min / max の大小関係が不正です")
 
@@ -132,9 +134,9 @@ lines = [
     f"param applicationGatewayName = {quote(application_gateway_name)}",
     f"param applicationGatewayResourceGroupName = {quote(application_gateway_rg_name)}",
     f"param agentPoolName = {quote(config.get('agentPoolName', 'agentpool'))}",
-    f"param agentPoolVmSize = {quote(config.get('agentPoolVmSize', 'standard_d2s_v4'))}",
+    f"param agentPoolVmSize = {quote(config.get('agentPoolVmSize', ''))}",
     f"param agentPoolOsDiskSizeGB = {int(config.get('agentPoolOsDiskSizeGB', 0))}",
-    f"param agentPoolAvailabilityZones = {to_bicep_array(config.get('agentPoolAvailabilityZones', ['1', '2', '3']))}",
+    f"param agentPoolAvailabilityZones = {to_bicep_array(config.get('agentPoolAvailabilityZones', []))}",
     f"param agentPoolOsType = {quote(config.get('agentPoolOsType', 'Linux'))}",
     f"param agentPoolMode = {quote(config.get('agentPoolMode', 'System'))}",
     f"param agentPoolCount = {int(config.get('agentPoolCount', 3))}",
@@ -144,7 +146,7 @@ lines = [
     f"param userPoolName = {quote(config.get('userPoolName', 'userpool'))}",
     f"param userPoolVmSize = {quote(user_pool_vm_size)}",
     f"param userPoolOsDiskSizeGB = {int(config.get('userPoolOsDiskSizeGB', 0))}",
-    f"param userPoolAvailabilityZones = {to_bicep_array(config.get('userPoolAvailabilityZones', ['1', '2', '3']))}",
+    f"param userPoolAvailabilityZones = {to_bicep_array(config.get('userPoolAvailabilityZones', []))}",
     f"param userPoolOsType = {quote(config.get('userPoolOsType', 'Linux'))}",
     f"param userPoolMode = {quote(config.get('userPoolMode', 'User'))}",
     f"param userPoolCount = {user_pool_count}",

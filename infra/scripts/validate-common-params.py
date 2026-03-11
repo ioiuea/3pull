@@ -233,7 +233,6 @@ def main() -> int:
             as_optional_ip(raw, f"network.vnetDnsServers[{i}]", errors)
 
     # AKS user pool 設定
-    as_non_empty_str(aks_values.get("userPoolVmSize"), "aks.userPoolVmSize", errors)
     count = as_int(aks_values.get("userPoolCount"), "aks.userPoolCount", errors)
     min_count = as_int(aks_values.get("userPoolMinCount"), "aks.userPoolMinCount", errors)
     max_count = as_int(aks_values.get("userPoolMaxCount"), "aks.userPoolMaxCount", errors)

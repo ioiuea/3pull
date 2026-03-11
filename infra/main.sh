@@ -19,6 +19,9 @@ infra_root="$repo_root/infra"
 common_file="$infra_root/common.parameter.json"
 params_dir="$infra_root/params"
 logs_dir="$infra_root/logs"
+maintenance_vm_runtime_config_file="$params_dir/maintenance-vm-runtime-config.json"
+vm_size_selection_file="$params_dir/vm-size-selection.json"
+vm_size_catalog_file="$params_dir/vm-size-catalog.json"
 
 # 共通パラメータの事前検証スクリプト
 common_validation_script="$infra_root/scripts/validate-common-params.py"
@@ -115,6 +118,7 @@ postgres_meta_file="$params_dir/postgres-database-meta.json"
 maintenance_vm_config_file="$infra_root/config/maintenance-vm.json"
 maintenance_vm_script="$infra_root/scripts/generate-maintenance-vm-params.py"
 maintenance_vm_meta_file="$params_dir/maintenance-vm-meta.json"
+vm_size_selector_script="$infra_root/scripts/select-vm-sizes.py"
 
 # NoSQL（Cosmos DB）
 cosmos_config_file="$infra_root/config/cosmos-database.json"
@@ -279,13 +283,140 @@ run_param_generator() {
   env "${env_args[@]}" "$script"
 }
 
+# 対話形式で VM サイズを選択し、AKS/メンテナンス VM の実行時設定へ反映する。
+# 対象:
+#   - AKS agentPoolVmSize
+#   - AKS userPoolVmSize
+#   - maintenance VM maintVmSize
+# 挙動:
+#   - 指定 location で利用可能な VM SKU を取得し、vCPU/メモリ等のスペック付きで番号表示する。
+#   - ユーザー入力で選択した SKU を runtime config に保存する。
+#   - 元の config は変更せず、params 配下の runtime ファイルのみ更新する。
+apply_interactive_vm_size_overrides() {
+  local location
+  local current_agent_vm_size
+  local current_user_vm_size
+  local current_maint_vm_size
+
+  if [[ "${interactive_vm_size:-false}" != "true" ]]; then
+    return
+  fi
+
+  if [[ ! -t 0 ]]; then
+    echo "--interactive-vm-size は対話端末でのみ利用できます（stdin が TTY ではありません）。" >&2
+    exit 1
+  fi
+
+  mkdir -p "$params_dir"
+
+  location="$(COMMON_FILE="$common_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
+print(str(common.get("common", {}).get("location", "")).strip())
+PY
+)"
+
+  current_agent_vm_size="$(AKS_CONFIG_FILE="$aks_config_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config = json.loads(Path(os.environ["AKS_CONFIG_FILE"]).read_text(encoding="utf-8"))
+print(str(config.get("agentPoolVmSize", "")).strip())
+PY
+)"
+
+  current_user_vm_size="$(AKS_CONFIG_FILE="$aks_config_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config = json.loads(Path(os.environ["AKS_CONFIG_FILE"]).read_text(encoding="utf-8"))
+print(str(config.get("userPoolVmSize", "")).strip())
+PY
+)"
+
+  current_maint_vm_size="$(MAINT_CONFIG_FILE="$maintenance_vm_config_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+config = json.loads(Path(os.environ["MAINT_CONFIG_FILE"]).read_text(encoding="utf-8"))
+print(str(config.get("maintVmSize", "")).strip())
+PY
+)"
+
+  if [[ -z "$location" ]]; then
+    echo "location が取得できないため、VM サイズ対話選択を開始できません。" >&2
+    exit 1
+  fi
+
+  echo "==> Interactive VM size selection"
+  echo "    location: $location"
+  echo "    - [EN] Fetching available VM SKUs and building selectable list..."
+  echo "    - [JA] 利用可能な VM SKU を取得して、選択可能な一覧を生成しています..."
+
+  LOCATION="$location" \
+  CURRENT_AGENT_VM_SIZE="$current_agent_vm_size" \
+  CURRENT_USER_VM_SIZE="$current_user_vm_size" \
+  CURRENT_MAINT_VM_SIZE="$current_maint_vm_size" \
+  OUT_FILE="$vm_size_selection_file" \
+  OUT_CATALOG_FILE="$vm_size_catalog_file" \
+  "$vm_size_selector_script"
+
+  if [[ ! -s "$vm_size_selection_file" ]]; then
+    echo "VM サイズ選択結果の保存に失敗しました: $vm_size_selection_file" >&2
+    exit 1
+  fi
+
+  AKS_CONFIG_FILE="$aks_config_file" \
+  MAINT_CONFIG_FILE="$maintenance_vm_config_file" \
+  SELECTION_FILE="$vm_size_selection_file" \
+  OUT_AKS_CONFIG_FILE="$params_dir/aks-runtime-config.json" \
+  OUT_MAINT_CONFIG_FILE="$maintenance_vm_runtime_config_file" \
+  python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+aks_config = json.loads(Path(os.environ["AKS_CONFIG_FILE"]).read_text(encoding="utf-8"))
+maint_config = json.loads(Path(os.environ["MAINT_CONFIG_FILE"]).read_text(encoding="utf-8"))
+selection = json.loads(Path(os.environ["SELECTION_FILE"]).read_text(encoding="utf-8"))
+
+aks_config["userPoolVmSize"] = str(selection.get("userPoolVmSize", "")).strip()
+aks_config["agentPoolVmSize"] = str(selection.get("agentPoolVmSize", "")).strip()
+maint_config["maintVmSize"] = str(selection.get("maintVmSize", "")).strip()
+
+Path(os.environ["OUT_AKS_CONFIG_FILE"]).write_text(
+    json.dumps(aks_config, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+Path(os.environ["OUT_MAINT_CONFIG_FILE"]).write_text(
+    json.dumps(maint_config, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
+
+  aks_config_file="$params_dir/aks-runtime-config.json"
+  maintenance_vm_config_file="$maintenance_vm_runtime_config_file"
+
+  echo "==> VM size runtime overrides generated"
+  echo "    - aks: $params_dir/aks-runtime-config.json"
+  echo "    - maintenance-vm: $maintenance_vm_runtime_config_file"
+  echo "    - vm-size-catalog: $vm_size_catalog_file"
+}
+
 # AKS 構成ファイルを実行時に補正し、利用可能な AZ を runtime config へ反映する。
 # 入力:
-#   - common.parameter.json から location / aks.userPoolVmSize
-#   - infra/config/aks.json から agentPoolVmSize
+#   - common.parameter.json から location
+#   - infra/config/aks.json（または runtime config）から agent/user pool の VM size
+#   - params/vm-size-selection.json から選択済み zones
 # 挙動:
 #   - 必須値が欠ける場合は自動補正をスキップし、元設定を維持する。
-#   - get_subscription_available_zones_json を使って agent/user pool の可用ゾーンを解決する。
+#   - 対話選択済みの zones を利用し、再度 az vm list-skus は呼ばない。
 #   - 解決できた pool のみ `agentPoolAvailabilityZones` / `userPoolAvailabilityZones` を上書きする。
 # 出力/副作用:
 #   - `${params_dir}/aks-runtime-config.json` を生成/更新する。
@@ -318,14 +449,13 @@ print(str(config.get("agentPoolVmSize", "")).strip())
 PY
 )"
 
-  user_pool_vm_size="$(COMMON_FILE="$common_file" AKS_CONFIG_FILE="$aks_config_file" python - <<'PY'
+  user_pool_vm_size="$(AKS_CONFIG_FILE="$aks_config_file" python - <<'PY'
 import json
 import os
 from pathlib import Path
 
 config = json.loads(Path(os.environ["AKS_CONFIG_FILE"]).read_text(encoding="utf-8"))
-common = json.loads(Path(os.environ["COMMON_FILE"]).read_text(encoding="utf-8"))
-print(str(common.get("aks", {}).get("userPoolVmSize", "")).strip())
+print(str(config.get("userPoolVmSize", "")).strip())
 PY
 )"
 
@@ -335,8 +465,59 @@ PY
   fi
 
   echo "==> Resolve AKS availability zones dynamically"
-  agent_zones_json="$(get_subscription_available_zones_json "$location" "$agent_pool_vm_size")"
-  user_zones_json="$(get_subscription_available_zones_json "$location" "$user_pool_vm_size")"
+  agent_zones_json="[]"
+  user_zones_json="[]"
+
+  if [[ ! -f "$vm_size_selection_file" ]]; then
+    echo "vm size selection file が見つかりません: $vm_size_selection_file" >&2
+    echo "先に Interactive VM size selection を完了してください。" >&2
+    exit 1
+  fi
+
+  cached_zones_output="$(
+    VM_SIZE_SELECTION_FILE="$vm_size_selection_file" \
+    EXPECTED_AGENT_VM_SIZE="$agent_pool_vm_size" \
+    EXPECTED_USER_VM_SIZE="$user_pool_vm_size" \
+    python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+selection_path = Path(os.environ["VM_SIZE_SELECTION_FILE"])
+expected_agent = str(os.environ.get("EXPECTED_AGENT_VM_SIZE", "")).strip().lower()
+expected_user = str(os.environ.get("EXPECTED_USER_VM_SIZE", "")).strip().lower()
+
+agent_out = "[]"
+user_out = "[]"
+try:
+    selection = json.loads(selection_path.read_text(encoding="utf-8"))
+except Exception:
+    print(agent_out)
+    print(user_out)
+    raise SystemExit(0)
+
+agent_selected = str(selection.get("agentPoolVmSize", "")).strip().lower()
+user_selected = str(selection.get("userPoolVmSize", "")).strip().lower()
+
+agent_zones = selection.get("agentPoolZones", [])
+user_zones = selection.get("userPoolZones", [])
+
+if expected_agent and expected_agent == agent_selected and isinstance(agent_zones, list) and agent_zones:
+    agent_out = json.dumps([str(z) for z in agent_zones])
+if expected_user and expected_user == user_selected and isinstance(user_zones, list) and user_zones:
+    user_out = json.dumps([str(z) for z in user_zones])
+
+print(agent_out)
+print(user_out)
+PY
+  )"
+
+  agent_zones_json="$(printf '%s\n' "$cached_zones_output" | sed -n '1p')"
+  user_zones_json="$(printf '%s\n' "$cached_zones_output" | sed -n '2p')"
+  if [[ -z "$agent_zones_json" || -z "$user_zones_json" ]]; then
+    echo "vm size selection file の zones 解析に失敗しました: $vm_size_selection_file" >&2
+    exit 1
+  fi
 
   if [[ "$agent_zones_json" == "[]" ]]; then
     echo "    - agent pool zones were not resolved for ${agent_pool_vm_size}; keep current values"
@@ -375,69 +556,31 @@ PY
   aks_runtime_config_file="$runtime_aks_config_file"
 }
 
-# 指定 VM SKU について、サブスクリプションで実際に利用可能な AZ 一覧を JSON 配列で返す。
-# 引数:
-#   $1: location
-#       - Azure リージョン名。例: japaneast
-#   $2: vm_size
-#       - VM SKU 名。例: Standard_D4s_v5
-# 出力:
-#   - 例: ["1","2","3"] の JSON 文字列を標準出力へ出力する。
-#   - SKU 情報を取得できない場合や解析失敗時は [] を返す。
-# 判定ロジック:
-#   - az vm list-skus の zones から候補を取得。
-#   - restrictions.reasonCode == NotAvailableForSubscription の zone を除外。
-#   - 差集合をソートして返す。
-get_subscription_available_zones_json() {
-  local location="$1"
-  local vm_size="$2"
-
-  az vm list-skus \
-    --location "$location" \
-    --resource-type virtualMachines \
-    --all \
-    --query "[?name=='$vm_size'] | [0].{zones:locationInfo[0].zones,restrictions:restrictions}" \
-    -o json \
-    --only-show-errors 2>/dev/null | python - <<'PY'
-import json
-import sys
-
-try:
-    data = json.load(sys.stdin)
-except Exception:
-    print("[]")
-    raise SystemExit(0)
-
-all_zones = set(data.get("zones") or [])
-deny_zones = set()
-for restriction in data.get("restrictions") or []:
-    if restriction.get("reasonCode") != "NotAvailableForSubscription":
-        continue
-    info = restriction.get("restrictionInfo") or {}
-    for zone in info.get("zones") or restriction.get("values") or []:
-        deny_zones.add(zone)
-
-print(json.dumps(sorted(all_zones - deny_zones)))
-PY
-}
-
 # -----------------------------------------------------------------------------
 # 事前チェック
 # -----------------------------------------------------------------------------
 # 1) 実行オプションを解析する。
 #    - 入力: スクリプト引数 ($@)
-#    - 出力: 変数 what_if ("--what-if" または空文字)
-# 現在は --what-if のみ受け付け、未知の引数は即時エラーにする。
+#    - 出力:
+#      - 変数 what_if ("--what-if" または空文字)
+#      - 変数 interactive_vm_size ("true")
+# サポート: --what-if, --interactive-vm-size
+# 未知の引数は即時エラーにする。
 what_if=""
+interactive_vm_size="true"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --what-if)
       what_if="--what-if"
       shift
       ;;
+    --interactive-vm-size)
+      interactive_vm_size="true"
+      shift
+      ;;
     *)
       echo "許可されていない引数です: $1" >&2
-      echo "利用可能な引数: --what-if" >&2
+      echo "利用可能な引数: --what-if, --interactive-vm-size" >&2
       exit 1
       ;;
   esac
@@ -575,6 +718,11 @@ if [[ ! -f "$maintenance_vm_config_file" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$vm_size_selector_script" ]]; then
+  echo "vm size selector script が見つかりません: $vm_size_selector_script" >&2
+  exit 1
+fi
+
 if [[ ! -f "$federated_credential_config_file" ]]; then
   echo "federated credential config file が見つかりません: $federated_credential_config_file" >&2
   exit 1
@@ -659,6 +807,9 @@ timestamp="$(date +'%Y%m%dT%H%M%S')"
 
 # パラメータ出力先ディレクトリを作成（既存の場合はそのまま）
 mkdir -p "$params_dir"
+
+# 必要時は対話で VM サイズを選択し、runtime 設定へ反映する。
+apply_interactive_vm_size_overrides
 
 # AKS 設定の availability zones を、サブスクリプション実態に合わせて事前補正する。
 update_aks_availability_zones

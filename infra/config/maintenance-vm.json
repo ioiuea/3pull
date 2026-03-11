@@ -2,7 +2,6 @@
   "modulesName": "maint",
   "networkModulesName": "nw",
   "lockKind": "CanNotDelete",
-  "maintVmSize": "Standard_D4as_v5",
   "maintVmAdminUsername": "adminUser",
   "maintVmImageReference": {
     "publisher": "canonical",

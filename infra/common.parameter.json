@@ -3,7 +3,7 @@
     "location": "japaneast",
     "environmentName": "dev",
     "systemName": "3pull",
-    "enableResourceLock": false
+    "enableResourceLock": true
   },
   "resourceToggles": {
     "logAnalytics": true,
@@ -30,7 +30,7 @@
     "enableFirewallIdps": false,
     "enableGatewayRoutePropagation": false,
     "enableCentralizedPrivateDns": false,
-    "enableLowLatencyApplicationGatewaySubnet": true,
+    "enableLowLatencyApplicationGatewaySubnet": false,
     "enableDdosProtection": false,
     "ddosProtectionPlanId": "",
     "vnetAddressPrefixes": [
@@ -44,7 +44,6 @@
     "egressNextHopIp": ""
   },
   "aks": {
-    "userPoolVmSize": "standard_d4s_v4",
     "userPoolCount": 3,
     "userPoolMinCount": 3,
     "userPoolMaxCount": 6,

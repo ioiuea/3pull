@@ -140,6 +140,9 @@ log_analytics_name = f"log-{environment_name}-{system_name}"
 log_analytics_resource_group_name = f"rg-{environment_name}-{system_name}-monitor"
 
 deploy = bool(common.get("resourceToggles", {}).get("maintenanceVm", True))
+maint_vm_size = str(config.get("maintVmSize", "")).strip()
+if not maint_vm_size:
+    raise SystemExit("maintenance-vm config の maintVmSize を設定してください")
 
 params_dir.mkdir(parents=True, exist_ok=True)
 params_file = params_dir / "maintenance-vm.bicepparam"
@@ -159,7 +162,7 @@ lines = [
     f"param maintVmName = {quote(f'vm-{environment_name}-{system_name}-maint')}",
     f"param maintNicName = {quote(f'nic-vm-{environment_name}-{system_name}-maint')}",
     f"param maintSubnetName = {quote(maint_subnet_name)}",
-    f"param maintVmSize = {quote(config.get('maintVmSize', 'Standard_D4as_v5'))}",
+    f"param maintVmSize = {quote(maint_vm_size)}",
     f"param maintVmAdminUsername = {quote(config.get('maintVmAdminUsername', 'adminUser'))}",
     "param maintVmAdminPassword = ''",
     f"param maintVmImageReference = {to_bicep(config.get('maintVmImageReference', {}))}",
