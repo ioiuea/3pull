@@ -24,7 +24,7 @@
 
 ### 3.1 実行環境前提
 
-- backend は `FastAPI + SQLAlchemy + Alembic + PostgreSQL` を前提とする。
+- backend は `FastAPI + SQLAlchemy + Alembic + Azure SQL Database` を前提とする。
 - 本番実行環境は `AKS` を前提とする。
 - cleanup は API リクエスト経路ではなく、CLI 実行を前提にする。
 - 非同期ジョブ worker は API とは別プロセスで実行する。
@@ -67,8 +67,8 @@
 ### 4.2 認証監査ログ
 
 - 監査ログは `auth_audit_logs` に記録する。
-- `auth_audit_logs` は月次パーティションで運用する。
-- 保持期間を超えた古い月次パーティションは cleanup で drop する。
+- `auth_audit_logs` は Azure SQL Database の通常テーブルで運用する。
+- 保持期間を超えた古い行は cleanup で batch delete する。
 - 監査ログ記録はベストエフォートとし、記録失敗が本処理を失敗させない。
 - `metadata` は allowlist + サイズ制限前提で扱う。
 
@@ -82,8 +82,8 @@
 - `event_type` は `AuthAuditEventType`（ENUM）を使用する。
 - `user_id` / `session_id` は「取得できる場合のみ」保存する。
 - 監査ログ記録失敗は本来の認証処理を失敗させない。
-- `metadata` は allowlist 前提で扱い、DB 側では 4KB 制限を持つ。
-- `metadata` の 4KB 制限は、`auth_audit_logs` テーブルの DB 制約で担保する。
+- `metadata` は allowlist 前提で扱い、Azure SQL Database では JSON 文字列として保持する。
+- `metadata` は Azure SQL Database では JSON 文字列として保持し、repository で serialize / deserialize を吸収する。
 - `metadata` には、平文トークンや平文パスワードなどの機密情報を保存しない。
 
 現在の `AuthAuditEventType` 一覧:

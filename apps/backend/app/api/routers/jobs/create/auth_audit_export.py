@@ -6,12 +6,12 @@ from datetime import datetime
 
 from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
-from app.adapters.postgres.session import get_session, get_session_factory
+from app.adapters.sql.session import get_session, get_session_factory
 from app.api.schemas.jobs import AsyncJobResponse
 from app.core.settings import get_settings
-from app.models.auth.auth_audit_log import AuthAuditEventType
+from app.models.audit.auth_audit_log import AuthAuditEventType
 from app.models.jobs.async_job import AsyncJobType
 from app.repositories.jobs import create_async_job
 from app.services.jobs import dispatch_async_job
@@ -46,7 +46,7 @@ class AuthAuditExportCreateRequest(BaseModel):
 async def create_auth_audit_export_job(
     request: Request,
     payload: AuthAuditExportCreateRequest,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> AsyncJobResponse:
     """監査ログエクスポートジョブを作成して enqueue する."""
     settings = get_settings()
@@ -79,17 +79,16 @@ async def create_auth_audit_export_job(
     session_factory = get_session_factory()
     # enqueue より先に DB へコミットしておかないと、worker が先にメッセージを拾った時に
     # 対象 job 行がまだ見えず、無駄な再試行が起きる。
-    async with session_factory() as write_session:
-        async with write_session.begin():
-            job = await create_async_job(
-                write_session,
-                job_type=AsyncJobType.AUTH_AUDIT_EXPORT,
-                requested_by_user_id=user.id,
-                queue_name=queue_name,
-                task_name=task_name,
-                requested_payload=requested_payload,
-                expires_at=expires_at,
-            )
+    with session_factory.begin() as write_session:
+        job = create_async_job(
+            write_session,
+            job_type=AsyncJobType.AUTH_AUDIT_EXPORT,
+            requested_by_user_id=user.id,
+            queue_name=queue_name,
+            task_name=task_name,
+            requested_payload=requested_payload,
+            expires_at=expires_at,
+        )
 
     try:
         # メッセージには job_id だけを載せ、詳細は DB を正本として worker が読む。

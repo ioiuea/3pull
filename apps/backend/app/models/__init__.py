@@ -4,7 +4,7 @@ ORM モデルパッケージ.
 - Alembic autogenerate 対象のモデルを import して登録する
 """
 
-from app.models.auth.auth_audit_log import AuthAuditEventType, AuthAuditLog
+from app.models.audit.auth_audit_log import AuthAuditEventType, AuthAuditLog
 from app.models.auth.auth_identity import AuthIdentity, AuthProvider
 from app.models.auth.email_verification_token import EmailVerificationToken
 from app.models.auth.password_reset_token import PasswordResetToken

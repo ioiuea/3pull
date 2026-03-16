@@ -8,12 +8,11 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, String, func
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import ForeignKey, Index, Integer, String, text
+from sqlalchemy.dialects.mssql import DATETIME2, NVARCHAR, UNIQUEIDENTIFIER
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.adapters.postgres.base import Base
+from app.adapters.sql.base import Base
 
 
 class AsyncJobType(StrEnum):
@@ -45,64 +44,75 @@ class AsyncJob(Base):
             "created_at",
         ),
         Index(
+            "ix_async_jobs_requested_by_user_id_status_job_type",
+            "requested_by_user_id",
+            "status",
+            "job_type",
+        ),
+        Index(
             "ix_async_jobs_job_type_status_created_at",
             "job_type",
             "status",
             "created_at",
         ),
         Index("ix_async_jobs_expires_at", "expires_at"),
+        {"schema": "core"},
     )
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+        UNIQUEIDENTIFIER,
+        primary_key=True,
+        default=uuid4,
     )
     job_type: Mapped[str] = mapped_column(String(64), nullable=False)
-    requested_by_user_id: Mapped[UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    status: Mapped[AsyncJobStatus] = mapped_column(
-        Enum(
-            AsyncJobStatus,
-            name="async_job_status",
-            native_enum=True,
-            values_callable=lambda enum_cls: [member.value for member in enum_cls],
-        ),
+    requested_by_user_id: Mapped[UUID] = mapped_column(
+        UNIQUEIDENTIFIER,
+        ForeignKey("auth.users.id", ondelete="NO ACTION"),
         nullable=False,
-        default=AsyncJobStatus.QUEUED,
-        server_default=AsyncJobStatus.QUEUED.value,
+    )
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=AsyncJobStatus.QUEUED.value,
+        server_default=text(f"'{AsyncJobStatus.QUEUED.value}'"),
     )
     queue_name: Mapped[str] = mapped_column(String(128), nullable=False)
     task_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    requested_payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
-    result_payload: Mapped[dict[str, object] | None] = mapped_column(
-        JSONB, nullable=True
+    requested_payload: Mapped[str] = mapped_column(
+        NVARCHAR(length=None),
+        nullable=False,
+    )
+    result_payload: Mapped[str | None] = mapped_column(
+        NVARCHAR(length=None),
+        nullable=True,
     )
     error_message: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     retry_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         default=0,
-        server_default="0",
+        server_default=text("0"),
     )
     started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DATETIME2(precision=3),
+        nullable=True,
     )
     finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DATETIME2(precision=3),
+        nullable=True,
     )
     expires_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DATETIME2(precision=3),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DATETIME2(precision=3),
         nullable=False,
-        server_default=func.now(),
+        server_default=text("SYSUTCDATETIME()"),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DATETIME2(precision=3),
         nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
+        server_default=text("SYSUTCDATETIME()"),
+        onupdate=text("SYSUTCDATETIME()"),
     )

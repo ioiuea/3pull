@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.internal.probes import router as probes_router
+from app.api.routers.audit import router as audit_router
 from app.api.routers.auth import router as auth_router
 from app.api.routers.health import router as health_router
 from app.api.routers.jobs import router as jobs_router
@@ -56,6 +57,7 @@ app.add_middleware(
 # 公開 API ルーターをプレフィックス配下に集約する。
 app.include_router(health_router, prefix=API_PREFIX)
 app.include_router(auth_router, prefix=API_PREFIX)
+app.include_router(audit_router, prefix=API_PREFIX)
 app.include_router(jobs_router, prefix=API_PREFIX)
 # 内部プローブはプレフィックス配下に入れず、アプリ直下に公開する。
 app.include_router(probes_router)

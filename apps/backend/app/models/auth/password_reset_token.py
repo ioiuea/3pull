@@ -10,35 +10,47 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import ForeignKey, Index, String, text
+from sqlalchemy.dialects.mssql import DATETIME2, UNIQUEIDENTIFIER
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.adapters.postgres.base import Base
+from app.adapters.sql.base import Base
 
 
 class PasswordResetToken(Base):
     """パスワードリセット用のワンタイムトークン."""
 
     __tablename__ = "password_reset_tokens"
+    __table_args__ = (
+        Index(
+            "ix_password_reset_tokens_identity_id_consumed_at",
+            "identity_id",
+            "consumed_at",
+        ),
+        {"schema": "auth"},
+    )
 
     id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+        UNIQUEIDENTIFIER,
+        primary_key=True,
+        default=uuid4,
     )
     identity_id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
-        ForeignKey("auth_identities.id", ondelete="CASCADE"),
+        UNIQUEIDENTIFIER,
+        ForeignKey("auth.auth_identities.id", ondelete="CASCADE"),
         nullable=False,
     )
     token_hash: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        DATETIME2(precision=3),
+        nullable=False,
     )
     consumed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DATETIME2(precision=3),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DATETIME2(precision=3),
         nullable=False,
-        server_default=func.now(),
+        server_default=text("SYSUTCDATETIME()"),
     )

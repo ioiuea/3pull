@@ -46,27 +46,21 @@ def test_run_jobs_cleanup_dry_run_counts_artifacts_and_stale_jobs(monkeypatch) -
         },
     )()
 
-    class _AsyncNullContext:
-        async def __aenter__(self):
+    class _NullContext:
+        def __enter__(self):
             return self
 
-        async def __aexit__(self, exc_type, exc, tb):
+        def __exit__(self, exc_type, exc, tb):
             return False
 
-    class _FakeSession:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
+    class _FakeSessionFactory:
         def begin(self):
-            return _AsyncNullContext()
+            return _NullContext()
 
-    async def _fake_count_expired(session, *, expires_before):
+    def _fake_count_expired(session, *, expires_before):
         return 2
 
-    async def _fake_count_stale(session, *, started_before):
+    def _fake_count_stale(session, *, started_before):
         return 3
 
     monkeypatch.setattr(
@@ -74,7 +68,7 @@ def test_run_jobs_cleanup_dry_run_counts_artifacts_and_stale_jobs(monkeypatch) -
     )
     monkeypatch.setattr(
         "app.schedulers.cleanup.runners.async_jobs.get_session_factory",
-        lambda: (lambda: _FakeSession()),
+        lambda: _FakeSessionFactory(),
     )
     monkeypatch.setattr(
         "app.schedulers.cleanup.runners.async_jobs.count_expired_async_job_artifacts",

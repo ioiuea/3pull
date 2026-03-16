@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
-from app.adapters.postgres.session import get_session, get_session_factory
+from app.adapters.sql.session import get_session, get_session_factory
 from app.api.schemas.jobs import AsyncJobResponse
 from app.core.settings import get_settings
 from app.models.jobs.async_job import AsyncJobType
@@ -39,7 +39,7 @@ class SampleWaitBlobCreateRequest(BaseModel):
 async def create_sample_wait_blob_job(
     request: Request,
     payload: SampleWaitBlobCreateRequest,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> AsyncJobResponse:
     """120秒待機 + Blob 保存を行うサンプルジョブを作成して enqueue する."""
     settings = get_settings()
@@ -64,17 +64,16 @@ async def create_sample_wait_blob_job(
 
     session_factory = get_session_factory()
     # 先にジョブ行をコミットしてから enqueue し、worker から確実に参照できる状態にする。
-    async with session_factory() as write_session:
-        async with write_session.begin():
-            job = await create_async_job(
-                write_session,
-                job_type=AsyncJobType.SAMPLE_WAIT_BLOB,
-                requested_by_user_id=user.id,
-                queue_name=queue_name,
-                task_name=task_name,
-                requested_payload=requested_payload,
-                expires_at=expires_at,
-            )
+    with session_factory.begin() as write_session:
+        job = create_async_job(
+            write_session,
+            job_type=AsyncJobType.SAMPLE_WAIT_BLOB,
+            requested_by_user_id=user.id,
+            queue_name=queue_name,
+            task_name=task_name,
+            requested_payload=requested_payload,
+            expires_at=expires_at,
+        )
 
     try:
         # メッセージ本文は最小限にし、DB 上の job レコードを処理の正本とする。

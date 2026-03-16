@@ -33,7 +33,8 @@
 
 - Node.js / pnpm
 - Python 3.12+ / uv
-- PostgreSQL クライアント（`psql`）
+- Azure CLI（`az login` 済み）
+- ODBC Driver 18 for SQL Server
 - OpenSSL（JWT 鍵生成で使用）
 - `kubectl`（AKS / Kubernetes 操作で使用）
 - `helm`（Helm chart の render / deploy で使用）
@@ -48,11 +49,11 @@
    プロジェクトルートで `make install` を実行します。  
    フロントエンド/バックエンドの依存関係をまとめてセットアップします。
 
-3. PostgreSQL 初期セットアップを行う
-   `scripts/init/postgres/README.md` を参照して、データベース/スキーマ/ロール/`search_path` を作成します。
+3. Azure SQL Database の初期設定とマイグレーションを適用する
+   まず `./scripts/init/sql/deploy.sh -local` を実行して `auth` / `audit` / `core` schema と現在の Entra ユーザー権限を作成し、その後 `make alembic-upgrade` を実行します。
 
 4. 非同期ジョブ用の Blob コンテナを作成する
-   `apps/backend/scripts/storage/README.md` を参照して、非同期ジョブ成果物の保存先となる Blob コンテナを作成します。
+   `scripts/README.md` を参照して、非同期ジョブ成果物の保存先となる Blob コンテナを作成します。
 
 5. Entra ID の OIDC アプリを作成する
    Entra ID 側で OIDC 用アプリを作成し、クライアントID/シークレット/リダイレクトURIを準備します。
@@ -62,7 +63,8 @@
 
 7. アプリを起動する
    用途に応じて以下を実行します。
-   - 本番相当起動: `make up-api` / `make up-web`
+   - 本番相当起動: `make up`
+   - 個別起動: `make up-api` / `make up-web`
    - 開発起動: `make dev-api` / `make dev-web`
 
 ## 参照先

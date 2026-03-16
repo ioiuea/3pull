@@ -13,9 +13,9 @@ from urllib.parse import urljoin, urlparse
 from uuid import UUID
 
 from authlib.integrations.starlette_client import OAuthError
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.adapters.idp.entra import (
     fetch_entra_me_profile,
@@ -23,10 +23,8 @@ from app.adapters.idp.entra import (
     refresh_entra_access_token,
     validate_entra_settings,
 )
-from app.adapters.postgres.session import get_session
+from app.adapters.sql.session import get_session
 from app.api.schemas.auth import (
-    AuthAuditLogItemResponse,
-    AuthAuditLogListResponse,
     EmailLoginRequest,
     EmailLoginResponse,
     EmailSignupRequest,
@@ -44,14 +42,18 @@ from app.api.schemas.auth import (
     SessionRefreshResponse,
     UserMeResponse,
 )
+from app.core.datetime import ensure_utc_datetime
 from app.core.logging.config import get_logger
 from app.core.security.client_ip import resolve_client_ips
 from app.core.security.token_cipher import decrypt_token, encrypt_token
 from app.core.settings import get_settings
-from app.models.auth.auth_audit_log import AuthAuditEventType, AuthAuditLog
-from app.models.auth.user import User
-from app.repositories.auth.auth_audit_log_repository import list_auth_audit_logs
+from app.models.audit.auth_audit_log import AuthAuditEventType
+from app.models.auth.user import User, UserType
 from app.repositories.auth.session_repository import update_entra_tokens_by_session_id
+from app.services.audit.auth_audit_log_service import (
+    AuthAuditLogPayload,
+    record_auth_audit_log,
+)
 from app.services.auth.auth_account_service import (
     AuthConflictCode,
     AuthConflictError,
@@ -65,10 +67,6 @@ from app.services.auth.auth_account_service import (
     resolve_password_reset_user_id_for_audit,
     signup_email_user,
     verify_email_by_token,
-)
-from app.services.auth.auth_audit_log_service import (
-    AuthAuditLogPayload,
-    record_auth_audit_log,
 )
 from app.services.auth.session_auth_service import (
     SessionAuthError,
@@ -85,7 +83,7 @@ logger = get_logger(__name__)
 
 
 async def _record_auth_audit(
-    session: AsyncSession,
+    session: Session,
     *,
     event_type: AuthAuditEventType,
     request: Request | None = None,
@@ -196,6 +194,26 @@ def _resolve_login_identifier(claims: dict[str, object]) -> tuple[str, str]:
     return subject, login_email
 
 
+def _resolve_entra_display_name(claims: dict[str, object]) -> str | None:
+    """
+    Entra クレームから表示名候補を解決する.
+
+    Args:
+        claims: ID トークンクレーム
+
+    Returns:
+        str | None: 表示名。空文字は返さない
+    """
+    for key in ("name", "preferred_username", "upn", "email"):
+        raw = claims.get(key)
+        if not isinstance(raw, str):
+            continue
+        value = raw.strip()
+        if value:
+            return value
+    return None
+
+
 def _validate_internal_domain(login_email: str) -> None:
     """
     Entra ログインユーザーのメールドメインを内部ドメイン一覧で検証する.
@@ -237,7 +255,7 @@ def _to_user_me_response(user: User) -> UserMeResponse:
         id=user.id,
         email=user.email,
         display_name=user.display_name,
-        user_type=user.user_type,
+        user_type=UserType(user.user_type),
         is_active=user.is_active,
     )
 
@@ -260,33 +278,6 @@ def _set_session_cookie(response: Response, raw_token: str) -> None:
         secure=settings.session_cookie_secure,
         samesite=settings.session_cookie_samesite,
         path="/",
-    )
-
-
-def _to_auth_audit_log_item(
-    log: AuthAuditLog,
-    *,
-    user_display_name: str | None,
-    user_email: str | None,
-) -> AuthAuditLogItemResponse:
-    """
-    AuthAuditLog モデルを一覧レスポンス行へ変換する.
-    """
-    return AuthAuditLogItemResponse(
-        id=log.id,
-        occurred_at=log.occurred_at,
-        event_type=log.event_type,
-        user_id=log.user_id,
-        user_display_name=user_display_name,
-        user_email=user_email,
-        session_id=log.session_id,
-        provider=log.provider,
-        client_ip=str(log.client_ip) if log.client_ip is not None else None,
-        xff_raw=log.xff_raw,
-        connection_ip=str(log.connection_ip) if log.connection_ip is not None else None,
-        user_agent=log.user_agent,
-        reason_code=log.reason_code,
-        metadata=log.audit_metadata,
     )
 
 
@@ -376,7 +367,7 @@ def _raise_token_crypto_error(error: RuntimeError) -> NoReturn:
 
 async def _require_session_user(
     request: Request,
-    session: AsyncSession,
+    session: Session,
 ) -> tuple[User, str]:
     """
     セッション Cookie から現在ユーザーを解決する.
@@ -409,7 +400,7 @@ async def _require_session_user(
 async def post_email_signup(
     payload: EmailSignupRequest,
     request: Request,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> EmailSignupResponse:
     """Email サインアップを実行し、検証トークン発行状態を返す."""
     try:
@@ -458,7 +449,7 @@ async def post_email_signup(
 async def post_email_verify(
     payload: EmailVerifyRequest,
     request: Request,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> EmailVerifyResponse:
     """Email 検証トークンを消費して検証を完了する."""
     try:
@@ -495,7 +486,7 @@ async def post_email_login(
     payload: EmailLoginRequest,
     request: Request,
     response: Response,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> EmailLoginResponse:
     """Email ログインを実行してセッション Cookie を発行する."""
     try:
@@ -566,7 +557,7 @@ async def post_password_change(
     payload: PasswordChangeRequest,
     request: Request,
     response: Response,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> PasswordChangeResponse:
     """現在パスワード確認つきでパスワード変更を行う."""
     # セッションから現在ユーザーを解決する（未ログインなら 401）。
@@ -618,7 +609,7 @@ async def post_password_change(
 async def post_password_reset_request(
     payload: PasswordResetRequestRequest,
     request: Request,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> PasswordResetRequestResponse:
     """
     パスワードリセット要求を受け付ける.
@@ -652,7 +643,7 @@ async def post_password_reset_request(
 async def post_password_reset_confirm(
     payload: PasswordResetConfirmRequest,
     request: Request,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> PasswordResetConfirmResponse:
     """リセットトークンでパスワード再設定を確定する."""
     try:
@@ -723,7 +714,7 @@ async def get_auth_entra_login(request: Request) -> Response:
 @router.get("/entra/callback")
 async def get_auth_entra_callback(
     request: Request,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> Response:
     """Entra OIDC コールバックを処理してアプリセッションを発行する."""
     # 念のため設定不足を再チェックする。
@@ -768,7 +759,7 @@ async def get_auth_entra_callback(
             session,
             user_principal_name=login_email,
             entra_subject=subject,
-            display_name=str(claims.get("name") or ""),
+            display_name=_resolve_entra_display_name(claims),
         )
         # ログインセッションを新規発行する。
         raw_token = await issue_user_session(
@@ -849,7 +840,7 @@ async def get_auth_entra_callback(
 @router.get("/me", response_model=UserMeResponse)
 async def get_auth_me(
     request: Request,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> UserMeResponse:
     """現在ログイン中のユーザー情報を返す."""
     # セッションからユーザーを引いて返すだけの読み取りAPI。
@@ -857,57 +848,16 @@ async def get_auth_me(
     return _to_user_me_response(user)
 
 
-@router.get("/audit-logs", response_model=AuthAuditLogListResponse)
-async def get_auth_audit_logs(
-    request: Request,
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
-    event_type: AuthAuditEventType | None = None,
-    user_id: UUID | None = None,
-    session_id: UUID | None = None,
-    occurred_from: datetime | None = Query(default=None, alias="from"),
-    occurred_to: datetime | None = Query(default=None, alias="to"),
-    session: AsyncSession = Depends(get_session),
-) -> AuthAuditLogListResponse:
-    """
-    監査ログ一覧を返す（ログイン済みユーザー向け）.
-    """
-    await _require_session_user(request, session)
-    items, total = await list_auth_audit_logs(
-        session,
-        page=page,
-        page_size=page_size,
-        event_type=event_type,
-        user_id=user_id,
-        session_id=session_id,
-        occurred_from=occurred_from,
-        occurred_to=occurred_to,
-    )
-    return AuthAuditLogListResponse(
-        page=page,
-        page_size=page_size,
-        total=total,
-        items=[
-            _to_auth_audit_log_item(
-                log,
-                user_display_name=user_display_name,
-                user_email=user_email,
-            )
-            for log, user_display_name, user_email in items
-        ],
-    )
-
-
 @router.get("/entra/profile", response_model=EntraGraphProfileResponse)
 async def get_auth_entra_profile(
     request: Request,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> EntraGraphProfileResponse:
     """
     Entra 認証ユーザー向けに Graph API からプロフィールを返す.
     """
     user, raw_token = await _require_session_user(request, session)
-    if user.user_type.value != "internal":
+    if str(user.user_type) != UserType.INTERNAL.value:
         await _record_auth_audit(
             session,
             event_type=AuthAuditEventType.ENTRA_PROFILE_FETCH_FAIL,
@@ -957,7 +907,9 @@ async def get_auth_entra_profile(
             metadata={"path": "/backend/auth/entra/profile", "method": "GET"},
         )
         _raise_token_crypto_error(error)
-    access_token_expires_at = current_session.entra_access_token_expires_at
+    access_token_expires_at = ensure_utc_datetime(
+        current_session.entra_access_token_expires_at
+    )
     token_expired = (
         access_token_expires_at is not None
         and access_token_expires_at <= datetime.now(timezone.utc)
@@ -986,7 +938,7 @@ async def get_auth_entra_profile(
         new_refresh_token = str(refreshed.get("refresh_token") or "") or None
         access_token_expires_at = _resolve_entra_token_expires_at(refreshed)
         try:
-            await update_entra_tokens_by_session_id(
+            update_entra_tokens_by_session_id(
                 session,
                 session_id=current_session.id,
                 access_token=encrypt_token(new_access_token) or "",
@@ -1046,7 +998,7 @@ async def get_auth_entra_profile(
 async def post_auth_logout(
     request: Request,
     response: Response,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> LogoutResponse:
     """現在セッションを失効してログアウトする."""
     cookie_name = get_settings().session_cookie_name
@@ -1110,7 +1062,7 @@ async def post_auth_logout(
 async def post_auth_session_refresh(
     request: Request,
     response: Response,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> SessionRefreshResponse:
     """現在セッションをローテーションして新しい Cookie を発行する."""
     cookie_name = get_settings().session_cookie_name

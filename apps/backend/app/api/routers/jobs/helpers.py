@@ -9,14 +9,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
-from app.adapters.postgres.session import get_session
+from app.adapters.sql.session import get_session
 from app.adapters.storage import download_blob_bytes
 from app.api.schemas.jobs import AsyncJobArtifactResponse, AsyncJobResponse
 from app.core.settings import get_settings
 from app.models.auth.user import User
-from app.models.jobs.async_job import AsyncJob, AsyncJobType
+from app.models.jobs.async_job import AsyncJob, AsyncJobStatus, AsyncJobType
 from app.models.jobs.async_job_artifact import AsyncJobArtifact, AsyncJobArtifactType
 from app.repositories.jobs import (
     count_active_async_jobs,
@@ -51,7 +51,7 @@ def ensure_async_jobs_enabled() -> None:
 
 async def enforce_async_job_concurrency(
     *,
-    session: AsyncSession,
+    session: Session,
     requested_by_user_id: UUID,
     job_type: AsyncJobType,
 ) -> None:
@@ -59,7 +59,7 @@ async def enforce_async_job_concurrency(
     settings = get_settings()
     # 受付上限は job_type ごとに分ける。
     # こうしておくと、軽いサンプルジョブが重い export ジョブの枠を食い潰さない。
-    global_active = await count_active_async_jobs(session, job_type=job_type)
+    global_active = count_active_async_jobs(session, job_type=job_type)
     if global_active >= settings.async_job_global_concurrency:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -69,7 +69,7 @@ async def enforce_async_job_concurrency(
             },
         )
 
-    user_active = await count_active_async_jobs_by_user(
+    user_active = count_active_async_jobs_by_user(
         session,
         requested_by_user_id=requested_by_user_id,
         job_type=job_type,
@@ -118,7 +118,7 @@ def raise_session_error(error: SessionAuthError) -> NoReturn:
 
 async def require_session_user(
     request: Request,
-    session: AsyncSession,
+    session: Session,
 ) -> User:
     """Cookie セッションからログインユーザーを解決する."""
     cookie_name = get_settings().session_cookie_name
@@ -163,11 +163,13 @@ def to_job_response(
         id=job.id,
         job_type=AsyncJobType(job.job_type),
         requested_by_user_id=job.requested_by_user_id,
-        status=job.status,
-        requested_payload=dict(job.requested_payload),
-        result_payload=(
-            dict(job.result_payload) if job.result_payload is not None else None
-        ),
+        status=AsyncJobStatus(job.status),
+        requested_payload=job.requested_payload
+        if isinstance(job.requested_payload, dict)
+        else {},
+        result_payload=job.result_payload
+        if isinstance(job.result_payload, dict)
+        else None,
         error_message=job.error_message,
         retry_count=job.retry_count,
         started_at=job.started_at,
@@ -184,19 +186,19 @@ async def download_job_artifact(
     request: Request,
     job_id: UUID,
     artifact_id: UUID,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> StreamingResponse:
     """成果物を backend 経由でダウンロードする."""
     # Blob の直接 URL を返さず backend 経由にすることで、
     # 認可は常に「このユーザーの成果物か」で統一できる。
     user = await require_session_user(request, session)
-    job = await get_async_job_by_id(session, job_id=job_id)
+    job = get_async_job_by_id(session, job_id=job_id)
     if job is None or job.requested_by_user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "job_not_found", "message": "Job not found"},
         )
-    artifact = await get_async_job_artifact_by_id(session, artifact_id=artifact_id)
+    artifact = get_async_job_artifact_by_id(session, artifact_id=artifact_id)
     if artifact is None or artifact.job_id != job.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -217,17 +219,17 @@ async def download_job_artifact(
 async def get_job_with_owner_check(
     *,
     request: Request,
-    session: AsyncSession,
+    session: Session,
     job_id: UUID,
 ) -> tuple[AsyncJob, list[AsyncJobArtifact]]:
     """ジョブの所有者チェックを行って詳細を返す."""
     # 参照系 API で毎回同じ所有者確認をするため、共通化して重複を減らす。
     user = await require_session_user(request, session)
-    job = await get_async_job_by_id(session, job_id=job_id)
+    job = get_async_job_by_id(session, job_id=job_id)
     if job is None or job.requested_by_user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "job_not_found", "message": "Job not found"},
         )
-    artifacts = await list_async_job_artifacts_by_job(session, job_id=job.id)
+    artifacts = list_async_job_artifacts_by_job(session, job_id=job.id)
     return job, artifacts

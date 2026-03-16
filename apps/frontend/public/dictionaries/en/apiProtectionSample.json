@@ -21,7 +21,7 @@
   },
   "panels": {
     "api": "API Status",
-    "postgres": "PostgreSQL Status",
+    "sql": "SQL Database Status",
     "up": "Up",
     "down": "Down / Error",
     "blocked": "Blocked by auth",

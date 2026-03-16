@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.adapters.network.tcp import tcp_ping
-from app.adapters.postgres.session import get_session
+from app.adapters.sql.session import get_session
 from app.api.schemas.health import (
     HealthDependencies,
     HealthResponse,
@@ -30,7 +30,7 @@ router = APIRouter(tags=["health"])
 
 async def _require_authenticated_session(
     request: Request,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> None:
     """
     ヘルスチェック API 用の認証依存.
@@ -61,35 +61,38 @@ async def get_health(
     settings = get_settings()
 
     if not settings.database_url:
-        postgres_result = TcpDependencyHealth(
+        sql_result = TcpDependencyHealth(
             host="",
-            port=5432,
+            port=settings.database_default_port,
             ok=False,
             latency_ms=0,
             error="DATABASE_URL is not set",
         )
         return HealthResponse(
             status="degraded",
-            dependencies=HealthDependencies(postgres=postgres_result),
+            dependencies=HealthDependencies(sql=sql_result),
         )
 
-    postgres_target = _host_port_from_url(settings.database_url)
-    if postgres_target is None:
-        postgres_result = TcpDependencyHealth(
+    sql_target = _host_port_from_url(
+        settings.database_url,
+        settings.database_default_port,
+    )
+    if sql_target is None:
+        sql_result = TcpDependencyHealth(
             host="",
-            port=5432,
+            port=settings.database_default_port,
             ok=False,
             latency_ms=0,
             error="DATABASE_URL is invalid",
         )
         return HealthResponse(
             status="degraded",
-            dependencies=HealthDependencies(postgres=postgres_result),
+            dependencies=HealthDependencies(sql=sql_result),
         )
-    host, port = postgres_target
+    host, port = sql_target
 
     ok, latency_ms, error = await run_in_threadpool(tcp_ping, host, port)
-    postgres_result = TcpDependencyHealth(
+    sql_result = TcpDependencyHealth(
         host=host,
         port=port,
         ok=ok,
@@ -98,5 +101,5 @@ async def get_health(
     )
     return HealthResponse(
         status="ok" if ok else "degraded",
-        dependencies=HealthDependencies(postgres=postgres_result),
+        dependencies=HealthDependencies(sql=sql_result),
     )

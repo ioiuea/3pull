@@ -21,7 +21,7 @@
   },
   "panels": {
     "api": "API稼働状態",
-    "postgres": "PostgreSQL稼働状態",
+    "sql": "SQL Database稼働状態",
     "up": "稼働中",
     "down": "停止/異常",
     "blocked": "認証でブロック",

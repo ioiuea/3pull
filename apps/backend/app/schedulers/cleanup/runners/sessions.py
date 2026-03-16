@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from time import perf_counter
 
-from app.adapters.postgres.session import get_session_factory
+from app.adapters.sql.session import get_session_factory
 from app.core.logging.config import get_logger
 from app.core.settings import get_settings
 from app.repositories.auth.session_repository import (
@@ -22,7 +22,6 @@ async def run_sessions_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResu
     settings = get_settings()
 
     if not settings.session_cleanup_enabled:
-        # セッション cleanup が無効なら、運用ジョブは成功扱いで空振り終了する。
         return CleanupResult(
             job_name="sessions_cleanup",
             status="disabled",
@@ -31,16 +30,14 @@ async def run_sessions_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResu
         )
 
     run_at = datetime.now(timezone.utc)
-    # 期限切れ直後に消さず、grace 日数を過ぎたものだけ削除対象にする。
     cutoff = run_at - timedelta(days=settings.session_expired_grace_days)
     session_factory = get_session_factory()
 
-    async with session_factory() as session:
-        async with session.begin():
-            target_count = await count_expired_sessions_for_cleanup(
-                session,
-                expires_before=cutoff,
-            )
+    with session_factory.begin() as session:
+        target_count = count_expired_sessions_for_cleanup(
+            session,
+            expires_before=cutoff,
+        )
 
     logger.info(
         "cleanup.sessions.criteria",
@@ -53,7 +50,6 @@ async def run_sessions_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResu
     )
 
     if dry_run:
-        # dry-run では対象件数の可視化だけを行う。
         return CleanupResult(
             job_name="sessions_cleanup",
             status="dry_run",
@@ -63,15 +59,12 @@ async def run_sessions_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResu
 
     deleted_total = 0
     while True:
-        async with session_factory() as session:
-            async with session.begin():
-                # repository 側で batch 単位削除を行い、
-                # 1 回のトランザクションを小さく保つ。
-                deleted = await delete_expired_sessions_batch(
-                    session,
-                    expires_before=cutoff,
-                    batch_size=batch_size,
-                )
+        with session_factory.begin() as session:
+            deleted = delete_expired_sessions_batch(
+                session,
+                expires_before=cutoff,
+                batch_size=batch_size,
+            )
         deleted_total += deleted
         if deleted < batch_size:
             break

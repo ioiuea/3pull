@@ -9,7 +9,7 @@ from __future__ import annotations
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.models.auth.user import User, UserType
 
@@ -27,7 +27,7 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
+def get_user_by_email(session: Session, email: str) -> User | None:
     """
     正規化メールアドレスでユーザーを 1 件取得する.
 
@@ -39,11 +39,11 @@ async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
         User | None: 一致ユーザー
     """
     normalized = normalize_email(email)
-    result = await session.execute(select(User).where(User.email == normalized))
+    result = session.execute(select(User).where(User.email_normalized == normalized))
     return result.scalar_one_or_none()
 
 
-async def get_user_by_id(session: AsyncSession, user_id: UUID) -> User | None:
+def get_user_by_id(session: Session, user_id: UUID) -> User | None:
     """
     ユーザー ID でユーザーを 1 件取得する.
 
@@ -54,12 +54,12 @@ async def get_user_by_id(session: AsyncSession, user_id: UUID) -> User | None:
     Returns:
         User | None: 一致ユーザー
     """
-    result = await session.execute(select(User).where(User.id == user_id))
+    result = session.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
 
 
-async def create_user(
-    session: AsyncSession,
+def create_user(
+    session: Session,
     email: str,
     user_type: UserType,
     display_name: str | None,
@@ -76,19 +76,21 @@ async def create_user(
     Returns:
         User: 作成済みユーザー
     """
+    normalized_email = normalize_email(email)
     user = User(
-        email=normalize_email(email),
+        email=email.strip(),
+        email_normalized=normalized_email,
         user_type=user_type,
         display_name=display_name,
         is_active=True,
     )
     session.add(user)
-    await session.flush()
+    session.flush()
     return user
 
 
-async def update_user_profile(
-    session: AsyncSession,
+def update_user_profile(
+    session: Session,
     user: User,
     user_type: UserType,
     display_name: str | None,
@@ -109,9 +111,10 @@ async def update_user_profile(
     """
     user.user_type = user_type
     if email:
-        user.email = normalize_email(email)
-    if display_name:
+        user.email = email.strip()
+        user.email_normalized = normalize_email(email)
+    if display_name is not None:
         user.display_name = display_name
     session.add(user)
-    await session.flush()
+    session.flush()
     return user

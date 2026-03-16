@@ -10,28 +10,20 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.models.auth.auth_identity import AuthIdentity, AuthProvider
 
 
-async def get_identity_by_provider_subject(
-    session: AsyncSession,
+def get_identity_by_provider_subject(
+    session: Session,
     provider: AuthProvider,
     provider_subject: str,
 ) -> AuthIdentity | None:
     """
     provider + provider_subject で認証アイデンティティを取得する.
-
-    Args:
-        session: DB セッション
-        provider: 認証プロバイダー
-        provider_subject: プロバイダー側 subject
-
-    Returns:
-        AuthIdentity | None: 一致アイデンティティ
     """
-    result = await session.execute(
+    result = session.execute(
         select(AuthIdentity).where(
             AuthIdentity.provider == provider,
             AuthIdentity.provider_subject == provider_subject,
@@ -40,43 +32,26 @@ async def get_identity_by_provider_subject(
     return result.scalar_one_or_none()
 
 
-async def get_identity_by_id(
-    session: AsyncSession,
+def get_identity_by_id(
+    session: Session,
     identity_id: UUID,
 ) -> AuthIdentity | None:
     """
     identity_id で認証アイデンティティを取得する.
-
-    Args:
-        session: DB セッション
-        identity_id: 認証アイデンティティ ID
-
-    Returns:
-        AuthIdentity | None: 一致アイデンティティ
     """
-    result = await session.execute(
-        select(AuthIdentity).where(AuthIdentity.id == identity_id)
-    )
+    result = session.execute(select(AuthIdentity).where(AuthIdentity.id == identity_id))
     return result.scalar_one_or_none()
 
 
-async def get_identity_by_user_and_provider(
-    session: AsyncSession,
+def get_identity_by_user_and_provider(
+    session: Session,
     user_id: UUID,
     provider: AuthProvider,
 ) -> AuthIdentity | None:
     """
     user_id + provider で認証アイデンティティを取得する.
-
-    Args:
-        session: DB セッション
-        user_id: ユーザー ID
-        provider: 認証プロバイダー
-
-    Returns:
-        AuthIdentity | None: 一致アイデンティティ
     """
-    result = await session.execute(
+    result = session.execute(
         select(AuthIdentity).where(
             AuthIdentity.user_id == user_id,
             AuthIdentity.provider == provider,
@@ -85,8 +60,8 @@ async def get_identity_by_user_and_provider(
     return result.scalar_one_or_none()
 
 
-async def create_identity(
-    session: AsyncSession,
+def create_identity(
+    session: Session,
     user_id: UUID,
     provider: AuthProvider,
     provider_subject: str,
@@ -95,17 +70,6 @@ async def create_identity(
 ) -> AuthIdentity:
     """
     認証アイデンティティを作成する.
-
-    Args:
-        session: DB セッション
-        user_id: ユーザー ID
-        provider: 認証プロバイダー
-        provider_subject: プロバイダー側 subject
-        email_normalized: 正規化メール
-        password_hash: パスワードハッシュ（email provider のみ）
-
-    Returns:
-        AuthIdentity: 作成済みアイデンティティ
     """
     identity = AuthIdentity(
         user_id=user_id,
@@ -115,27 +79,19 @@ async def create_identity(
         password_hash=password_hash,
     )
     session.add(identity)
-    await session.flush()
+    session.flush()
     return identity
 
 
-async def get_identity_by_provider_and_email(
-    session: AsyncSession,
+def get_identity_by_provider_and_email(
+    session: Session,
     provider: AuthProvider,
     email_normalized: str,
 ) -> AuthIdentity | None:
     """
     provider + email_normalized で認証アイデンティティを取得する.
-
-    Args:
-        session: DB セッション
-        provider: 認証プロバイダー
-        email_normalized: 正規化メール
-
-    Returns:
-        AuthIdentity | None: 一致アイデンティティ
     """
-    result = await session.execute(
+    result = session.execute(
         select(AuthIdentity).where(
             AuthIdentity.provider == provider,
             AuthIdentity.email_normalized == email_normalized,
@@ -144,51 +100,36 @@ async def get_identity_by_provider_and_email(
     return result.scalar_one_or_none()
 
 
-async def mark_email_verified(
-    session: AsyncSession,
+def mark_email_verified(
+    session: Session,
     identity: AuthIdentity,
 ) -> AuthIdentity:
     """
     Email identity の検証完了時刻を更新する.
-
-    Args:
-        session: DB セッション
-        identity: 更新対象 identity
-
-    Returns:
-        AuthIdentity: 更新済み identity
     """
     identity.email_verified_at = datetime.now(timezone.utc)
     session.add(identity)
-    await session.flush()
+    session.flush()
     return identity
 
 
-async def update_password_hash(
-    session: AsyncSession,
+def update_password_hash(
+    session: Session,
     *,
     identity: AuthIdentity,
     password_hash: str,
 ) -> AuthIdentity:
     """
     Email identity のパスワードハッシュを更新する.
-
-    Args:
-        session: DB セッション
-        identity: 更新対象 identity
-        password_hash: 新しいパスワードハッシュ
-
-    Returns:
-        AuthIdentity: 更新済み identity
     """
     identity.password_hash = password_hash
     session.add(identity)
-    await session.flush()
+    session.flush()
     return identity
 
 
-async def record_failed_email_login(
-    session: AsyncSession,
+def record_failed_email_login(
+    session: Session,
     *,
     identity: AuthIdentity,
     max_failures: int,
@@ -196,18 +137,8 @@ async def record_failed_email_login(
 ) -> AuthIdentity:
     """
     Email ログイン失敗を記録し、閾値到達時はロック期限を設定する.
-
-    Args:
-        session: DB セッション
-        identity: 更新対象 identity
-        max_failures: ロック発動までの失敗回数
-        lock_minutes: ロック継続時間（分）
-
-    Returns:
-        AuthIdentity: 更新済み identity
     """
     now = datetime.now(timezone.utc)
-    # ロック期限を過ぎていた場合はカウンタをリセットして再計測する。
     if identity.locked_until is not None and identity.locked_until <= now:
         identity.failed_login_count = 0
         identity.locked_until = None
@@ -218,39 +149,28 @@ async def record_failed_email_login(
         identity.failed_login_count = 0
 
     session.add(identity)
-    await session.flush()
+    session.flush()
     return identity
 
 
-async def reset_failed_email_login_state(
-    session: AsyncSession,
+def reset_failed_email_login_state(
+    session: Session,
     *,
     identity: AuthIdentity,
 ) -> AuthIdentity:
     """
     Email ログイン成功時に失敗カウンタとロック状態を解除する.
-
-    Args:
-        session: DB セッション
-        identity: 更新対象 identity
-
-    Returns:
-        AuthIdentity: 更新済み identity
     """
     identity.failed_login_count = 0
     identity.locked_until = None
     identity.last_login_at = datetime.now(timezone.utc)
     session.add(identity)
-    await session.flush()
+    session.flush()
     return identity
 
 
-async def delete_identity_by_id(session: AsyncSession, identity_id: UUID) -> None:
+def delete_identity_by_id(session: Session, identity_id: UUID) -> None:
     """
     認証アイデンティティを削除する.
-
-    Args:
-        session: DB セッション
-        identity_id: 認証アイデンティティ ID
     """
-    await session.execute(delete(AuthIdentity).where(AuthIdentity.id == identity_id))
+    session.execute(delete(AuthIdentity).where(AuthIdentity.id == identity_id))

@@ -2,20 +2,18 @@
 Alembic 実行コンテキスト設定.
 
 - app 側の pydantic-settings から DATABASE_URL を解決する
+- Azure SQL 向け sync Engine を利用する
 - SQLAlchemy Base.metadata を target_metadata に設定する
 - autogenerate 時の型差分・デフォルト差分比較を有効化する
 """
 
 from __future__ import annotations
-
-import re
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
 
-from app.adapters.postgres.base import Base
-from app.core.settings import get_settings
+from app.adapters.sql.base import Base
+from app.adapters.sql.session import build_sync_engine, resolve_database_url
 from app.models import load_all_models
 
 # this is the Alembic Config object, which provides access
@@ -28,46 +26,6 @@ if config.config_file_name is not None:
 # Alembic がモデル定義を認識できるように import 副作用を明示する。
 load_all_models()
 target_metadata = Base.metadata
-
-_AUDIT_CHILD_PARTITION_RE = re.compile(r"^auth_audit_logs_\d{4}_\d{2}$")
-
-
-def _include_object(
-    object_: object,
-    name: str | None,
-    type_: str,
-    reflected: bool,
-    compare_to: object,
-) -> bool:
-    """
-    Alembic autogenerate の比較対象を制御する.
-
-    DB 上で動的に作成/削除される監査ログ月次子パーティションは、
-    モデル定義との差分に含めない。
-    """
-    del object_, compare_to
-
-    if reflected and type_ in {"table", "index"} and name:
-        if _AUDIT_CHILD_PARTITION_RE.match(name):
-            return False
-
-    return True
-
-
-def _resolve_database_url() -> str:
-    """
-    DATABASE_URL を設定から取得し、Alembic 設定へ反映する.
-
-    Returns:
-        str: SQLAlchemy 接続 URL
-
-    Raises:
-        RuntimeError: DATABASE_URL が未設定の場合
-    """
-    settings = get_settings()
-    if not settings.database_url:
-        raise RuntimeError("DATABASE_URL is required for alembic migrations")
-    return settings.database_url
 
 
 def run_migrations_offline() -> None:
@@ -82,7 +40,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = _resolve_database_url()
+    url = resolve_database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -90,7 +48,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
         compare_server_default=True,
-        include_object=_include_object,
+        include_schemas=True,
     )
 
     with context.begin_transaction():
@@ -104,13 +62,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    section = config.get_section(config.config_ini_section, {})
-    section["sqlalchemy.url"] = _resolve_database_url()
-    connectable = engine_from_config(
-        section,
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connectable = build_sync_engine(use_null_pool=True)
 
     with connectable.connect() as connection:
         context.configure(
@@ -118,7 +70,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             compare_type=True,
             compare_server_default=True,
-            include_object=_include_object,
+            include_schemas=True,
         )
 
         with context.begin_transaction():

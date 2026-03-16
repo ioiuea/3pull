@@ -172,9 +172,9 @@ export const getAuditLogs = async (
     search.set('user_id', params.userId);
   }
 
-  const response = await backendFetch(`/auth/audit-logs?${search.toString()}`);
+  const response = await backendFetch(`/audit/audit-logs?${search.toString()}`);
   if (!response.ok) {
-    throw new Error(`/auth/audit-logs failed: ${response.status}`);
+    throw new Error(`/audit/audit-logs failed: ${response.status}`);
   }
   return (await response.json()) as AuditLogListResponse;
 };

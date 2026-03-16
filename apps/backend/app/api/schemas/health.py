@@ -22,7 +22,7 @@ class TcpDependencyHealth(BaseModel):
 class HealthDependencies(BaseModel):
     """依存先サービスごとの健全性."""
 
-    postgres: TcpDependencyHealth
+    sql: TcpDependencyHealth
 
 
 class HealthResponse(BaseModel):

@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
-from app.adapters.postgres.session import get_session
+from app.adapters.sql.session import get_session
 from app.api.schemas.jobs import AsyncJobResponse
 from app.models.jobs.async_job import AsyncJobStatus
 from app.repositories.jobs import (
@@ -24,11 +24,11 @@ from .helpers import require_session_user, router, to_job_response
 async def cancel_job(
     request: Request,
     job_id: UUID,
-    session: AsyncSession = Depends(get_session),
+    session: Session = Depends(get_session),
 ) -> AsyncJobResponse:
     """自分の queued/running ジョブをキャンセルする."""
     user = await require_session_user(request, session)
-    job = await get_async_job_by_id(session, job_id=job_id)
+    job = get_async_job_by_id(session, job_id=job_id)
     # 他人のジョブの存在を見せないため、未存在と他人所有は同じ 404 にする。
     if job is None or job.requested_by_user_id != user.id:
         raise HTTPException(
@@ -38,7 +38,7 @@ async def cancel_job(
 
     if job.status == AsyncJobStatus.CANCELED:
         # すでに canceled なら冪等に成功扱いで最新状態を返す。
-        artifacts = await list_async_job_artifacts_by_job(session, job_id=job.id)
+        artifacts = list_async_job_artifacts_by_job(session, job_id=job.id)
         return to_job_response(job, artifacts=artifacts)
 
     if job.status in {
@@ -51,11 +51,11 @@ async def cancel_job(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "code": "job_not_cancelable",
-                "message": f"Job cannot be canceled in status: {job.status.value}",
+                "message": f"Job cannot be canceled in status: {job.status}",
             },
         )
 
-    await update_async_job_status(
+    update_async_job_status(
         session,
         job=job,
         status=AsyncJobStatus.CANCELED,
@@ -66,6 +66,6 @@ async def cancel_job(
     )
     # onupdate で更新される updated_at などの遅延ロードを避けるため、
     # レスポンス化前に最新値を明示取得する。
-    await session.refresh(job)
-    artifacts = await list_async_job_artifacts_by_job(session, job_id=job.id)
+    session.refresh(job)
+    artifacts = list_async_job_artifacts_by_job(session, job_id=job.id)
     return to_job_response(job, artifacts=artifacts)

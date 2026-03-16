@@ -342,7 +342,7 @@
    - 後続の federated credential 作成に必要
 6. Azure 側の依存リソースを作成する
    - 既存利用
-     - PostgreSQL
+     - Azure SQL Database
      - Storage Account
      - Service Bus
    - 新規作成

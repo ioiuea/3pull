@@ -11,11 +11,11 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, String, func
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import Index, String, text
+from sqlalchemy.dialects.mssql import DATETIME2, NVARCHAR, UNIQUEIDENTIFIER
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.adapters.postgres.base import Base
+from app.adapters.sql.base import Base
 
 
 class UserType(StrEnum):
@@ -29,33 +29,36 @@ class User(Base):
     """認証方式に依存しないユーザー本体情報."""
 
     __tablename__ = "users"
+    __table_args__ = (
+        Index("ix_users_is_active", "is_active"),
+        {"schema": "auth"},
+    )
 
-    id: Mapped[UUID] = mapped_column(
-        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
-    )
-    # Entra では userPrincipalName、Email 認証では登録メールアドレスを保存する。
-    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
-    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    user_type: Mapped[UserType] = mapped_column(
-        Enum(
-            UserType,
-            name="user_type",
-            native_enum=False,
-            values_callable=lambda enum_cls: [member.value for member in enum_cls],
-        ),
+    id: Mapped[UUID] = mapped_column(UNIQUEIDENTIFIER, primary_key=True, default=uuid4)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    email_normalized: Mapped[str] = mapped_column(
+        String(320),
         nullable=False,
+        unique=True,
     )
+    display_name: Mapped[str | None] = mapped_column(
+        NVARCHAR(255),
+        nullable=True,
+    )
+    user_type: Mapped[str] = mapped_column(String(32), nullable=False)
     is_active: Mapped[bool] = mapped_column(
-        nullable=False, default=True, server_default="true"
+        nullable=False,
+        default=True,
+        server_default=text("1"),
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DATETIME2(precision=3),
         nullable=False,
-        server_default=func.now(),
+        server_default=text("SYSUTCDATETIME()"),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        DATETIME2(precision=3),
         nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
+        server_default=text("SYSUTCDATETIME()"),
+        onupdate=text("SYSUTCDATETIME()"),
     )

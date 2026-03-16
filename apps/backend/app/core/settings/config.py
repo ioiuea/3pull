@@ -55,9 +55,15 @@ class AppSettings(BaseSettings):
         validation_alias="SERVICE_NAME",
     )
 
-    api_port: int = Field(default=8000, validation_alias="API_PORT")
-
     database_url: str | None = Field(default=None, validation_alias="DATABASE_URL")
+    database_default_port: int = Field(
+        default=1433,
+        validation_alias="DATABASE_DEFAULT_PORT",
+    )
+    database_access_token_scope: str = Field(
+        default="https://database.windows.net/.default",
+        validation_alias="DATABASE_ACCESS_TOKEN_SCOPE",
+    )
     database_echo: bool = Field(default=False, validation_alias="DATABASE_ECHO")
     database_pool_size: int = Field(default=5, validation_alias="DATABASE_POOL_SIZE")
     database_max_overflow: int = Field(
@@ -282,6 +288,14 @@ class AppSettings(BaseSettings):
         """
         if not 1 <= value <= 720:
             raise ValueError("SESSION_TTL_HOURS must be between 1 and 720")
+        return value
+
+    @field_validator("database_default_port")
+    @classmethod
+    def _validate_database_default_port(cls, value: int) -> int:
+        """DATABASE_DEFAULT_PORT の範囲を検証する."""
+        if not 1 <= value <= 65_535:
+            raise ValueError("DATABASE_DEFAULT_PORT must be between 1 and 65535")
         return value
 
     @field_validator("session_expired_grace_days")

@@ -49,7 +49,7 @@ frontend-ci: frontend-format frontend-lint frontend-typecheck frontend-test
 # ------------------------------
 # Backend targets
 # ------------------------------
-.PHONY: backend-install alembic-revision alembic-upgrade schedulers-sessions schedulers-sessions-dry-run schedulers-audit schedulers-audit-dry-run schedulers-jobs schedulers-jobs-dry-run
+.PHONY: backend-install backend-format backend-format-fix backend-lint backend-lint-fix backend-typecheck backend-test backend-ci alembic-revision alembic-upgrade schedulers-sessions schedulers-sessions-dry-run schedulers-audit schedulers-audit-dry-run schedulers-jobs schedulers-jobs-dry-run
 
 backend-install:
 	cd $(BACKEND_DIR) && uv sync --frozen
@@ -100,11 +100,6 @@ schedulers-jobs-dry-run:
 	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup jobs --dry-run
 
 # ------------------------------
-# Combined runtime targets
-# ------------------------------
-.PHONY: install env up up-api up-web up-worker up-worker-auth-audit-export up-worker-sample-wait-blob dev dev-api dev-web dev-worker dev-worker-auth-audit-export dev-worker-sample-wait-blob
-
-# ------------------------------
 # Docker targets
 # ------------------------------
 .PHONY: docker-build docker-build-api docker-build-worker docker-build-schedulers docker-build-web docker-run-api docker-run-worker-auth-audit-export docker-run-worker-sample-wait-blob docker-run-schedulers-sessions docker-run-schedulers-audit docker-run-schedulers-jobs-dry-run docker-run-web
@@ -124,7 +119,12 @@ docker-build-schedulers:
 	docker build -f docker/schedulers.Dockerfile -t $(DOCKER_SCHEDULERS_IMAGE) .
 
 docker-build-web:
-	docker build -f docker/web.Dockerfile -t $(DOCKER_WEB_IMAGE) .
+	@test -n "$(VITE_BACKEND_BASE_URL)" || (echo 'VITE_BACKEND_BASE_URL must be set for docker-build-web' && exit 1)
+	@test -n "$(VITE_PRODUCT_NAME)" || (echo 'VITE_PRODUCT_NAME must be set for docker-build-web' && exit 1)
+	docker build -f docker/web.Dockerfile \
+		--build-arg VITE_BACKEND_BASE_URL="$(VITE_BACKEND_BASE_URL)" \
+		--build-arg VITE_PRODUCT_NAME="$(VITE_PRODUCT_NAME)" \
+		-t $(DOCKER_WEB_IMAGE) .
 
 docker-build: docker-build-api docker-build-worker docker-build-schedulers docker-build-web
 
@@ -158,6 +158,11 @@ docker-run-schedulers-jobs-dry-run:
 
 docker-run-web:
 	docker run --rm -p 3000:3000 $(DOCKER_WEB_IMAGE)
+
+# ------------------------------
+# Combined runtime targets
+# ------------------------------
+.PHONY: install env ci up up-api up-web up-worker up-worker-auth-audit-export up-worker-sample-wait-blob dev dev-api dev-web dev-worker dev-worker-auth-audit-export dev-worker-sample-wait-blob
 
 install: frontend-install backend-install
 

@@ -4,16 +4,16 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.api.routers.jobs.create.auth_audit_export import AuthAuditExportCreateRequest
+from app.api.routers.jobs.create.sample_wait_blob import SampleWaitBlobCreateRequest
 from app.api.routers.jobs.helpers import (
     enforce_async_job_concurrency,
     ensure_async_jobs_enabled,
     resolve_async_job_expiration,
 )
 from app.models.jobs.async_job import AsyncJobType
-from app.api.routers.jobs.create.sample_wait_blob import SampleWaitBlobCreateRequest
 
 
 def test_auth_audit_export_request_model_accepts_payload() -> None:
@@ -95,7 +95,6 @@ def test_resolve_async_job_expiration_clamps_retention_days(monkeypatch) -> None
     assert expires_at < now + timedelta(days=30, minutes=1)
 
 
-@pytest.mark.asyncio
 async def test_enforce_async_job_concurrency_scopes_counts_by_job_type(
     monkeypatch,
 ) -> None:
@@ -112,16 +111,16 @@ async def test_enforce_async_job_concurrency_scopes_counts_by_job_type(
     )()
     captured: dict[str, object] = {}
 
-    async def _fake_count_active_async_jobs(
-        session: AsyncSession,
+    def _fake_count_active_async_jobs(
+        session: Session,
         *,
         job_type: AsyncJobType | None = None,
     ) -> int:
         captured["global_job_type"] = job_type
         return 0
 
-    async def _fake_count_active_async_jobs_by_user(
-        session: AsyncSession,
+    def _fake_count_active_async_jobs_by_user(
+        session: Session,
         *,
         requested_by_user_id: str,
         job_type: AsyncJobType | None = None,

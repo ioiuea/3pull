@@ -15,7 +15,7 @@ type CheckResult = {
 type HealthPayload = {
   status?: 'ok' | 'degraded';
   dependencies?: {
-    postgres?: {
+    sql?: {
       ok?: boolean;
     };
   };
@@ -61,7 +61,7 @@ const ApiProtectionSamplePage = () => {
     return t('panels.down');
   };
 
-  const toPostgresStatusLabel = (result: CheckResult | null): string => {
+  const toSqlStatusLabel = (result: CheckResult | null): string => {
     if (!result) {
       return t('panels.notChecked');
     }
@@ -69,11 +69,11 @@ const ApiProtectionSamplePage = () => {
       return t('panels.unauthorized');
     }
     const payload = parseHealthPayload(result);
-    const postgresOk = payload?.dependencies?.postgres?.ok;
-    if (postgresOk === true) {
+    const sqlOk = payload?.dependencies?.sql?.ok;
+    if (sqlOk === true) {
       return t('panels.up');
     }
-    if (postgresOk === false) {
+    if (sqlOk === false) {
       return t('panels.down');
     }
     return t('panels.unknown');
@@ -151,11 +151,11 @@ const ApiProtectionSamplePage = () => {
                 </p>
               </div>
               <div className="rounded-md border bg-background/40 p-3">
-                <p className="text-xs text-muted-foreground">{t('panels.postgres')}</p>
+                <p className="text-xs text-muted-foreground">{t('panels.sql')}</p>
                 <p
-                  className={`text-sm font-semibold ${toStatusTone(toPostgresStatusLabel(protectedResult))}`}
+                  className={`text-sm font-semibold ${toStatusTone(toSqlStatusLabel(protectedResult))}`}
                 >
-                  {toPostgresStatusLabel(protectedResult)}
+                  {toSqlStatusLabel(protectedResult)}
                 </p>
               </div>
             </div>
@@ -195,11 +195,11 @@ const ApiProtectionSamplePage = () => {
                 </p>
               </div>
               <div className="rounded-md border bg-background/40 p-3">
-                <p className="text-xs text-muted-foreground">{t('panels.postgres')}</p>
+                <p className="text-xs text-muted-foreground">{t('panels.sql')}</p>
                 <p
-                  className={`text-sm font-semibold ${toStatusTone(toPostgresStatusLabel(unprotectedResult))}`}
+                  className={`text-sm font-semibold ${toStatusTone(toSqlStatusLabel(unprotectedResult))}`}
                 >
-                  {toPostgresStatusLabel(unprotectedResult)}
+                  {toSqlStatusLabel(unprotectedResult)}
                 </p>
               </div>
             </div>

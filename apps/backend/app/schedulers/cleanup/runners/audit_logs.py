@@ -1,34 +1,27 @@
-"""監査ログの古い月次パーティションを整理する cleanup."""
+"""監査ログの保持期限超過データを段階削除する cleanup."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from time import perf_counter
 
-from app.adapters.postgres.session import get_session_factory
+from app.adapters.sql.session import get_session_factory
 from app.core.logging.config import get_logger
 from app.core.settings import get_settings
-from app.repositories.auth.auth_audit_log_repository import (
-    count_rows_in_audit_partition,
-    drop_audit_partition,
-    ensure_next_month_audit_partition,
-    list_audit_partitions_for_drop,
+from app.repositories.audit.auth_audit_log_repository import (
+    count_auth_audit_logs_before_cutoff,
+    delete_auth_audit_logs_before_cutoff_batch,
 )
-from app.schedulers.cleanup.helpers import CleanupResult, add_months, month_start
+from app.schedulers.cleanup.helpers import CleanupResult
 
 logger = get_logger(__name__)
 
 
 async def run_audit_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResult:
-    # 監査ログは行削除ではなくパーティション drop で掃除するため、
-    # batch_size は共通 interface のためだけに受け取る。
-    del batch_size  # cleanup interface を揃えるために受け取るが未使用
-
     start = perf_counter()
     settings = get_settings()
 
     if not settings.audit_cleanup_enabled:
-        # 監査ログ retention 運用が無効な環境では何もせず終了する。
         return CleanupResult(
             job_name="audit_retention_cleanup",
             status="disabled",
@@ -37,97 +30,56 @@ async def run_audit_cleanup(*, dry_run: bool, batch_size: int) -> CleanupResult:
         )
 
     run_at = datetime.now(timezone.utc)
-    current_month_start = month_start(run_at)
-    # retention は「何か月残すか」で決め、保持開始月より前のパーティションを落とす。
-    keep_from_month = add_months(
-        current_month_start,
-        -(settings.auth_audit_retention_months - 1),
-    )
-    partition_drop_before_month = keep_from_month.date()
-
-    next_month_start = add_months(current_month_start, 1)
-    next_next_month_start = add_months(current_month_start, 2)
-
+    cutoff = run_at - timedelta(days=settings.auth_audit_retention_months * 31)
     session_factory = get_session_factory()
 
-    if dry_run:
-        async with session_factory() as session:
-            async with session.begin():
-                # dry-run では drop 候補を調べ、消える行数だけ積み上げる。
-                drop_targets = await list_audit_partitions_for_drop(
-                    session,
-                    drop_before_month=partition_drop_before_month,
-                )
-                dropped_rows = 0
-                for schema_name, table_name in drop_targets:
-                    dropped_rows += await count_rows_in_audit_partition(
-                        session,
-                        schema_name=schema_name,
-                        table_name=table_name,
-                    )
-        logger.info(
-            "cleanup.audit.dry_run",
-            run_at=run_at.isoformat(),
-            current_month=current_month_start.date().isoformat(),
-            keep_from_month=keep_from_month.date().isoformat(),
-            drop_before_month=partition_drop_before_month.isoformat(),
-            drop_partition_count=len(drop_targets),
-            drop_candidate_row_count=dropped_rows,
-            next_partition=f"auth_audit_logs_{next_month_start:%Y_%m}",
+    with session_factory.begin() as session:
+        target_count = count_auth_audit_logs_before_cutoff(
+            session,
+            cutoff=cutoff,
         )
+
+    logger.info(
+        "cleanup.audit.criteria",
+        run_at=run_at.isoformat(),
+        cutoff=cutoff.isoformat(),
+        retention_months=settings.auth_audit_retention_months,
+        target_count=target_count,
+        dry_run=dry_run,
+        batch_size=batch_size,
+    )
+
+    if dry_run:
         return CleanupResult(
             job_name="audit_retention_cleanup",
             status="dry_run",
-            deleted_count=dropped_rows,
+            deleted_count=target_count,
             duration_ms=(perf_counter() - start) * 1000,
         )
 
-    dropped_row_count = 0
-    dropped_partitions = 0
-
-    async with session_factory() as session:
-        async with session.begin():
-            # 実削除は「古いパーティションを丸ごと落とす」方式。
-            drop_targets = await list_audit_partitions_for_drop(
+    deleted_total = 0
+    while True:
+        with session_factory.begin() as session:
+            deleted = delete_auth_audit_logs_before_cutoff_batch(
                 session,
-                drop_before_month=partition_drop_before_month,
+                cutoff=cutoff,
+                batch_size=batch_size,
             )
-            for schema_name, table_name in drop_targets:
-                dropped_row_count += await count_rows_in_audit_partition(
-                    session,
-                    schema_name=schema_name,
-                    table_name=table_name,
-                )
-                await drop_audit_partition(
-                    session,
-                    schema_name=schema_name,
-                    table_name=table_name,
-                )
-                dropped_partitions += 1
-
-    async with session_factory() as session:
-        async with session.begin():
-            # 次月分を先に作っておくと、月替わり直後の書き込みで詰まりにくい。
-            await ensure_next_month_audit_partition(
-                session,
-                partition_start=next_month_start,
-                partition_end=next_next_month_start,
-            )
+        deleted_total += deleted
+        if deleted < batch_size:
+            break
 
     logger.info(
         "cleanup.audit.retention",
         run_at=run_at.isoformat(),
-        current_month=current_month_start.date().isoformat(),
-        keep_from_month=keep_from_month.date().isoformat(),
-        drop_before_month=partition_drop_before_month.isoformat(),
-        drop_partition_count=dropped_partitions,
-        dropped_partition_row_count=dropped_row_count,
-        deleted_count=dropped_row_count,
-        created_partition=f"auth_audit_logs_{next_month_start:%Y_%m}",
+        cutoff=cutoff.isoformat(),
+        target_count=target_count,
+        deleted_count=deleted_total,
+        batch_size=batch_size,
     )
     return CleanupResult(
         job_name="audit_retention_cleanup",
         status="success",
-        deleted_count=dropped_row_count,
+        deleted_count=deleted_total,
         duration_ms=(perf_counter() - start) * 1000,
     )

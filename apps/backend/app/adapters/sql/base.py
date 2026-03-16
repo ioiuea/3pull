@@ -10,7 +10,6 @@ from __future__ import annotations
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase
 
-# Alembic が制約名を安定して生成できるように命名規約を固定する。
 NAMING_CONVENTION: dict[str, str] = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",

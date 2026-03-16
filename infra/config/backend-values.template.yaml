@@ -152,7 +152,6 @@ config:
   env:
     SERVICE_NAME: sample-system-api
     API_LOG_LEVEL: INFO
-    API_PORT: "8000"
     FRONTEND_BASE_URL: https://app.example.com
     AUTH_POST_LOGIN_DEFAULT_PATH: /en
     CSRF_TRUSTED_ORIGINS: https://app.example.com
