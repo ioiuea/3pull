@@ -120,6 +120,7 @@ def main() -> int:
     key_vault_values = common.get("keyVault")
     service_bus_values = common.get("serviceBus")
     storage_values = common.get("storage")
+    sql_database_values = common.get("sqlDatabase")
     postgres_values = common.get("postgres")
     redis_values = common.get("redis")
     cosno_values = common.get("cosno")
@@ -153,6 +154,11 @@ def main() -> int:
     elif not isinstance(storage_values, dict):
         errors.append("storage: object で指定してください。")
         storage_values = {}
+    if sql_database_values is None:
+        sql_database_values = {}
+    elif not isinstance(sql_database_values, dict):
+        errors.append("sqlDatabase: object で指定してください。")
+        sql_database_values = {}
     if not isinstance(postgres_values, dict):
         errors.append("postgres: object で指定してください。")
         postgres_values = {}
@@ -271,6 +277,23 @@ def main() -> int:
                     "aks.serviceCidr は network.vnetAddressPrefixes と重複できません: "
                     f"serviceCidr={service_cidr}, vnet={vnet}"
                 )
+
+    # Azure SQL Database 設定
+    sql_sku_tier = as_non_empty_str(sql_database_values.get("skuTier"), "sqlDatabase.skuTier", errors)
+    if sql_sku_tier is not None and sql_sku_tier not in ["Basic", "Standard", "Premium", "GeneralPurpose", "BusinessCritical", "Hyperscale"]:
+        errors.append(
+            "sqlDatabase.skuTier: Basic / Standard / Premium / GeneralPurpose / BusinessCritical / Hyperscale のいずれかを指定してください。"
+        )
+
+    as_non_empty_str(sql_database_values.get("skuName"), "sqlDatabase.skuName", errors)
+
+    sql_max_size_gb = as_int(sql_database_values.get("maxSizeGb"), "sqlDatabase.maxSizeGb", errors)
+    if sql_max_size_gb is not None and sql_max_size_gb < 2:
+        errors.append("sqlDatabase.maxSizeGb: 2 以上の整数を指定してください。")
+
+    as_bool(sql_database_values.get("zoneRedundant"), "sqlDatabase.zoneRedundant", errors)
+    as_non_empty_str(sql_database_values.get("entraAdminLogin"), "sqlDatabase.entraAdminLogin", errors)
+    as_non_empty_str(sql_database_values.get("entraAdminObjectId"), "sqlDatabase.entraAdminObjectId", errors)
 
     # PostgreSQL 設定
     sku_tier = as_non_empty_str(postgres_values.get("skuTier"), "postgres.skuTier", errors)

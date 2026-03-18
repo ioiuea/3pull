@@ -19,14 +19,15 @@
 
 | principal | ロール | スコープ | 用途 |
 | --- | --- | --- | --- |
-| `mi-[env]-[system]-api` | `Key Vault Secrets User` | Key Vault | API 実行時のSecret参照 |
-| `mi-[env]-[system]-worker` | `Key Vault Secrets User` | Key Vault | worker 実行時のSecret参照 |
+| `mi-[env]-[system]-api` | `Key Vault Secrets User`, `Key Vault Crypto User` | Key Vault | API 実行時のSecret参照 / Always Encrypted 用キー参照 |
+| `mi-[env]-[system]-worker` | `Key Vault Secrets User`, `Key Vault Crypto User` | Key Vault | worker 実行時のSecret参照 / Always Encrypted 用キー参照 |
 | `mi-[env]-[system]-schedulers` | `Key Vault Secrets User` | Key Vault | schedulers 実行時のSecret参照 |
 | bootstrap/CI principal | `Key Vault Secrets Officer` | Key Vault | Secret 登録/更新 |
 
 補足:
 
 - keda-operator MI には Key Vault RBAC を付与しません（最小権限）。
+- `Key Vault Crypto User` は Azure SQL Always Encrypted で Azure Key Vault のキーを利用する principal に付与します。
 - Secret 値そのものは IaC に含めず、`az keyvault secret set` で投入します。
 
 ## Private Endpoint / DNS

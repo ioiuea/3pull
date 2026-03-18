@@ -130,11 +130,13 @@ if not maint_subnet_name:
 
 modules_name = config.get("modulesName", "maint")
 network_modules_name = config.get("networkModulesName", "nw")
+managed_identity_modules_name = config.get("managedIdentityModulesName", "svc")
 enable_resource_lock = bool(common_values.get("enableResourceLock", True))
 lock_kind = config.get("lockKind", "CanNotDelete") if enable_resource_lock else ""
 
 service_rg_name = f"rg-{environment_name}-{system_name}-{modules_name}"
 nw_rg_name = f"rg-{environment_name}-{system_name}-{network_modules_name}"
+managed_identity_rg_name = f"rg-{environment_name}-{system_name}-{managed_identity_modules_name}"
 vnet_name = f"vnet-{environment_name}-{system_name}"
 log_analytics_name = f"log-{environment_name}-{system_name}"
 log_analytics_resource_group_name = f"rg-{environment_name}-{system_name}-monitor"
@@ -156,6 +158,7 @@ lines = [
     f"param modulesName = {quote(modules_name)}",
     f"param nwResourceGroup = {quote(nw_rg_name)}",
     f"param vnetName = {quote(vnet_name)}",
+    f"param managedIdentityResourceGroupName = {quote(managed_identity_rg_name)}",
     f"param lockKind = {quote(lock_kind)}",
     f"param logAnalyticsName = {quote(log_analytics_name)}",
     f"param logAnalyticsResourceGroupName = {quote(log_analytics_resource_group_name)}",

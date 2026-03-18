@@ -195,7 +195,7 @@ flowchart LR
   - エントリーポイント。パラメータ生成とデプロイを順序制御します。
 - `common.parameter.json`
   - 共通パラメータと、どのリソースをデプロイ対象にするか（実行可否）を管理します。
-  - `common` / `logAnalytics` / `network` / `aks` / `keyVault` / `serviceBus` / `postgres` / `redis` / `cosno` / `resourceToggles` の親オブジェクトで分類しています。
+  - `common` / `logAnalytics` / `network` / `aks` / `keyVault` / `serviceBus` / `sqlDatabase` / `postgres` / `redis` / `cosno` / `resourceToggles` の親オブジェクトで分類しています。
 - `bicep/`
   - リソース単位の Bicep 本体。
 - `scripts/`
@@ -432,6 +432,108 @@ Kubernetes Service（ClusterIP）用の IP 範囲（CIDR）です。
   - 対象リソースの `resourceToggles` が `true`
   - 必要な Managed Identity が Azure 上に実在する
 - 条件を満たす場合のみ RBAC を作成し、満たさない場合は RBAC 作成をスキップします。
+- Key Vault では `api` / `worker` に `Key Vault Secrets User` に加えて `Key Vault Crypto User` も付与します。
+  Azure SQL Always Encrypted で Azure Key Vault のキーを利用する前提です。
+
+### sqlDatabase.skuTier
+
+Azure SQL Database の価格レベルです。
+
+- デフォルト: `Basic`
+- 主な選択肢: `Basic` / `Standard` / `Premium` / `GeneralPurpose` / `BusinessCritical` / `Hyperscale`
+
+サンプルアプリの初期構成では `Basic` を既定とし、検証用途で十分な最小構成を優先します。
+
+### sqlDatabase.skuName
+
+Azure SQL Database の SKU 名です。
+
+- デフォルト: `Basic`
+
+`skuTier` と整合する値を指定してください。初期構成では `skuTier=Basic`, `skuName=Basic` を前提にしています。
+
+### sqlDatabase.maxSizeGb
+
+Azure SQL Database の最大サイズ (GiB) です。
+
+- デフォルト: `2`
+
+サンプルアプリ用途では 2 GiB を既定とし、必要に応じて拡張します。
+
+### sqlDatabase.zoneRedundant
+
+Azure SQL Database の zone redundancy を有効化するかどうかです。
+
+- `false`（デフォルト）: 無効
+- `true`: 有効
+
+可用性要件とコストを見ながら有効化してください。サンプルアプリの初期構成では無効を既定とします。
+
+### sqlDatabase.entraAdminLogin
+
+Azure SQL Server の Microsoft Entra administrator に設定する主体のログイン名です。
+
+設定可能な主体:
+
+- Entra ユーザー
+- Entra グループ
+
+推奨:
+
+- 個人ユーザーではなく Entra グループを指定してください。
+
+例:
+
+- ユーザー: `3pull-admin@example.com`
+- グループ: `sql-admins-dev-3pull`
+
+確認例:
+
+```bash
+az ad user show \
+  --id 3pull-admin@example.com \
+  --query "{login:userPrincipalName, objectId:id}"
+```
+
+```bash
+az ad group show \
+  --group sql-admins-dev-3pull \
+  --query "{login:displayName, objectId:id}"
+```
+
+### sqlDatabase.entraAdminObjectId
+
+`sqlDatabase.entraAdminLogin` に対応する Entra object ID です。  
+Azure SQL Server の Microsoft Entra administrator 設定に利用します。
+
+設定可能な主体:
+
+- Entra ユーザーの object ID
+- Entra グループの object ID
+
+注意:
+
+- ここで指定するのは Managed Identity ではありません。
+- runtime 用 / migration 用の Managed Identity は、Azure SQL Database 内で `CREATE USER ... FROM EXTERNAL PROVIDER` して利用する別の principal です。
+- Azure SQL Server の Entra administrator には、通常はユーザーまたはグループを設定します。
+
+### SQL Database デプロイ時の補足
+
+Azure SQL Server は Microsoft Entra admin を標準の運用経路としつつ、bootstrap / 緊急時用に SQL 管理者ログインも保持します。  
+そのため `resourceToggles.sqlDatabase=true` でデプロイする場合は、実行時に以下の環境変数を指定してください。
+
+```bash
+SQL_ADMIN_LOGIN='sqladmin' \
+SQL_ADMIN_PASSWORD='YourStrongPassword!' \
+bash infra/main.sh
+```
+
+- `SQL_ADMIN_LOGIN`
+  - SQL Server 作成時の一時的な管理者ログイン名
+- `SQL_ADMIN_PASSWORD`
+  - SQL Server 作成時の一時的な管理者パスワード
+
+通常運用のアプリ接続は Microsoft Entra 認証を前提とし、SQL 認証は bootstrap や緊急時対応のために保持します。
 
 ### postgres.enableZoneRedundantHa
 
@@ -778,8 +880,9 @@ Cosmos DB のキーによるメタデータ書き込みを無効化するかど�
 - `keyVault`
 - `serviceBus`
 - `storage`
-- `postgresDatabase`
+- `sqlDatabase`
 - `maintenanceVm`
+- `postgresDatabase`
 - `cosmosDatabase`
 - `redis`
 - `agicController`
@@ -808,11 +911,20 @@ az account show
 
 ```bash
 cd infra
-POSTGRES_ADMIN_PASSWORD='YourStrongPassword!' \
-MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh --what-if
-POSTGRES_ADMIN_PASSWORD='YourStrongPassword!' \
-MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
+SQL_ADMIN_LOGIN='sqladmin' \
+SQL_ADMIN_PASSWORD='YourStrongPassword!' \
+MAINT_VM_ADMIN_LOGIN='maintadmin' \
+MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' \
+./main.sh --what-if
+
+SQL_ADMIN_LOGIN='sqladmin' \
+SQL_ADMIN_PASSWORD='YourStrongPassword!' \
+MAINT_VM_ADMIN_LOGIN='maintadmin' \
+MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' \
+./main.sh
 ```
+
+`resourceToggles.postgresDatabase=true` で PostgreSQL Flexible Server もデプロイする場合のみ、追加で `POSTGRES_ADMIN_PASSWORD` を指定してください。
 
 ### デプロイの流れ
 
@@ -837,8 +949,9 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' ./main.sh
   - Key Vault
   - Service Bus
   - Storage Account
-  - PostgreSQL Flexible Server
+  - Azure SQL Database
   - Maintenance VM
+  - PostgreSQL Flexible Server
   - Cosmos DB (NoSQL)
   - Redis
 - post

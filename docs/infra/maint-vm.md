@@ -43,7 +43,7 @@
 | ---- | --------------------------------------- | ----------------- |
 | 名前 | vm-[common.environmentName]-[common.systemName]-maint | name              |
 | 場所 | [common.location]                              | location          |
-| ID   | SystemAssigned                          | identity.type     |
+| ID   | `UserAssigned`                          | identity.type     |
 
 ## ハードウェア情報
 
@@ -93,10 +93,15 @@
 
 ## VM本体の構成
 
-- システム割り当てマネージドIDの有効化。
+- migration 用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-migration`）を VM に割り当てる。
 - ログインするアカウントに、本VMに対して以下どちらかの権限が付与されていること。
   - 仮想マシン管理者ログイン
   - 仮想マシンユーザーログイン
+
+補足:
+
+- migration 用 User Assigned Managed Identity は Azure SQL bootstrap / Alembic 実行用の principal として利用します。
+- runtime 用の API / worker / schedulers Managed Identity は maint-vm には割り当てません。
 
 ## ネットワーク
 
@@ -132,6 +137,37 @@ az login
 ```
 az ssh vm -n vm-[common.environmentName]-[common.systemName]-maint -g rg-[common.environmentName]-[common.systemName]-maint
 ```
+
+# migration 実行方針
+
+## 位置づけ
+
+- maint-vm は Azure SQL Database の bootstrap / migration 実行地点とする。
+- runtime principal とは別に、migration 専用 Managed Identity を用いる。
+
+## 利用するManaged Identity
+
+| 用途 | Managed Identity | 備考 |
+| --- | --- | --- |
+| Azure SQL bootstrap / Alembic | `mi-[common.environmentName]-[common.systemName]-migration` | User Assigned Managed Identity |
+
+## 想定する実行内容
+
+- `scripts/init/sql/deploy.sh`
+- `make alembic-upgrade`
+- 必要に応じた SQL / Alembic の手動実行
+
+## 設計意図
+
+- API / worker / schedulers に DDL 権限を持たせない
+- Private Endpoint 経由で Azure SQL へ到達できる管理経路を maint-vm に集約する
+- migration 実行主体を固定し、監査・切り分けをしやすくする
+- VM の identity は migration 用 principal に絞り、責務を明確にする
+
+関連:
+
+- Azure SQL Database: [azure-sql-database.md](./azure-sql-database.md)
+- Managed Identity: [managed-id.md](./managed-id.md)
 
 # パッケージインストール手順
 

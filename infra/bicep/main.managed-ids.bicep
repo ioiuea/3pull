@@ -41,6 +41,12 @@ resource schedulersManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdenti
   tags: modulesTags
 }
 
+resource migrationManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-migration'
+  location: location
+  tags: modulesTags
+}
+
 resource kedaOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'mi-${environmentName}-${systemName}-keda-operator'
   location: location
@@ -62,6 +68,7 @@ resource agicLowLatencyManagedIdentity 'Microsoft.ManagedIdentity/userAssignedId
 output apiManagedIdentityName string = apiManagedIdentity.name
 output workerManagedIdentityName string = workerManagedIdentity.name
 output schedulersManagedIdentityName string = schedulersManagedIdentity.name
+output migrationManagedIdentityName string = migrationManagedIdentity.name
 output kedaOperatorManagedIdentityName string = kedaOperatorManagedIdentity.name
 output agicStandardManagedIdentityName string = agicStandardManagedIdentity.name
 output agicLowLatencyManagedIdentityName string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.name : ''

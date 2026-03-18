@@ -1,0 +1,8 @@
+{
+  "modulesName": "svc",
+  "networkModulesName": "nw",
+  "lockKind": "CanNotDelete",
+  "publicNetworkAccess": "Disabled",
+  "minimalTlsVersion": "1.2",
+  "privateDnsZoneName": "privatelink.database.windows.net"
+}

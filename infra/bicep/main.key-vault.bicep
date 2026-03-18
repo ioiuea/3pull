@@ -97,6 +97,11 @@ var keyVaultSecretsUserRoleDefinitionId = subscriptionResourceId(
   '4633458b-17de-408a-b874-0445c86b69e6'
 )
 
+var keyVaultCryptoUserRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '12338af0-0e69-4776-bea7-57ae8d297424'
+)
+
 var keyVaultSecretsOfficerRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   'b86a8fe4-44ce-4948-aee5-eccb2c155cd7'
@@ -204,11 +209,31 @@ resource keyVaultSecretsUserForApi 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
+resource keyVaultCryptoUserForApi 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(keyVault.id, apiManagedIdentity.id, 'KeyVaultCryptoUser')
+  scope: keyVault
+  properties: {
+    roleDefinitionId: keyVaultCryptoUserRoleDefinitionId
+    principalId: apiManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 resource keyVaultSecretsUserForWorker 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
   name: guid(keyVault.id, workerManagedIdentity.id, 'KeyVaultSecretsUser')
   scope: keyVault
   properties: {
     roleDefinitionId: keyVaultSecretsUserRoleDefinitionId
+    principalId: workerManagedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource keyVaultCryptoUserForWorker 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (enableWorkloadIdentityRbac) {
+  name: guid(keyVault.id, workerManagedIdentity.id, 'KeyVaultCryptoUser')
+  scope: keyVault
+  properties: {
+    roleDefinitionId: keyVaultCryptoUserRoleDefinitionId
     principalId: workerManagedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }

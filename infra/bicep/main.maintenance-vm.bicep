@@ -18,6 +18,9 @@ param nwResourceGroup string
 @description('VNETの名称')
 param vnetName string
 
+@description('Managed Identity のリソースグループ名')
+param managedIdentityResourceGroupName string
+
 @description('ロック')
 param lockKind string = 'CanNotDelete'
 
@@ -76,6 +79,11 @@ var maintOsDisk = union(maintVmOsDisk, {
   name: 'disk-${maintVmName}'
 })
 
+resource migrationManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  scope: resourceGroup(managedIdentityResourceGroupName)
+  name: 'mi-${environmentName}-${systemName}-migration'
+}
+
 resource nic 'Microsoft.Network/networkInterfaces@2024-07-01' = {
   name: maintNicName
   location: location
@@ -100,7 +108,10 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-11-01' = {
   location: location
   tags: modulesTags
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${migrationManagedIdentity.id}': {}
+    }
   }
   properties: {
     hardwareProfile: {

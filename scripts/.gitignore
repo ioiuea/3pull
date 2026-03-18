@@ -1,2 +1,3 @@
 init/agicController/deploy.sh
 init/kedaController/deploy.sh
+init/sql/param.conf

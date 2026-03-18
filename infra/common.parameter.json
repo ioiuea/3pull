@@ -18,8 +18,9 @@
     "keyVault": true,
     "serviceBus": true,
     "storage": true,
-    "postgresDatabase": true,
+    "sqlDatabase": true,
     "maintenanceVm": true,
+    "postgresDatabase": false,
     "cosmosDatabase": false,
     "redis": false
   },
@@ -50,6 +51,14 @@
     "userPoolLabel": "user",
     "podCidr": "10.189.0.0/17",
     "serviceCidr": "10.47.0.0/24"
+  },
+  "sqlDatabase": {
+    "skuTier": "Basic",
+    "skuName": "Basic",
+    "maxSizeGb": 2,
+    "zoneRedundant": false,
+    "entraAdminLogin": "",
+    "entraAdminObjectId": ""
   },
   "postgres": {
     "skuTier": "Burstable",
