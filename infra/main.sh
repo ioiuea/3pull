@@ -83,6 +83,9 @@ aks_config_file="$infra_root/config/aks.json"
 aks_runtime_config_file="$aks_config_file"
 aks_script="$infra_root/scripts/generate-aks-params.py"
 aks_meta_file="$params_dir/aks-meta.json"
+aks_rbac_config_file="$infra_root/config/aks-rbac.json"
+aks_rbac_script="$infra_root/scripts/generate-aks-rbac-params.py"
+aks_rbac_meta_file="$params_dir/aks-rbac-meta.json"
 
 # Workload Identity 用 Federated Credential
 federated_credential_config_file="$infra_root/config/federated-credential.json"
@@ -449,6 +452,7 @@ PY
   SELECTION_FILE="$vm_size_selection_file" \
   OUT_AKS_CONFIG_FILE="$params_dir/aks-runtime-config.json" \
   OUT_MAINT_CONFIG_FILE="$maintenance_vm_runtime_config_file" \
+  MAINT_VM_ADMIN_LOGIN="${MAINT_VM_ADMIN_LOGIN:-}" \
   python - <<'PY'
 import json
 import os
@@ -457,10 +461,13 @@ from pathlib import Path
 aks_config = json.loads(Path(os.environ["AKS_CONFIG_FILE"]).read_text(encoding="utf-8"))
 maint_config = json.loads(Path(os.environ["MAINT_CONFIG_FILE"]).read_text(encoding="utf-8"))
 selection = json.loads(Path(os.environ["SELECTION_FILE"]).read_text(encoding="utf-8"))
+maint_vm_admin_login = str(os.environ.get("MAINT_VM_ADMIN_LOGIN", "")).strip()
 
 aks_config["userPoolVmSize"] = str(selection.get("userPoolVmSize", "")).strip()
 aks_config["agentPoolVmSize"] = str(selection.get("agentPoolVmSize", "")).strip()
 maint_config["maintVmSize"] = str(selection.get("maintVmSize", "")).strip()
+if maint_vm_admin_login:
+    maint_config["maintVmAdminUsername"] = maint_vm_admin_login
 
 Path(os.environ["OUT_AKS_CONFIG_FILE"]).write_text(
     json.dumps(aks_config, ensure_ascii=False, indent=2) + "\n",
@@ -1165,6 +1172,30 @@ deploy_group_if_enabled \
   "$aks_resource_group_name" \
   "$aks_params_file" \
   "Skip AKS (resourceToggles.aks=false)"
+
+# -----------------------------------------------------------------------------
+# AKS Azure RBAC
+# -----------------------------------------------------------------------------
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$aks_rbac_config_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
+AKS_META_FILE="$aks_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$aks_rbac_meta_file" \
+"$aks_rbac_script"
+
+aks_rbac_deploy="$(meta_bool "$aks_rbac_meta_file" "deploy")"
+
+aks_rbac_params_file="$(meta_get "$aks_rbac_meta_file" "paramsFile")"
+
+deploy_group_if_enabled \
+  "$aks_rbac_deploy" \
+  "Deploy AKS Azure RBAC" \
+  "aks-rbac" \
+  "main-service-aks-rbac-${timestamp}" \
+  "$aks_resource_group_name" \
+  "$aks_rbac_params_file" \
+  "Skip AKS Azure RBAC (resourceToggles.aks=false or required managed identities not found)"
 
 # -----------------------------------------------------------------------------
 # Federated Credential (AKS 関連)

@@ -94,6 +94,8 @@
 ## VM本体の構成
 
 - migration 用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-migration`）を VM に割り当てる。
+- AKS 日常運用用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-aks-operator`）を VM に割り当てる。
+- AKS 高権限運用用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-aks-admin`）を VM に割り当てる。
 - ログインするアカウントに、本VMに対して以下どちらかの権限が付与されていること。
   - 仮想マシン管理者ログイン
   - 仮想マシンユーザーログイン
@@ -101,7 +103,10 @@
 補足:
 
 - migration 用 User Assigned Managed Identity は Azure SQL bootstrap / Alembic 実行用の principal として利用します。
+- aks-operator 用 User Assigned Managed Identity は AKS の kubeconfig 取得、日常の `kubectl`、アプリ namespace の `helm` 実行用 principal として利用します。
+- aks-admin 用 User Assigned Managed Identity は AGIC / KEDA 導入や緊急時の cluster-wide 操作用 principal として利用します。
 - runtime 用の API / worker / schedulers Managed Identity は maint-vm には割り当てません。
+- maint-vm の SystemAssigned は利用しません。
 
 ## ネットワーク
 
@@ -162,12 +167,69 @@ az ssh vm -n vm-[common.environmentName]-[common.systemName]-maint -g rg-[common
 - API / worker / schedulers に DDL 権限を持たせない
 - Private Endpoint 経由で Azure SQL へ到達できる管理経路を maint-vm に集約する
 - migration 実行主体を固定し、監査・切り分けをしやすくする
-- VM の identity は migration 用 principal に絞り、責務を明確にする
+- VM の identity は DB 用 1 つと AKS 用 2 つの計 3 principal に限定し、責務を明確にする
+
+# AKS 運用実行方針
+
+## 位置づけ
+
+- maint-vm は AKS への運用アクセス起点とする。
+- 個人アカウントではなく、AKS 用 Managed Identity を使って `kubectl` / `helm` を実行する。
+- DB 運用 principal と AKS 運用 principal は分離する。
+- AKS は日常運用用 (`aks-operator`) と高権限運用用 (`aks-admin`) を分離する。
+
+## 利用する Managed Identity
+
+| 用途 | Managed Identity | 備考 |
+| --- | --- | --- |
+| AKS 日常運用 | `mi-[common.environmentName]-[common.systemName]-aks-operator` | User Assigned Managed Identity |
+| AKS 高権限運用 | `mi-[common.environmentName]-[common.systemName]-aks-admin` | User Assigned Managed Identity |
+
+## 想定する実行内容
+
+`aks-operator`:
+
+- `az aks get-credentials`
+- `kubectl get|describe|logs`
+- app namespace の `kubectl apply`
+- app namespace の `helm upgrade --install`
+
+`aks-admin`:
+
+- AGIC / KEDA の初期導入・更新
+- CRD / ClusterRole / ClusterRoleBinding を含む変更
+- namespace 作成や cluster-wide 設定変更
+- 緊急時の高権限 `kubectl` 操作
+
+## 実行時の前提
+
+- VM に複数 UAMI を割り当てるため、Azure CLI ログイン時は `--client-id` を付けて利用する principal を明示する。
+- AKS は Private Cluster のため、maint-vm から AKS Private FQDN へ名前解決・疎通できることを前提とする。
+- AAD/Azure RBAC ベースの kubeconfig を利用する。
+
+例:
+
+```shell
+az login --identity --client-id <AKS_OPERATOR_MANAGED_IDENTITY_CLIENT_ID>
+az aks get-credentials \
+  --resource-group rg-[common.environmentName]-[common.systemName]-svc \
+  --name aks-[common.environmentName]-[common.systemName] \
+  --overwrite-existing
+```
+
+## 設計意図
+
+- `migration` MI に AKS 権限を持たせず、DB と Kubernetes の権限境界を分ける
+- 日常の調査・アプリ配備は `aks-operator`、初期構築・緊急作業は `aks-admin` に分離する
+- AGIC / KEDA のような cluster-wide 操作を `aks-admin` に閉じ込める
+- 緊急時の `kubectl` 操作も、個人権限ではなく監査しやすい高権限 principal に寄せる
+- runtime 用 Managed Identity を運用端末に露出させない
 
 関連:
 
 - Azure SQL Database: [azure-sql-database.md](./azure-sql-database.md)
 - Managed Identity: [managed-id.md](./managed-id.md)
+- AKS: [aks.md](./aks.md)
 
 # パッケージインストール手順
 
@@ -195,3 +257,15 @@ Signed-by: /etc/apt/keyrings/microsoft.gpg" | sudo tee /etc/apt/sources.list.d/a
 sudo apt-get update
 sudo apt-get install azure-cli
 ```
+
+## AKS 運用ツール
+
+AKS 運用を行う場合は、少なくとも以下を maint-vm へ導入します。
+
+- `kubectl`
+- `helm`
+- `kubelogin`
+
+補足:
+
+- `kubelogin` は Azure RBAC/AAD ベースの kubeconfig を `kubectl` から利用するために必要です。

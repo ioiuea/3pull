@@ -11,3 +11,5 @@ logs/*
 # Python bytecode caches
 scripts/__pycache__
 scripts/**/*.pyc
+
+common.parameter.test.json

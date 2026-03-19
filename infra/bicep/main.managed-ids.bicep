@@ -47,6 +47,18 @@ resource migrationManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentit
   tags: modulesTags
 }
 
+resource aksOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-aks-operator'
+  location: location
+  tags: modulesTags
+}
+
+resource aksAdminManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-aks-admin'
+  location: location
+  tags: modulesTags
+}
+
 resource kedaOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'mi-${environmentName}-${systemName}-keda-operator'
   location: location
@@ -69,6 +81,8 @@ output apiManagedIdentityName string = apiManagedIdentity.name
 output workerManagedIdentityName string = workerManagedIdentity.name
 output schedulersManagedIdentityName string = schedulersManagedIdentity.name
 output migrationManagedIdentityName string = migrationManagedIdentity.name
+output aksOperatorManagedIdentityName string = aksOperatorManagedIdentity.name
+output aksAdminManagedIdentityName string = aksAdminManagedIdentity.name
 output kedaOperatorManagedIdentityName string = kedaOperatorManagedIdentity.name
 output agicStandardManagedIdentityName string = agicStandardManagedIdentity.name
 output agicLowLatencyManagedIdentityName string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.name : ''

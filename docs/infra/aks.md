@@ -47,6 +47,38 @@
 | --- | --- | --- |
 | ACR Pull 権限 | `cr[env][system]` へ `AcrPull` | `Microsoft.Authorization/roleAssignments` |
 
+## Azure RBAC
+
+`aadProfile.enableAzureRBAC=true` を前提に、AKS への運用アクセスも Azure RBAC で制御します。
+
+| 項目 | 設定値 | Bicepプロパティ名 |
+| --- | --- | --- |
+| マネージド AAD | `true` | `properties.aadProfile.managed` |
+| Azure RBAC | `true` | `properties.aadProfile.enableAzureRBAC` |
+
+## maint-vm からの AKS 運用アクセス
+
+maint-vm に割り当てた `mi-[common.environmentName]-[common.systemName]-aks-operator` と `mi-[common.environmentName]-[common.systemName]-aks-admin` に対し、用途ごとに以下を付与します。
+
+| Managed Identity | ロール | スコープ | 用途 |
+| --- | --- | --- | --- |
+| `mi-[env]-[system]-aks-operator` | `Azure Kubernetes Service Cluster User Role` | AKS | `az aks get-credentials` 実行 |
+| `mi-[env]-[system]-aks-operator` | `Azure Kubernetes Service RBAC Reader` | AKS | cluster-wide な参照系 `kubectl` 実行 |
+| `mi-[env]-[system]-aks-operator` | `Azure Kubernetes Service RBAC Writer` | AKS | アプリ配備や定常運用の更新系 `kubectl` / `helm` 実行 |
+| `mi-[env]-[system]-aks-admin` | `Azure Kubernetes Service RBAC Cluster Admin` | AKS | 初期構築・緊急対応の高権限作業 |
+
+補足:
+
+- `aks-operator` は日常運用用であり、`RBAC Reader` と `RBAC Writer` を AKS スコープで付与します。
+- namespace は Bicep で事前作成せず、Helm 実行時の `--create-namespace` に任せます。
+- `aks-admin` は `RBAC Cluster Admin` により cluster 全体の変更が可能なため、初期構築・AGIC/KEDA 導入・緊急対応に限定して使います。
+- `RBAC Cluster Admin` には `listClusterUserCredential/action` が含まれるため、`aks-admin` に `Cluster User Role` は別途付与しません。
+- 付与スコープは AKS リソースに限定し、node resource group には直接ロール付与しません。
+- 現行実装では app namespace は `infra/config/federated-credential.json` の `appNamespace` で管理しており、値は `application` です。
+- backend / frontend Helm chart の namespace は `systemName` から自動生成せず、`Release.Namespace` をそのまま使います。
+- アプリ本体は `application` namespace、AGIC は `ingress` namespace、KEDA は `keda` namespace を固定値として扱います。
+- Helm 実行引数と federated credential はこの固定値に揃える前提です。
+
 ## Workload Identity 構成責務（現実装）
 
 | 対象 | ServiceAccount 作成 | annotation 設定 | federated credential 作成 |
