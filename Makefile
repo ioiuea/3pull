@@ -124,6 +124,7 @@ docker-build-web:
 	docker build -f docker/web.Dockerfile \
 		--build-arg VITE_BACKEND_BASE_URL="$(VITE_BACKEND_BASE_URL)" \
 		--build-arg VITE_PRODUCT_NAME="$(VITE_PRODUCT_NAME)" \
+		--build-arg VITE_ENABLE_EMAIL_AUTH="$(if $(VITE_ENABLE_EMAIL_AUTH),$(VITE_ENABLE_EMAIL_AUTH),true)" \
 		-t $(DOCKER_WEB_IMAGE) .
 
 docker-build: docker-build-api docker-build-worker docker-build-schedulers docker-build-web

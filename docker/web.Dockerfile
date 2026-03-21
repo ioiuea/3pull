@@ -30,6 +30,7 @@ ENV PATH=${PNPM_HOME}:${PATH}
 
 ARG VITE_BACKEND_BASE_URL
 ARG VITE_PRODUCT_NAME
+ARG VITE_ENABLE_EMAIL_AUTH=true
 
 WORKDIR /workspace/apps/frontend
 
@@ -41,6 +42,7 @@ COPY apps/frontend ./
 # `react-router.config.ts` は `ssr: false` のため、静的出力は `build/client` が正本。
 RUN VITE_BACKEND_BASE_URL="${VITE_BACKEND_BASE_URL}" \
     VITE_PRODUCT_NAME="${VITE_PRODUCT_NAME}" \
+    VITE_ENABLE_EMAIL_AUTH="${VITE_ENABLE_EMAIL_AUTH}" \
     test -n "${VITE_BACKEND_BASE_URL}" && \
     test -n "${VITE_PRODUCT_NAME}" && \
     pnpm run build

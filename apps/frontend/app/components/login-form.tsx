@@ -9,6 +9,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '~/components/ui
 import { Input } from '~/components/ui/input';
 import { type AuthMe, backendFetch } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
+import { ENABLE_EMAIL_AUTH } from '~/constants/auth';
 import { PRODUCT_NAME } from '~/constants/product';
 
 type EmailLoginResponse = {
@@ -89,7 +90,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
             {PRODUCT_NAME}
           </p>
           <CardTitle className="text-xl">{t('login.title')}</CardTitle>
-          <CardDescription>{t('login.description')}</CardDescription>
+          <CardDescription>
+            {ENABLE_EMAIL_AUTH ? t('login.description') : t('login.descriptionEntraOnly')}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={onSubmit}>
@@ -100,44 +103,54 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
                   {t('login.entra')}
                 </Button>
               </Field>
-              <Field>
-                <FieldLabel htmlFor="email">{t('common.email')}</FieldLabel>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder={t('common.emailPlaceholder')}
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="password">{t('common.password')}</FieldLabel>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-                <FieldDescription>
-                  <Link to={`/${currentLanguage}/password-reset`}>{t('login.forgotPassword')}</Link>
-                </FieldDescription>
-              </Field>
+              {ENABLE_EMAIL_AUTH && (
+                <>
+                  <Field>
+                    <FieldLabel htmlFor="email">{t('common.email')}</FieldLabel>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder={t('common.emailPlaceholder')}
+                      required
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="password">{t('common.password')}</FieldLabel>
+                    <Input
+                      id="password"
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                    <FieldDescription>
+                      <Link to={`/${currentLanguage}/password-reset`}>
+                        {t('login.forgotPassword')}
+                      </Link>
+                    </FieldDescription>
+                  </Field>
+                </>
+              )}
               {errorMessage && (
                 <FieldDescription className="text-destructive">{errorMessage}</FieldDescription>
               )}
-              <Field>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? t('login.signingIn') : t('login.submit')}
-                </Button>
-                <FieldDescription className="text-center">
-                  {t('login.noAccount')}{' '}
-                  <Link to={`/${currentLanguage}/signup?return_to=${encodeURIComponent(returnTo)}`}>
-                    {t('login.goSignup')}
-                  </Link>
-                </FieldDescription>
-              </Field>
+              {ENABLE_EMAIL_AUTH && (
+                <Field>
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? t('login.signingIn') : t('login.submit')}
+                  </Button>
+                  <FieldDescription className="text-center">
+                    {t('login.noAccount')}{' '}
+                    <Link
+                      to={`/${currentLanguage}/signup?return_to=${encodeURIComponent(returnTo)}`}
+                    >
+                      {t('login.goSignup')}
+                    </Link>
+                  </FieldDescription>
+                </Field>
+              )}
             </FieldGroup>
           </form>
         </CardContent>
