@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session
 from app.api.schemas.jobs import AsyncJobListResponse, AsyncJobResponse
+from app.core.security.session import require_session_user
 from app.models.jobs.async_job import AsyncJobType
 from app.models.jobs.async_job_artifact import AsyncJobArtifact
 from app.repositories.jobs import (
@@ -17,7 +18,7 @@ from app.repositories.jobs import (
     list_async_jobs_by_user,
 )
 
-from .helpers import require_session_user, router, to_job_response
+from .helpers import router, to_job_response
 
 
 @router.get("", response_model=AsyncJobListResponse)

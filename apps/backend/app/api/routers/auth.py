@@ -24,7 +24,6 @@ from app.adapters.idp.entra import (
     validate_entra_settings,
 )
 from app.adapters.sql.session import get_session
-from app.api.dependencies.rate_limit import require_rate_limit
 from app.api.schemas.auth import (
     EmailLoginRequest,
     EmailLoginResponse,
@@ -47,6 +46,14 @@ from app.core.datetime import ensure_utc_datetime
 from app.core.logging.config import get_logger
 from app.core.security import RateLimitPolicyKey, RateLimitService
 from app.core.security.client_ip import resolve_client_ips
+from app.core.security.rate_limit.fastapi import require_rate_limit
+from app.core.security.session import (
+    raise_session_auth_http_error,
+    raise_session_missing_http_error,
+    require_session_context,
+    require_session_user,
+    resolve_session_cookie_token,
+)
 from app.core.security.token_cipher import decrypt_token, encrypt_token
 from app.core.settings import get_settings
 from app.models.audit.auth_audit_log import AuthAuditEventType
@@ -72,11 +79,9 @@ from app.services.auth.auth_account_service import (
 )
 from app.services.auth.session_auth_service import (
     SessionAuthError,
-    SessionAuthErrorCode,
     issue_user_session,
     refresh_user_session,
     resolve_active_session_by_token,
-    resolve_user_by_session_token,
     revoke_session_by_token,
 )
 
@@ -376,25 +381,6 @@ def _raise_auth_error(error: AuthConflictError) -> NoReturn:
     )
 
 
-def _raise_session_error(error: SessionAuthError) -> NoReturn:
-    """
-    セッションエラーを HTTP エラーへ変換して送出する.
-
-    Args:
-        error: セッション認証エラー
-    """
-    # セッション関連の失敗は基本的に未認証扱い（401）。
-    status_code_map: dict[SessionAuthErrorCode, int] = {
-        SessionAuthErrorCode.SESSION_INVALID: status.HTTP_401_UNAUTHORIZED,
-        SessionAuthErrorCode.SESSION_EXPIRED: status.HTTP_401_UNAUTHORIZED,
-        SessionAuthErrorCode.USER_NOT_FOUND: status.HTTP_401_UNAUTHORIZED,
-    }
-    raise HTTPException(
-        status_code=status_code_map.get(error.code, status.HTTP_401_UNAUTHORIZED),
-        detail={"code": error.code.value, "message": error.message},
-    )
-
-
 def _raise_token_crypto_error(error: RuntimeError) -> NoReturn:
     """
     トークン暗号化/復号エラーを HTTP エラーへ変換して送出する.
@@ -406,37 +392,6 @@ def _raise_token_crypto_error(error: RuntimeError) -> NoReturn:
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail={"code": "entra_token_crypto_error", "message": str(error)},
     ) from error
-
-
-async def _require_session_user(
-    request: Request,
-    session: Session,
-) -> tuple[User, str]:
-    """
-    セッション Cookie から現在ユーザーを解決する.
-
-    Args:
-        request: 受信リクエスト
-        session: DB セッション
-
-    Returns:
-        tuple[User, str]: 現在ユーザーと生セッショントークン
-    """
-    # 設定済みのCookie名でセッショントークンを取得する。
-    cookie_name = get_settings().session_cookie_name
-    raw_token = request.cookies.get(cookie_name)
-    if not raw_token:
-        # Cookie 自体が無い場合は未ログイン。
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "session_missing", "message": "Session cookie is missing"},
-        )
-    try:
-        # トークンからユーザーを解決（期限切れ/無効は例外）。
-        user = await resolve_user_by_session_token(session, raw_token=raw_token)
-    except SessionAuthError as error:
-        _raise_session_error(error)
-    return user, raw_token
 
 
 @router.post("/email/signup", response_model=EmailSignupResponse)
@@ -614,14 +569,16 @@ async def post_password_change(
 ) -> PasswordChangeResponse:
     """現在パスワード確認つきでパスワード変更を行う."""
     # セッションから現在ユーザーを解決する（未ログインなら 401）。
-    user, raw_token = await _require_session_user(request, session)
+    auth_context = await require_session_context(request, session)
+    user = auth_context.user
+    raw_token = auth_context.raw_token
     try:
         current_session = await resolve_active_session_by_token(
             session,
             raw_token=raw_token,
         )
     except SessionAuthError as error:
-        _raise_session_error(error)
+        raise_session_auth_http_error(error)
 
     try:
         # 現在パスワードを検証し、新パスワードへ更新する。
@@ -926,7 +883,7 @@ async def get_auth_me(
 ) -> UserMeResponse:
     """現在ログイン中のユーザー情報を返す."""
     # セッションからユーザーを引いて返すだけの読み取りAPI。
-    user, _ = await _require_session_user(request, session)
+    user = await require_session_user(request, session)
     return _to_user_me_response(user)
 
 
@@ -938,7 +895,9 @@ async def get_auth_entra_profile(
     """
     Entra 認証ユーザー向けに Graph API からプロフィールを返す.
     """
-    user, raw_token = await _require_session_user(request, session)
+    auth_context = await require_session_context(request, session)
+    user = auth_context.user
+    raw_token = auth_context.raw_token
     if str(user.user_type) != UserType.INTERNAL.value:
         await _record_auth_audit(
             session,
@@ -972,7 +931,7 @@ async def get_auth_entra_profile(
             reason_code=error.code.value,
             metadata={"path": "/backend/auth/entra/profile", "method": "GET"},
         )
-        _raise_session_error(error)
+        raise_session_auth_http_error(error)
 
     try:
         access_token = decrypt_token(current_session.entra_access_token)
@@ -1083,9 +1042,8 @@ async def post_auth_logout(
     session: Session = Depends(get_session),
 ) -> LogoutResponse:
     """現在セッションを失効してログアウトする."""
-    cookie_name = get_settings().session_cookie_name
     # リクエストCookieから現在セッションを取得する。
-    raw_token = request.cookies.get(cookie_name)
+    raw_token = resolve_session_cookie_token(request)
     resolved_user_id: str | None = None
     resolved_session_id: str | None = None
     if raw_token:
@@ -1147,9 +1105,8 @@ async def post_auth_session_refresh(
     session: Session = Depends(get_session),
 ) -> SessionRefreshResponse:
     """現在セッションをローテーションして新しい Cookie を発行する."""
-    cookie_name = get_settings().session_cookie_name
     # 現在セッションCookieを取得する。
-    raw_token = request.cookies.get(cookie_name)
+    raw_token = resolve_session_cookie_token(request)
     resolved_user_id: str | None = None
     resolved_session_id: str | None = None
     if not raw_token:
@@ -1161,10 +1118,7 @@ async def post_auth_session_refresh(
             reason_code="session_missing",
             metadata={"path": "/backend/auth/session/refresh", "method": "POST"},
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "session_missing", "message": "Session cookie is missing"},
-        )
+        raise_session_missing_http_error()
     try:
         current_session = await resolve_active_session_by_token(
             session,
@@ -1198,7 +1152,7 @@ async def post_auth_session_refresh(
             reason_code=error.code.value,
             metadata={"path": "/backend/auth/session/refresh", "method": "POST"},
         )
-        _raise_session_error(error)
+        raise_session_auth_http_error(error)
 
     # 新しいセッションCookieへ差し替える。
     _set_session_cookie(response, new_token)

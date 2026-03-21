@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session, get_session_factory
 from app.api.schemas.jobs import AsyncJobResponse
+from app.core.security.session import require_session_user
 from app.core.settings import get_settings
 from app.models.jobs.async_job import AsyncJobType
 from app.repositories.jobs import create_async_job
@@ -16,7 +17,6 @@ from app.services.jobs import dispatch_async_job
 from ..helpers import (
     enforce_async_job_concurrency,
     ensure_async_jobs_enabled,
-    require_session_user,
     resolve_async_job_expiration,
     router,
     to_job_response,

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session
 from app.api.schemas.jobs import AsyncJobResponse
+from app.core.security.session import require_session_user
 from app.models.jobs.async_job import AsyncJobStatus
 from app.repositories.jobs import (
     get_async_job_by_id,
@@ -17,7 +18,7 @@ from app.repositories.jobs import (
     update_async_job_status,
 )
 
-from .helpers import require_session_user, router, to_job_response
+from .helpers import router, to_job_response
 
 
 @router.post("/{job_id}/cancel", response_model=AsyncJobResponse)

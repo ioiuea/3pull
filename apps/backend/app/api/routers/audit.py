@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session
-from app.api.routers.jobs.helpers import require_session_user
 from app.api.schemas.audit import AuthAuditLogItemResponse, AuthAuditLogListResponse
+from app.core.security.session import require_session_user
 from app.models.audit.auth_audit_log import AuthAuditEventType, AuthAuditLog
 from app.repositories.audit.auth_audit_log_repository import list_auth_audit_logs
 

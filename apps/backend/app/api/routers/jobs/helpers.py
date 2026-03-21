@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
-from typing import NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -14,8 +13,8 @@ from sqlalchemy.orm import Session
 from app.adapters.sql.session import get_session
 from app.adapters.storage import download_blob_bytes
 from app.api.schemas.jobs import AsyncJobArtifactResponse, AsyncJobResponse
+from app.core.security.session import require_session_user
 from app.core.settings import get_settings
-from app.models.auth.user import User
 from app.models.jobs.async_job import AsyncJob, AsyncJobStatus, AsyncJobType
 from app.models.jobs.async_job_artifact import AsyncJobArtifact, AsyncJobArtifactType
 from app.repositories.jobs import (
@@ -24,11 +23,6 @@ from app.repositories.jobs import (
     get_async_job_artifact_by_id,
     get_async_job_by_id,
     list_async_job_artifacts_by_job,
-)
-from app.services.auth.session_auth_service import (
-    SessionAuthError,
-    SessionAuthErrorCode,
-    resolve_user_by_session_token,
 )
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -100,38 +94,6 @@ def resolve_async_job_expiration(
         settings.async_job_retention_max_days,
     )
     return datetime.now(timezone.utc) + timedelta(days=effective_retention_days)
-
-
-def raise_session_error(error: SessionAuthError) -> NoReturn:
-    """セッション解決エラーを HTTP 例外へ変換する."""
-    # 認証サービス側のドメインエラーを、API 用の HTTP 応答へ寄せる変換点。
-    status_code_map: dict[SessionAuthErrorCode, int] = {
-        SessionAuthErrorCode.SESSION_INVALID: status.HTTP_401_UNAUTHORIZED,
-        SessionAuthErrorCode.SESSION_EXPIRED: status.HTTP_401_UNAUTHORIZED,
-        SessionAuthErrorCode.USER_NOT_FOUND: status.HTTP_401_UNAUTHORIZED,
-    }
-    raise HTTPException(
-        status_code=status_code_map.get(error.code, status.HTTP_401_UNAUTHORIZED),
-        detail={"code": error.code.value, "message": error.message},
-    )
-
-
-async def require_session_user(
-    request: Request,
-    session: Session,
-) -> User:
-    """Cookie セッションからログインユーザーを解決する."""
-    cookie_name = get_settings().session_cookie_name
-    raw_token = request.cookies.get(cookie_name)
-    if not raw_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "session_missing", "message": "Session cookie is missing"},
-        )
-    try:
-        return await resolve_user_by_session_token(session, raw_token=raw_token)
-    except SessionAuthError as error:
-        raise_session_error(error)
 
 
 def to_artifact_response(artifact: AsyncJobArtifact) -> AsyncJobArtifactResponse:

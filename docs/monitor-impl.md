@@ -4,7 +4,7 @@
 
 - 本ドキュメントは、backend アプリケーションの監視実装を `Application Insights` 前提で整理する。
 - rate limit に限定しない backend 全体の監視基盤として扱う。
-- `docs/apps/auth-rate-limit.md` から切り出した内容を含み、今後の監視実装の正本とする。
+- `apps/backend/README.md` の auth rate limit 仕様から切り出した内容を含み、今後の監視実装の正本とする。
 
 ## 2. 背景
 

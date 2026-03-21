@@ -82,6 +82,7 @@ apps/backend
     │       ├── health.py
     │       └── jobs.py
     ├── adapters/                          # 外部サービス接続の抽象化層
+    │   ├── cache/                         # Redis client 生成
     │   ├── idp/                           # IdP 連携
     │   ├── network/                       # TCP 到達性確認などの疎通処理
     │   ├── queue/                         # Azure Service Bus 送受信
@@ -90,7 +91,17 @@ apps/backend
     ├── core/                              # 横断基盤層
     │   ├── lifecycle/                     # startup / shutdown 処理
     │   ├── logging/                       # structlog とアクセスログ設定
-    │   ├── security/                      # password / CSRF / token 暗号化など
+    │   ├── security/                      # password / CSRF / API protect / token 暗号化
+    │   │   ├── client_ip.py               # trusted proxy 前提の client IP 解決
+    │   │   ├── csrf.py                    # Origin/Referer ベース CSRF 保護
+    │   │   ├── password.py                # password hash / verify
+    │   │   ├── rate_limit/                # Redis ベース IP rate limit
+    │   │   │   ├── models.py              # policy / decision などの型
+    │   │   │   ├── store.py               # Redis 操作
+    │   │   │   ├── service.py             # rate limit 判定
+    │   │   │   └── fastapi.py             # FastAPI guard
+    │   │   ├── session.py                 # session cookie ベース API protect
+    │   │   └── token_cipher.py            # token 暗号化/復号
     │   ├── settings/                      # AppSettings と環境変数解決
     │   └── datetime.py                    # UTC 正規化など共通 utility
     ├── models/                            # SQLAlchemy ORM テーブル定義
@@ -125,7 +136,7 @@ apps/backend
 - `services/`: ユースケース、複数 repository を束ねる業務ロジック
 - `repositories/`: SQLAlchemy Session を使った CRUD / query
 - `models/`: SQLAlchemy ORM テーブル定義
-- `adapters/`: Azure SQL / Service Bus / Blob / Entra などの外部接続
+- `adapters/`: Redis / Azure SQL / Service Bus / Blob / Entra などの外部接続
 - `workers/`: 非同期ジョブの実行本体
 - `schedulers/`: cleanup 系 CLI
 - `core/`: 設定、ログ、セキュリティ、共通 utility
@@ -178,10 +189,392 @@ apps/backend
 - Entra の access token / refresh token は暗号化して保存
 - `/backend/auth/entra/profile` は internal ユーザーのみ許可
 
-関連ドキュメント:
+### API Security
 
-- [docs/apps/auth-rate-limit.md](../../docs/apps/auth-rate-limit.md)
-- [docs/api-security.md](../../docs/api-security.md)
+設計原則:
+
+1. セキュリティポリシーは `app/core/security` に置く。
+2. 認証ドメイン本体は `app/services/auth` に置く。
+3. router は HTTP 入出力と `Depends(...)` / guard 呼び出しの接着に限定する。
+4. `app/api/dependencies` は使わない。
+5. 同じ保護手段を複数 router で使う場合、router helper に重複実装しない。
+
+レイヤ責務:
+
+- `app/core/security`
+  - API 保護の共通ルール
+  - FastAPI から使う guard
+  - client IP 解決
+  - session cookie ベース API protect
+  - rate limit policy 適用
+- `app/services/auth`
+  - 認証/セッションのドメイン処理
+  - DB を使った user/session 解決
+  - 認証失敗をドメインエラーとして返す
+- `app/api/routers`
+  - route 定義
+  - request/response schema の接着
+  - `Depends(...)` の適用
+  - guard 通過後の業務処理
+
+実装構成:
+
+```text
+apps/backend/app/
+  core/
+    security/
+      client_ip.py
+      csrf.py
+      rate_limit/
+        __init__.py
+        models.py
+        store.py
+        service.py
+        fastapi.py
+      session.py
+  services/
+    auth/
+      session_auth_service.py
+  api/
+    routers/
+      auth.py
+      health.py
+      audit.py
+      jobs/
+        helpers.py
+        query.py
+        commands.py
+        create/
+```
+
+#### Rate Limit
+
+対象実装:
+
+- `app/core/security/rate_limit/models.py`
+- `app/core/security/rate_limit/store.py`
+- `app/core/security/rate_limit/service.py`
+- `app/core/security/rate_limit/fastapi.py`
+- `app/api/routers/auth.py`
+
+モジュール責務:
+
+- `models.py`
+  - `RateLimitPolicyKey`、`RateLimitPolicy`、`RateLimitDecision` などの型を持つ。
+- `store.py`
+  - Redis への読み書きだけを担当する。
+  - request counter / failure counter / block key の更新と TTL 管理を行う。
+- `service.py`
+  - settings から policy を構築する。
+  - request/failure を評価し、`RateLimitDecision` を返す。
+- `fastapi.py`
+  - `Request` から client IP を解決する。
+  - `RateLimitService` を呼ぶ。
+  - fail-open / observe / enforce を HTTP 応答へ反映する。
+
+router からの利用:
+
+```python
+from app.core.security.rate_limit.fastapi import require_rate_limit
+
+@router.post("/email/login")
+async def post_email_login(
+    ...,
+    _: None = Depends(require_rate_limit(RateLimitPolicyKey.EMAIL_LOGIN)),
+):
+    ...
+```
+
+処理フロー:
+
+```mermaid
+flowchart TD
+    A[Client Request] --> B[api/routers/auth.py]
+    B --> C[Depends(require_rate_limit(policy_key))]
+    C --> D[core/security/rate_limit/fastapi.py]
+    D --> E[resolve_client_ips]
+    D --> F[RateLimitService.evaluate_request]
+    F --> G[RateLimitRedisStore]
+    G --> H[(Redis)]
+    F --> I{blocked?}
+    I -- no --> J[router 本体を続行]
+    I -- observe --> J
+    I -- enforce --> K[HTTP 429]
+```
+
+処理順:
+
+1. router が `Depends(require_rate_limit(policy_key))` を定義する。
+2. `fastapi.py` が `Request` から `client IP` を解決する。
+3. `RateLimitService.evaluate_request(...)` が block key を確認する。
+4. block 中でなければ `store.py` が request counter を更新する。
+5. 閾値超過時は block key を設定し、`RateLimitDecision(blocked=True)` を返す。
+6. `observe` mode ではログのみ記録して request は通す。
+7. `enforce` mode では `HTTP 429` を返す。
+8. request 評価で block されなければ router 本体の処理へ進む。
+
+failure counter の扱い:
+
+```mermaid
+flowchart TD
+    A[router 本体で認証/検証失敗] --> B[_record_rate_limit_failure]
+    B --> C[RateLimitService.record_failure]
+    C --> D[RateLimitRedisStore]
+    D --> E[(Redis)]
+    C --> F{閾値超過?}
+    F -- no --> G[通常の失敗応答]
+    F -- yes --> H[block key を設定]
+```
+
+補足:
+
+- failure counter の更新は router 本体から明示的に呼ぶ。
+- どの API が failure counter を持つかは policy に依存する。
+- `app/api/dependencies` は削除済みであり、rate limit dependency は `core/security` に置く。
+- `store.py` は役割としては repository 相当だが、security モジュール専用の Redis store として `core/security` 内に置く。
+
+#### Session Protect
+
+対象実装:
+
+- `app/core/security/session.py`
+- `app/services/auth/session_auth_service.py`
+- `app/api/routers/auth.py`
+- `app/api/routers/health.py`
+- `app/api/routers/audit.py`
+- `app/api/routers/jobs/*`
+
+モジュール責務:
+
+- `session.py`
+  - cookie 名の解決
+  - raw session token の取得
+  - `SessionAuthError -> HTTP 401` 変換
+  - `require_session_context`
+  - `require_session_user`
+  - `require_authenticated_session`
+- `session_auth_service.py`
+  - session 発行
+  - session ローテーション
+  - session 失効
+  - raw token から有効 session / user を解決
+
+guard 一覧:
+
+- `require_session_context(request, session) -> AuthenticatedSessionContext`
+  - user と raw token の両方が必要な endpoint 用
+- `require_session_user(request, session) -> User`
+  - user だけ取れればよい endpoint 用
+- `require_authenticated_session(request, session) -> None`
+  - 認証済み確認だけでよい endpoint 用
+
+共通 guard を使う API:
+
+- `GET /backend/auth/me`
+- `GET /backend/auth/entra/profile`
+- `POST /backend/auth/password/change`
+- `GET /backend/health`
+- `GET /backend/audit/audit-logs`
+- `GET /backend/jobs`
+- `GET /backend/jobs/{job_id}`
+- `POST /backend/jobs/{job_id}/cancel`
+- `GET /backend/jobs/{job_id}/artifacts/{artifact_id}/download`
+- `POST /backend/jobs/auth-audit-export`
+- `POST /backend/jobs/sample-wait-blob`
+
+補足:
+
+- `POST /backend/auth/logout`
+- `POST /backend/auth/session/refresh`
+
+は session cookie を使うが、未認証時の扱いが通常 guard と異なるため、
+router 側で `resolve_session_cookie_token(...)` を直接使う。
+
+処理フロー:
+
+```mermaid
+flowchart TD
+    A[Client Request with Session Cookie] --> B[api/routers/*.py]
+    B --> C[require_session_user / require_session_context]
+    C --> D[core/security/session.py]
+    D --> E[request.cookies から raw token を取得]
+    D --> F[resolve_user_by_session_token]
+    F --> G[services/auth/session_auth_service.py]
+    G --> H[(auth.sessions / auth.users)]
+    F --> I{valid session?}
+    I -- no --> J[session.py が HTTP 401 に変換]
+    I -- yes --> K[User または Context を router へ返す]
+    K --> L[router 本体を続行]
+```
+
+処理順:
+
+1. router が `require_session_user(...)` または `require_session_context(...)` を呼ぶ。
+2. `session.py` が settings から cookie 名を解決し、raw token を取得する。
+3. raw token を `session_auth_service.py` に渡して user を解決する。
+4. service は DB 上の session / user を見て有効性を判定する。
+5. 無効・期限切れ・user 不在なら `SessionAuthError` を返す。
+6. `session.py` がそれを API 用の `401` に変換する。
+7. 成功時は `User` または `AuthenticatedSessionContext` を router に返す。
+8. router は取得した user/context を使って本体処理だけを続行する。
+
+error 応答:
+
+- session cookie 未設定
+  - `HTTP 401`
+  - `code: session_missing`
+- session invalid / expired / user not found
+  - `HTTP 401`
+  - `code` は `SessionAuthError.code` をそのまま使う
+
+logout / session refresh の特例:
+
+- `logout`
+  - cookie があれば失効を試みる
+  - 無効 token でもログアウト成功として扱う
+  - browser cookie は常に削除する
+- `session/refresh`
+  - cookie 未設定時は `session_missing` で `401`
+  - 有効 token なら session をローテーションし、新 cookie を発行する
+
+### Auth Rate Limit
+
+認証系 API に適用する IP ベース rate limit の仕様は、上記 `Rate Limit` のうち
+認証 API 向けの具体ポリシーを指します。
+
+目的:
+
+- ブルートフォース
+- パスワードリセット乱発
+- サインアップ乱発
+- OIDC callback の過剰試行
+
+を、`client IP + policy_key` 単位で制御する。
+
+対象 API:
+
+- `POST /backend/auth/email/signup`
+- `POST /backend/auth/email/login`
+- `POST /backend/auth/password/reset/request`
+- `POST /backend/auth/password/reset/confirm`
+- `GET /backend/auth/entra/login`
+- `GET /backend/auth/entra/callback`
+
+非対象:
+
+- `/backend/auth/me`
+- `/backend/auth/logout`
+- `/backend/auth/session/refresh`
+- jobs / audit / health などの認証以外 API
+
+基本方針:
+
+- 既存のアカウント単位ロックを置き換えず、補完する
+- 判定単位は `client IP + policy_key`
+- 共有ストアに `Azure Managed Redis` を使う
+- 複数 Pod 構成でも同一判定になるようにする
+- Redis 障害時は `fail-open`
+
+クライアント IP 解決:
+
+- `X-Forwarded-For` を常時信頼しない
+- `TRUST_PROXY_HEADERS=true` かつ `TRUSTED_PROXY_CIDRS` に一致する trusted proxy 配下でのみ forward header を採用する
+- それ以外は TCP peer address を `client IP` として扱う
+
+補足:
+
+- `TRUSTED_PROXY_CIDRS` は infra 側で Application Gateway サブネット CIDR から生成する
+
+policy 一覧:
+
+| API | policy_key |
+| --- | --- |
+| `POST /backend/auth/email/signup` | `email_signup` |
+| `POST /backend/auth/email/login` | `email_login` |
+| `POST /backend/auth/password/reset/request` | `password_reset_request` |
+| `POST /backend/auth/password/reset/confirm` | `password_reset_confirm` |
+| `GET /backend/auth/entra/login` | `entra_login` |
+| `GET /backend/auth/entra/callback` | `entra_callback` |
+
+判定ルール:
+
+- request 時
+  - block key を確認する
+  - request counter を sliding window で評価する
+  - 閾値超過時は block key を設定する
+- response/失敗時
+  - 必要な API では failure counter を更新する
+
+Redis キー設計:
+
+- namespace
+  - `auth:ratelimit`
+- request counter
+  - `auth:ratelimit:counter:<policy_key>:req:<client_ip>`
+- failure counter
+  - `auth:ratelimit:counter:<policy_key>:fail:<client_ip>`
+- block
+  - `auth:ratelimit:block:<policy_key>:<client_ip>`
+
+例:
+
+- `auth:ratelimit:counter:email_login:req:203.0.113.10`
+- `auth:ratelimit:counter:email_login:fail:203.0.113.10`
+- `auth:ratelimit:block:email_login:203.0.113.10`
+
+Redis データ構造:
+
+- counter
+  - Sorted Set
+  - score は UNIX epoch milliseconds
+- block
+  - string key + TTL
+
+TTL 方針:
+
+- counter
+  - policy の最長観測窓に合わせる
+- block
+  - policy ごとの block 秒数をそのまま TTL にする
+- 手動解除
+  - `block` key 削除で行う
+
+運用方針:
+
+- 標準の手動解除は block key のみ削除する
+- counter key は通常削除しない
+- ops script
+  - [scripts/ops/ip-rate-limit/README.md](/Users/hiroki.ueda/Dev/3pull/scripts/ops/ip-rate-limit/README.md)
+- maint-vm 運用時は `mi-[env]-[system]-redis-ops` を利用する
+
+設定項目:
+
+- `RATE_LIMIT_MODE`
+- `REDIS_HOST`
+- `REDIS_PORT`
+- `REDIS_SSL`
+- `TRUST_PROXY_HEADERS`
+- `TRUSTED_PROXY_CIDRS`
+- 各 `RATE_LIMIT_POLICY_*`
+
+補足:
+
+- `RATE_LIMIT_RESPONSE_MESSAGE` は環境変数化しない
+
+検証で確認済みのこと:
+
+- `email/login` で block されること
+- `password/reset/request` で block されること
+- `email/signup` で block されること
+- block TTL 経過で解除されること
+- 手動解除で即時解除できること
+- Redis 障害時に fail-open で継続すること
+- infra から `generated.env.sh` が生成されること
+
+残タスク:
+
+- AKS 上からの実接続確認
+- 検証環境での複数 Pod 試験
 
 ## データベース設計
 
