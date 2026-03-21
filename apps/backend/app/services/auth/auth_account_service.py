@@ -18,8 +18,8 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.core.datetime import ensure_utc_datetime
-from app.core.logging.config import get_logger
-from app.core.security.password import hash_password, needs_rehash, verify_password
+from app.core.logging import get_logger
+from app.core.security.crypto import hash_password, needs_rehash, verify_password
 from app.core.settings import get_settings
 from app.models.auth.auth_identity import AuthProvider
 from app.models.auth.user import User, UserType

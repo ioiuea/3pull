@@ -275,7 +275,7 @@
   - `apps/backend/app/schedulers/cleanup/runners/audit_logs.py`
   - `apps/backend/app/schedulers/cleanup/runners/async_jobs.py`
 - cleanup 共通ヘルパーは `apps/backend/app/schedulers/cleanup/helpers.py`。
-- `apps/backend/app/schedulers/scheduler_cleanup.py` から CLI 実行可能。
+- `apps/backend/app/schedulers/batch_jobs.py` から CLI 実行可能。
 
 現在の cleanup コマンド責務:
 

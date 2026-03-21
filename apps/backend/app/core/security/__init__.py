@@ -1,32 +1,10 @@
+"""backend のセキュリティ基盤パッケージ.
+
+- `http`: FastAPI 向けの API 保護機能
+  - session guard / request context / CSRF / rate limit
+- `crypto`: 認証用の暗号・ハッシュ機能
+  - password hash / token encryption
+
+実装コードからは、この top-level ではなく
+`app.core.security.http` または `app.core.security.crypto` を使う。
 """
-セキュリティ共通機能パッケージ.
-
-- パスワードハッシュやトークン検証などを配置する
-"""
-
-from app.core.security.client_ip import ResolvedClientIP, resolve_client_ips
-from app.core.security.rate_limit import (
-    RateLimitDecision,
-    RateLimitMode,
-    RateLimitPolicy,
-    RateLimitPolicyKey,
-    RateLimitReason,
-    RateLimitRedisStore,
-    RateLimitService,
-    RateLimitWindow,
-    build_rate_limit_policies,
-)
-
-__all__ = [
-    "ResolvedClientIP",
-    "RateLimitDecision",
-    "RateLimitMode",
-    "RateLimitPolicy",
-    "RateLimitPolicyKey",
-    "RateLimitReason",
-    "RateLimitRedisStore",
-    "RateLimitService",
-    "RateLimitWindow",
-    "build_rate_limit_policies",
-    "resolve_client_ips",
-]

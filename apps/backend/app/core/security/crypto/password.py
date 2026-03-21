@@ -1,10 +1,4 @@
-"""
-Argon2id ベースのパスワードハッシュユーティリティ.
-
-- signup 時のハッシュ化
-- login 時の検証
-- パラメータ変更時の rehash 判定
-"""
+"""Argon2id ベースのパスワードハッシュユーティリティ."""
 
 from __future__ import annotations
 
@@ -18,12 +12,7 @@ from app.core.settings import get_settings
 
 @lru_cache(maxsize=1)
 def get_password_hasher() -> PasswordHasher:
-    """
-    設定値を反映した Argon2id ハッシャーを返す.
-
-    Returns:
-        PasswordHasher: Argon2id ハッシャー
-    """
+    """設定値を反映した Argon2id ハッシャーを返す."""
     settings = get_settings()
     return PasswordHasher(
         time_cost=settings.argon2_time_cost,
@@ -35,29 +24,12 @@ def get_password_hasher() -> PasswordHasher:
 
 
 def hash_password(password: str) -> str:
-    """
-    生パスワードを Argon2id でハッシュ化する.
-
-    Args:
-        password: 生パスワード
-
-    Returns:
-        str: Argon2id ハッシュ文字列
-    """
+    """生パスワードを Argon2id でハッシュ化する."""
     return get_password_hasher().hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    """
-    生パスワードと保存済みハッシュを検証する.
-
-    Args:
-        password: 生パスワード
-        password_hash: 保存済みハッシュ
-
-    Returns:
-        bool: 一致した場合 True
-    """
+    """生パスワードと保存済みハッシュを検証する."""
     try:
         return get_password_hasher().verify(password_hash, password)
     except (VerifyMismatchError, VerificationError, InvalidHashError):
@@ -65,13 +37,5 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def needs_rehash(password_hash: str) -> bool:
-    """
-    保存済みハッシュが現在設定で再ハッシュ必要かを判定する.
-
-    Args:
-        password_hash: 保存済みハッシュ
-
-    Returns:
-        bool: 再ハッシュが必要な場合 True
-    """
+    """保存済みハッシュが現在設定で再ハッシュ必要かを判定する."""
     return get_password_hasher().check_needs_rehash(password_hash)

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session, get_session_factory
 from app.api.schemas.jobs import AsyncJobResponse
-from app.core.security.session import require_session_user
+from app.core.security.http import CurrentUserDep
 from app.core.settings import get_settings
 from app.models.jobs.async_job import AsyncJobType
 from app.repositories.jobs import create_async_job
@@ -37,7 +37,7 @@ class SampleWaitBlobCreateRequest(BaseModel):
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def create_sample_wait_blob_job(
-    request: Request,
+    user: CurrentUserDep,
     payload: SampleWaitBlobCreateRequest,
     session: Session = Depends(get_session),
 ) -> AsyncJobResponse:
@@ -46,7 +46,6 @@ async def create_sample_wait_blob_job(
     ensure_async_jobs_enabled()
 
     # サンプルジョブも本番ジョブと同じ入口を通し、認証・上限チェックの挙動を揃える。
-    user = await require_session_user(request, session)
     await enforce_async_job_concurrency(
         session=session,
         requested_by_user_id=user.id,

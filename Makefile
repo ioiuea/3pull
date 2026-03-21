@@ -82,22 +82,22 @@ alembic-upgrade:
 	cd $(BACKEND_DIR) && uv run alembic upgrade head
 
 schedulers-sessions:
-	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup sessions
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.batch_jobs sessions-cleanup
 
 schedulers-sessions-dry-run:
-	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup sessions --dry-run
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.batch_jobs sessions-cleanup --dry-run
 
 schedulers-audit:
-	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup audit
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.batch_jobs audit-cleanup
 
 schedulers-audit-dry-run:
-	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup audit --dry-run
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.batch_jobs audit-cleanup --dry-run
 
 schedulers-jobs:
-	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup jobs
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.batch_jobs jobs-cleanup
 
 schedulers-jobs-dry-run:
-	uv --directory $(BACKEND_DIR) run python -m app.schedulers.scheduler_cleanup jobs --dry-run
+	uv --directory $(BACKEND_DIR) run python -m app.schedulers.batch_jobs jobs-cleanup --dry-run
 
 # ------------------------------
 # Docker targets
@@ -143,17 +143,17 @@ docker-run-worker-sample-wait-blob:
 
 docker-run-schedulers-sessions:
 	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
-		-e SCHEDULERS_COMMAND=sessions \
+		-e SCHEDULERS_COMMAND=sessions-cleanup \
 		$(DOCKER_SCHEDULERS_IMAGE)
 
 docker-run-schedulers-audit:
 	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
-		-e SCHEDULERS_COMMAND=audit \
+		-e SCHEDULERS_COMMAND=audit-cleanup \
 		$(DOCKER_SCHEDULERS_IMAGE)
 
 docker-run-schedulers-jobs-dry-run:
 	docker run --rm --init --env-file $(BACKEND_DIR)/.env \
-		-e SCHEDULERS_COMMAND="jobs --dry-run" \
+		-e SCHEDULERS_COMMAND="jobs-cleanup --dry-run" \
 		$(DOCKER_SCHEDULERS_IMAGE)
 
 docker-run-web:

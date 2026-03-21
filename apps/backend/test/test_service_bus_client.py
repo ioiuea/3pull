@@ -22,7 +22,11 @@ def test_create_service_bus_client_uses_connection_string(monkeypatch) -> None:
         captured["conn_str"] = conn_str
         return "connection-string-client"
 
+    # 接続方式の分岐だけを検証したいため、
+    # settings は connection string 有効のテスト用設定へ差し替える。
     monkeypatch.setattr(service_bus_client, "get_settings", lambda: settings)
+    # Service Bus SDK 本体を呼ばずに引数だけ確認したいため、
+    # from_connection_string を fake 実装へ差し替える。
     monkeypatch.setattr(
         service_bus_client.ServiceBusClient,
         "from_connection_string",
@@ -56,12 +60,18 @@ def test_create_service_bus_client_uses_default_credential(monkeypatch) -> None:
             captured["fully_qualified_namespace"] = fully_qualified_namespace
             captured["credential"] = credential
 
+    # FQDN + credential 分岐だけを検証したいため、
+    # settings は接続文字列未使用のテスト用設定へ差し替える。
     monkeypatch.setattr(service_bus_client, "get_settings", lambda: settings)
+    # 実際の credential 生成を避けるため、
+    # default credential 取得関数を sentinel を返す fake へ差し替える。
     monkeypatch.setattr(
         service_bus_client,
         "_get_default_credential",
         lambda: sentinel_credential,
     )
+    # SDK 実装への依存を避け、
+    # constructor 引数だけを確認するため ServiceBusClient を fake 化する。
     monkeypatch.setattr(service_bus_client, "ServiceBusClient", _FakeServiceBusClient)
 
     result = service_bus_client._create_service_bus_client()

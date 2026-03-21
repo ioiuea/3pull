@@ -4,33 +4,31 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Query, Request, status
+from fastapi import Depends, Query
 from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session
 from app.api.schemas.jobs import AsyncJobListResponse, AsyncJobResponse
-from app.core.security.session import require_session_user
+from app.core.security.http import CurrentUserDep
 from app.models.jobs.async_job import AsyncJobType
 from app.models.jobs.async_job_artifact import AsyncJobArtifact
 from app.repositories.jobs import (
-    get_async_job_by_id,
     list_async_job_artifacts_by_job,
     list_async_jobs_by_user,
 )
 
-from .helpers import router, to_job_response
+from .helpers import get_owned_job_with_artifacts, router, to_job_response
 
 
 @router.get("", response_model=AsyncJobListResponse)
 async def list_jobs(
-    request: Request,
+    user: CurrentUserDep,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     job_type: AsyncJobType | None = None,
     session: Session = Depends(get_session),
 ) -> AsyncJobListResponse:
     """自分のジョブ一覧を返す."""
-    user = await require_session_user(request, session)
     # 一覧取得でも必ず本人のジョブだけに絞る。管理者一覧 API は別で作る前提。
     items, total = list_async_jobs_by_user(
         session,
@@ -57,18 +55,14 @@ async def list_jobs(
 
 @router.get("/{job_id}", response_model=AsyncJobResponse)
 async def get_job(
-    request: Request,
+    user: CurrentUserDep,
     job_id: UUID,
     session: Session = Depends(get_session),
 ) -> AsyncJobResponse:
     """自分のジョブ詳細を返す."""
-    user = await require_session_user(request, session)
-    target = get_async_job_by_id(session, job_id=job_id)
-    # 存在しない場合と他人のジョブの場合を同じ 404 に寄せ、情報漏えいを避ける。
-    if target is None or target.requested_by_user_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "job_not_found", "message": "Job not found"},
-        )
-    artifacts = list_async_job_artifacts_by_job(session, job_id=target.id)
+    target, artifacts = get_owned_job_with_artifacts(
+        session=session,
+        job_id=job_id,
+        requested_by_user_id=user.id,
+    )
     return to_job_response(target, artifacts=artifacts)

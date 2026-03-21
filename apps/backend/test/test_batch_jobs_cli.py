@@ -1,18 +1,18 @@
 import asyncio
 
 from app.schedulers.cleanup.runners.async_jobs import run_jobs_cleanup
-from app.schedulers.scheduler_cleanup import _build_parser
+from app.schedulers.batch_jobs import _build_parser
 
 
 def test_jobs_cleanup_command_is_available() -> None:
     # 目的: cleanup CLI に jobs サブコマンドが公開されていることを保証する。
-    # 条件: jobs --dry-run --batch-size を parser に渡す。
+    # 条件: jobs-cleanup --dry-run --batch-size を parser に渡す。
     # 期待値: command/dry_run/batch_size が期待通り解釈される。
     parser = _build_parser()
 
-    args = parser.parse_args(["jobs", "--dry-run", "--batch-size", "1000"])
+    args = parser.parse_args(["jobs-cleanup", "--dry-run", "--batch-size", "1000"])
 
-    assert args.command == "jobs"
+    assert args.command == "jobs-cleanup"
     assert args.dry_run is True
     assert args.batch_size == 1000
 
@@ -22,6 +22,8 @@ def test_run_jobs_cleanup_returns_disabled_when_async_jobs_are_off(monkeypatch) 
     # 条件: settings.async_jobs_enabled を False に差し替える。
     # 期待値: job_name が jobs_cleanup、status が disabled になる。
     settings = type("Settings", (), {"async_jobs_enabled": False})()
+    # feature flag OFF 分岐だけを検証したいため、
+    # settings 解決をテスト用オブジェクトへ差し替える。
     monkeypatch.setattr(
         "app.schedulers.cleanup.runners.async_jobs.get_settings", lambda: settings
     )
@@ -63,17 +65,23 @@ def test_run_jobs_cleanup_dry_run_counts_artifacts_and_stale_jobs(monkeypatch) -
     def _fake_count_stale(session, *, started_before):
         return 3
 
+    # dry-run 集計ロジックだけを検証したいため、
+    # settings は必要最小限の cleanup 設定へ差し替える。
     monkeypatch.setattr(
         "app.schedulers.cleanup.runners.async_jobs.get_settings", lambda: settings
     )
+    # DB transaction を張らずに runner を実行するため、
+    # session factory を no-op context を返す fake 実装へ差し替える。
     monkeypatch.setattr(
         "app.schedulers.cleanup.runners.async_jobs.get_session_factory",
         lambda: _FakeSessionFactory(),
     )
+    # 成果物件数の集計だけを固定したいため count 関数を fake 化する。
     monkeypatch.setattr(
         "app.schedulers.cleanup.runners.async_jobs.count_expired_async_job_artifacts",
         _fake_count_expired,
     )
+    # stale job 件数も固定し、dry-run の合算結果だけを検証する。
     monkeypatch.setattr(
         "app.schedulers.cleanup.runners.async_jobs.count_stale_running_async_jobs",
         _fake_count_stale,

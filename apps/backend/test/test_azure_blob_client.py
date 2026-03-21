@@ -31,7 +31,11 @@ def test_create_blob_service_client_uses_connection_string(monkeypatch) -> None:
     fake_module.BlobServiceClient = _FakeBlobServiceClient
 
     azure_blob._create_blob_service_client.cache_clear()
+    # 接続方式の分岐だけを検証したいため、
+    # settings は接続文字列有効のテスト用設定へ差し替える。
     monkeypatch.setattr(azure_blob, "get_settings", lambda: settings)
+    # Azure SDK 本体を import せずテストするため、
+    # import されるモジュールを fake BlobServiceClient 付きで差し替える。
     monkeypatch.setitem(sys.modules, "azure.storage.blob", fake_module)
 
     result = azure_blob._create_blob_service_client()
@@ -65,8 +69,14 @@ def test_create_blob_service_client_uses_default_credential(monkeypatch) -> None
     fake_module.BlobServiceClient = _FakeBlobServiceClient
 
     azure_blob._create_blob_service_client.cache_clear()
+    # account_url 経由の分岐だけを検証したいため、
+    # settings は接続文字列未使用のテスト用設定へ差し替える。
     monkeypatch.setattr(azure_blob, "get_settings", lambda: settings)
+    # 実際の Azure credential 生成を避けるため、
+    # default credential 取得関数を sentinel を返す fake に差し替える。
     monkeypatch.setattr(azure_blob, "_get_default_credential", lambda: sentinel_credential)
+    # Azure SDK 本体を不要にするため、
+    # import される BlobServiceClient を fake 実装へ差し替える。
     monkeypatch.setitem(sys.modules, "azure.storage.blob", fake_module)
 
     result = azure_blob._create_blob_service_client()

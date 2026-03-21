@@ -1,4 +1,4 @@
-from app.core.settings.config import AppSettings
+from app.core.settings import AppSettings
 
 
 def test_async_job_settings_accept_new_env_names() -> None:

@@ -43,18 +43,19 @@ from app.api.schemas.auth import (
     UserMeResponse,
 )
 from app.core.datetime import ensure_utc_datetime
-from app.core.logging.config import get_logger
-from app.core.security import RateLimitPolicyKey, RateLimitService
-from app.core.security.client_ip import resolve_client_ips
-from app.core.security.rate_limit.fastapi import require_rate_limit
-from app.core.security.session import (
+from app.core.logging import get_logger
+from app.core.security.crypto import decrypt_token, encrypt_token
+from app.core.security.http import (
+    AuthenticatedSessionDep,
+    CurrentUserDep,
+    RateLimitPolicyKey,
+    RateLimitService,
     raise_session_auth_http_error,
     raise_session_missing_http_error,
-    require_session_context,
-    require_session_user,
+    require_rate_limit,
+    resolve_request_security_context,
     resolve_session_cookie_token,
 )
-from app.core.security.token_cipher import decrypt_token, encrypt_token
 from app.core.settings import get_settings
 from app.models.audit.auth_audit_log import AuthAuditEventType
 from app.models.auth.user import User, UserType
@@ -95,8 +96,8 @@ async def _record_rate_limit_failure(
     request: Request,
 ) -> None:
     """失敗系イベントを rate limit failure counter へ反映する."""
-    resolved_ips = resolve_client_ips(request)
-    client_ip = resolved_ips.client_ip
+    security_context = resolve_request_security_context(request)
+    client_ip = security_context.client_ip
     if client_ip is None:
         logger.warning(
             "auth.rate_limit.client_ip_unresolved",
@@ -145,7 +146,9 @@ async def _record_auth_audit(
     認証監査ログを記録する（記録失敗時も認証フローは継続）。
     """
     try:
-        resolved_ips = resolve_client_ips(request) if request else None
+        security_context = (
+            resolve_request_security_context(request) if request else None
+        )
         await record_auth_audit_log(
             session,
             payload=AuthAuditLogPayload(
@@ -153,10 +156,12 @@ async def _record_auth_audit(
                 user_id=UUID(user_id) if user_id else None,
                 session_id=UUID(session_id) if session_id else None,
                 provider=provider,
-                client_ip=resolved_ips.client_ip if resolved_ips else None,
-                xff_raw=resolved_ips.xff_raw if resolved_ips else None,
-                connection_ip=resolved_ips.connection_ip if resolved_ips else None,
-                user_agent=request.headers.get("user-agent") if request else None,
+                client_ip=security_context.client_ip if security_context else None,
+                xff_raw=security_context.xff_raw if security_context else None,
+                connection_ip=(
+                    security_context.connection_ip if security_context else None
+                ),
+                user_agent=security_context.user_agent if security_context else None,
                 reason_code=reason_code,
                 metadata=metadata,
             ),
@@ -564,12 +569,12 @@ async def post_email_login(
 async def post_password_change(
     payload: PasswordChangeRequest,
     request: Request,
+    auth_context: AuthenticatedSessionDep,
     response: Response,
     session: Session = Depends(get_session),
 ) -> PasswordChangeResponse:
     """現在パスワード確認つきでパスワード変更を行う."""
     # セッションから現在ユーザーを解決する（未ログインなら 401）。
-    auth_context = await require_session_context(request, session)
     user = auth_context.user
     raw_token = auth_context.raw_token
     try:
@@ -878,24 +883,22 @@ async def get_auth_entra_callback(
 
 @router.get("/me", response_model=UserMeResponse)
 async def get_auth_me(
-    request: Request,
-    session: Session = Depends(get_session),
+    user: CurrentUserDep,
 ) -> UserMeResponse:
     """現在ログイン中のユーザー情報を返す."""
     # セッションからユーザーを引いて返すだけの読み取りAPI。
-    user = await require_session_user(request, session)
     return _to_user_me_response(user)
 
 
 @router.get("/entra/profile", response_model=EntraGraphProfileResponse)
 async def get_auth_entra_profile(
     request: Request,
+    auth_context: AuthenticatedSessionDep,
     session: Session = Depends(get_session),
 ) -> EntraGraphProfileResponse:
     """
     Entra 認証ユーザー向けに Graph API からプロフィールを返す.
     """
-    auth_context = await require_session_context(request, session)
     user = auth_context.user
     raw_token = auth_context.raw_token
     if str(user.user_type) != UserType.INTERNAL.value:

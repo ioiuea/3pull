@@ -5,37 +5,33 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session
 from app.api.schemas.jobs import AsyncJobResponse
-from app.core.security.session import require_session_user
+from app.core.security.http import CurrentUserDep
 from app.models.jobs.async_job import AsyncJobStatus
 from app.repositories.jobs import (
-    get_async_job_by_id,
     list_async_job_artifacts_by_job,
     update_async_job_status,
 )
 
-from .helpers import router, to_job_response
+from .helpers import get_owned_job, router, to_job_response
 
 
 @router.post("/{job_id}/cancel", response_model=AsyncJobResponse)
 async def cancel_job(
-    request: Request,
+    user: CurrentUserDep,
     job_id: UUID,
     session: Session = Depends(get_session),
 ) -> AsyncJobResponse:
     """自分の queued/running ジョブをキャンセルする."""
-    user = await require_session_user(request, session)
-    job = get_async_job_by_id(session, job_id=job_id)
-    # 他人のジョブの存在を見せないため、未存在と他人所有は同じ 404 にする。
-    if job is None or job.requested_by_user_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "job_not_found", "message": "Job not found"},
-        )
+    job = get_owned_job(
+        session=session,
+        job_id=job_id,
+        requested_by_user_id=user.id,
+    )
 
     if job.status == AsyncJobStatus.CANCELED:
         # すでに canceled なら冪等に成功扱いで最新状態を返す。

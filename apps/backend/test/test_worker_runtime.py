@@ -77,9 +77,15 @@ def test_run_worker_loop_completes_message_on_success(monkeypatch) -> None:
         canceled_errors=(RuntimeError,),
     )
 
+    # worker loop 本体の ack 分岐だけを検証したいため、
+    # 実 settings は最小限のテスト用オブジェクトへ差し替える。
     monkeypatch.setattr("app.workers.runtime.get_settings", lambda: type("S", (), {"api_log_level": "INFO"})())
+    # ログ設定はテスト対象外なので no-op に差し替える。
     monkeypatch.setattr("app.workers.runtime.configure_logging", lambda **kwargs: None)
+    # job_type ごとの handler 解決を固定し、
+    # execute 成功時の分岐だけを見られるよう fake spec を返す。
     monkeypatch.setattr("app.workers.runtime.get_worker_handler", lambda job_type: spec)
+    # 本物の Service Bus を使わずメッセージ 1 件を返す receiver に差し替える。
     monkeypatch.setattr("app.workers.runtime.get_service_bus_receiver", _fake_get_receiver)
 
     with pytest.raises(_LoopStopped):
@@ -133,9 +139,14 @@ def test_run_worker_loop_abandons_message_on_retryable_error(monkeypatch) -> Non
         canceled_errors=(RuntimeError,),
     )
 
+    # retryable 例外時の ack 分岐だけを検証したいため、
+    # settings は最小限のテスト用オブジェクトへ差し替える。
     monkeypatch.setattr("app.workers.runtime.get_settings", lambda: type("S", (), {"api_log_level": "INFO"})())
+    # ログ設定は副作用を避けるため no-op に差し替える。
     monkeypatch.setattr("app.workers.runtime.configure_logging", lambda **kwargs: None)
+    # execute が retryable error を出す fake handler spec を固定する。
     monkeypatch.setattr("app.workers.runtime.get_worker_handler", lambda job_type: spec)
+    # 本物の receiver を使わず retryable 分岐に必要な最小挙動の fake に差し替える。
     monkeypatch.setattr("app.workers.runtime.get_service_bus_receiver", _fake_get_receiver)
 
     with pytest.raises(_LoopStopped):
@@ -189,9 +200,14 @@ def test_run_worker_loop_dead_letters_message_on_permanent_error(monkeypatch) ->
         canceled_errors=(RuntimeError,),
     )
 
+    # permanent 例外時の mark_failed / dead-letter 分岐だけを検証したいため、
+    # settings は最小限のテスト用オブジェクトへ差し替える。
     monkeypatch.setattr("app.workers.runtime.get_settings", lambda: type("S", (), {"api_log_level": "INFO"})())
+    # ログ設定は副作用を避けるため no-op に差し替える。
     monkeypatch.setattr("app.workers.runtime.configure_logging", lambda **kwargs: None)
+    # execute が permanent error を出す fake handler spec を固定する。
     monkeypatch.setattr("app.workers.runtime.get_worker_handler", lambda job_type: spec)
+    # dead-letter 分岐だけを検証したいため receiver も fake 実装へ差し替える。
     monkeypatch.setattr("app.workers.runtime.get_service_bus_receiver", _fake_get_receiver)
 
     with pytest.raises(_LoopStopped):

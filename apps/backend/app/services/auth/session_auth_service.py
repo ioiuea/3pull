@@ -17,8 +17,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.logging.config import get_logger
-from app.core.security.token_cipher import decrypt_token, encrypt_token
+from app.core.logging import get_logger
+from app.core.security.crypto import decrypt_token, encrypt_token
 from app.core.settings import get_settings
 from app.models.auth.session import UserSession
 from app.models.auth.user import User

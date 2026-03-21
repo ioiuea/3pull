@@ -16,10 +16,10 @@ from app.api.routers.audit import router as audit_router
 from app.api.routers.auth import router as auth_router
 from app.api.routers.health import router as health_router
 from app.api.routers.jobs import router as jobs_router
-from app.core.lifecycle.startup import lifespan
-from app.core.logging.middleware import AccessLogMiddleware
-from app.core.security.csrf import CsrfProtectionMiddleware
-from app.core.settings.config import get_settings
+from app.core.lifecycle import lifespan
+from app.core.logging import AccessLogMiddleware
+from app.core.security.http import install_security_middleware
+from app.core.settings import get_settings
 
 SETTINGS = get_settings()
 API_PREFIX = "/backend"
@@ -39,11 +39,8 @@ app.add_middleware(
     same_site="lax",
     https_only=SETTINGS.session_cookie_secure,
 )
-# Cookie セッション利用時の CSRF 対策として送信元オリジンを検証する。
-app.add_middleware(
-    CsrfProtectionMiddleware,
-    trusted_origins=SETTINGS.csrf_trusted_origins,
-)
+# Cookie セッション利用時の security middleware をまとめて組み込む。
+install_security_middleware(app)
 # Uvicorn 標準アクセスログではなく、構造化ログミドルウェアを標準利用する。
 app.add_middleware(AccessLogMiddleware)
 # Frontend から Cookie 付きで API 呼び出しできるよう CORS を許可する。

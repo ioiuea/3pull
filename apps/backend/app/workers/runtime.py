@@ -10,7 +10,7 @@ import asyncio
 from dataclasses import dataclass
 
 from app.adapters.queue.service_bus_client import get_service_bus_receiver
-from app.core.logging.config import configure_logging, get_logger
+from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
 from app.workers.job_registry import WorkerHandlerSpec, get_worker_handler
 from app.workers.messages import AsyncJobQueueMessage

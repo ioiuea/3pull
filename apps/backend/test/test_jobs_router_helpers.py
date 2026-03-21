@@ -65,6 +65,8 @@ def test_ensure_async_jobs_enabled_raises_when_disabled(monkeypatch) -> None:
     # 条件: settings.async_jobs_enabled を False に差し替える。
     # 期待値: jobs_feature_disabled コードで HTTPException が送出される。
     settings = type("Settings", (), {"async_jobs_enabled": False})()
+    # feature flag の ON/OFF 分岐だけを検証したいため、
+    # 実環境の settings 解決はテスト用設定へ差し替える。
     monkeypatch.setattr("app.api.routers.jobs.helpers.get_settings", lambda: settings)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -86,6 +88,8 @@ def test_resolve_async_job_expiration_clamps_retention_days(monkeypatch) -> None
             "async_job_retention_max_days": 30,
         },
     )()
+    # 保持日数の丸め込み規則だけを検証したいため、
+    # settings は上限値を持つテスト用オブジェクトに差し替える。
     monkeypatch.setattr("app.api.routers.jobs.helpers.get_settings", lambda: settings)
 
     now = datetime.now(UTC)
@@ -128,11 +132,16 @@ async def test_enforce_async_job_concurrency_scopes_counts_by_job_type(
         captured["user_job_type"] = job_type
         return 0
 
+    # 上限超過ではなく「どの job_type で件数確認するか」だけを見たいので、
+    # settings は十分大きい上限を持つテスト用設定へ差し替える。
     monkeypatch.setattr("app.api.routers.jobs.helpers.get_settings", lambda: settings)
+    # DB 件数取得を本物にするとテスト対象が広がるため、
+    # global 件数関数は job_type を記録する fake へ差し替える。
     monkeypatch.setattr(
         "app.api.routers.jobs.helpers.count_active_async_jobs",
         _fake_count_active_async_jobs,
     )
+    # user 別件数関数も同様に fake 化し、job_type の伝播だけを検証する。
     monkeypatch.setattr(
         "app.api.routers.jobs.helpers.count_active_async_jobs_by_user",
         _fake_count_active_async_jobs_by_user,

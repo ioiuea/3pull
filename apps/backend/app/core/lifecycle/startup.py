@@ -12,8 +12,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.core.logging.config import configure_logging, get_logger
-from app.core.settings.config import get_settings
+from app.core.logging import configure_logging, get_logger
+from app.core.settings import get_settings
 
 logger = get_logger(__name__)
 

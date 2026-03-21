@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from time import perf_counter
 
 from app.adapters.sql.session import get_session_factory
-from app.core.logging.config import get_logger
+from app.core.logging import get_logger
 from app.core.settings import get_settings
 from app.repositories.audit.auth_audit_log_repository import (
     count_auth_audit_logs_before_cutoff,

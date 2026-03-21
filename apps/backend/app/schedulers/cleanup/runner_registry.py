@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import perf_counter
 
-from app.core.logging.config import configure_logging, get_logger
+from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
 from app.schedulers.cleanup.helpers import CleanupResult, batch_size_type
 from app.schedulers.cleanup.runners import (
@@ -33,18 +33,18 @@ class CleanupRunnerSpec:
 
 
 _RUNNERS: dict[str, CleanupRunnerSpec] = {
-    "sessions": CleanupRunnerSpec(
-        command="sessions",
+    "sessions-cleanup": CleanupRunnerSpec(
+        command="sessions-cleanup",
         job_name="sessions_cleanup",
         run=run_sessions_cleanup,
     ),
-    "audit": CleanupRunnerSpec(
-        command="audit",
+    "audit-cleanup": CleanupRunnerSpec(
+        command="audit-cleanup",
         job_name="audit_retention_cleanup",
         run=run_audit_cleanup,
     ),
-    "jobs": CleanupRunnerSpec(
-        command="jobs",
+    "jobs-cleanup": CleanupRunnerSpec(
+        command="jobs-cleanup",
         job_name="jobs_cleanup",
         run=run_jobs_cleanup,
     ),
@@ -66,7 +66,7 @@ def get_cleanup_runner(command: str) -> CleanupRunnerSpec:
 def _build_parser() -> argparse.ArgumentParser:
     # cleanup は 1 つの CLI から複数ジョブを呼び分ける。
     # subcommand ごとに dry-run と batch-size の共通引数をそろえている。
-    parser = argparse.ArgumentParser(prog="python -m app.schedulers.scheduler_cleanup")
+    parser = argparse.ArgumentParser(prog="python -m app.schedulers.batch_jobs")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     for command in list_cleanup_commands():

@@ -6,12 +6,12 @@ import json
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session
 from app.api.schemas.audit import AuthAuditLogItemResponse, AuthAuditLogListResponse
-from app.core.security.session import require_session_user
+from app.core.security.http import CurrentUserDep
 from app.models.audit.auth_audit_log import AuthAuditEventType, AuthAuditLog
 from app.repositories.audit.auth_audit_log_repository import list_auth_audit_logs
 
@@ -55,7 +55,7 @@ def _to_auth_audit_log_item(
 
 @router.get("/audit-logs", response_model=AuthAuditLogListResponse)
 async def get_auth_audit_logs(
-    request: Request,
+    _: CurrentUserDep,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     event_type: AuthAuditEventType | None = None,
@@ -66,7 +66,6 @@ async def get_auth_audit_logs(
     session: Session = Depends(get_session),
 ) -> AuthAuditLogListResponse:
     """監査ログ一覧を返す（ログイン済みユーザー向け）."""
-    await require_session_user(request, session)
     items, total = list_auth_audit_logs(
         session,
         page=page,

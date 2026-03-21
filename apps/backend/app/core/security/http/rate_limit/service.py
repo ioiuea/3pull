@@ -1,18 +1,8 @@
-"""認証 API 向け rate limit service.
-
-この層は「どの policy をどう評価するか」を担当します。
-Redis の具体操作は `store.py` に委譲し、HTTP 応答化は `fastapi.py` に委譲します。
-
-責務:
-- settings から policy を組み立てる
-- request/failure イベントを評価する
-- block 中かどうかを判定する
-- observe/enforce の運用モードを決定する
-"""
+"""認証 API 向け rate limit service."""
 
 from __future__ import annotations
 
-from app.core.security.rate_limit.models import (
+from app.core.security.http.rate_limit.models import (
     RateLimitCounterKind,
     RateLimitDecision,
     RateLimitMode,
@@ -21,7 +11,7 @@ from app.core.security.rate_limit.models import (
     RateLimitReason,
     RateLimitWindow,
 )
-from app.core.security.rate_limit.store import RateLimitRedisStore
+from app.core.security.http.rate_limit.store import RateLimitRedisStore
 from app.core.settings import get_settings
 
 RATE_LIMIT_RESPONSE_MESSAGE = (
@@ -30,11 +20,7 @@ RATE_LIMIT_RESPONSE_MESSAGE = (
 
 
 def build_rate_limit_policies() -> dict[RateLimitPolicyKey, RateLimitPolicy]:
-    """設定値から policy 一覧を構築する.
-
-    policy 定義はコードに固定せず settings から解決します。
-    これにより環境ごとにしきい値だけを差し替えられます。
-    """
+    """設定値から policy 一覧を構築する."""
     settings = get_settings()
     return {
         RateLimitPolicyKey.EMAIL_LOGIN: RateLimitPolicy(
@@ -141,11 +127,7 @@ def build_rate_limit_policies() -> dict[RateLimitPolicyKey, RateLimitPolicy]:
 
 
 class RateLimitService:
-    """request / failure のレート制限判定を提供する.
-
-    router や FastAPI dependency はこの service の返す `RateLimitDecision` を見て、
-    実際に 429 を返すか、observe ログだけに留めるかを決めます。
-    """
+    """request / failure のレート制限判定を提供する."""
 
     def __init__(
         self,
@@ -153,12 +135,10 @@ class RateLimitService:
         store: RateLimitRedisStore | None = None,
         policies: dict[RateLimitPolicyKey, RateLimitPolicy] | None = None,
     ) -> None:
-        """store と policy 群を差し替え可能な形で初期化する."""
         self._store = store or RateLimitRedisStore()
         self._policies = policies or build_rate_limit_policies()
 
     async def close(self) -> None:
-        """内部 store が持つ接続を解放する."""
         await self._store.close()
 
     async def evaluate_request(
@@ -167,11 +147,6 @@ class RateLimitService:
         policy_key: RateLimitPolicyKey,
         client_ip: str,
     ) -> RateLimitDecision:
-        """request ベースの rate limit を評価する.
-
-        まず既存 block を確認し、その後 request window を順に評価します。
-        どれか 1 つでも閾値を超えた時点で block key を設定します。
-        """
         policy = self._policies[policy_key]
         existing_ttl = await self._store.get_block_ttl_seconds(
             policy_key=policy_key,
@@ -188,7 +163,6 @@ class RateLimitService:
             )
 
         for window in policy.request_windows:
-            # 複数 window は OR 条件として扱い、短期/長期どちらの超過でも block する。
             count = await self._store.record_and_count(
                 policy_key=policy_key,
                 kind=RateLimitCounterKind.REQUEST,
@@ -226,12 +200,6 @@ class RateLimitService:
         policy_key: RateLimitPolicyKey,
         client_ip: str,
     ) -> RateLimitDecision:
-        """failure ベースの rate limit を記録・評価する.
-
-        login 失敗や token 検証失敗のような「悪い試行」を
-        別カウンタで持ちたい場合に使います。
-        policy 側で `failure_windows` を持たない API では何も block しません。
-        """
         policy = self._policies[policy_key]
         if not policy.failure_windows:
             return RateLimitDecision(
@@ -243,7 +211,6 @@ class RateLimitService:
             )
 
         for window in policy.failure_windows:
-            # failure window も request window と同様に OR 条件で評価する。
             count = await self._store.record_and_count(
                 policy_key=policy_key,
                 kind=RateLimitCounterKind.FAILURE,
@@ -276,15 +243,12 @@ class RateLimitService:
 
     @property
     def mode(self) -> RateLimitMode:
-        """現在の rate limit モードを返す."""
         return self._mode
 
     @property
     def response_message(self) -> str:
-        """block 時に API で返す固定メッセージを返す."""
         return RATE_LIMIT_RESPONSE_MESSAGE
 
     @property
     def _mode(self) -> RateLimitMode:
-        """settings から現在モードを解決する内部 helper."""
         return RateLimitMode(get_settings().rate_limit_mode)

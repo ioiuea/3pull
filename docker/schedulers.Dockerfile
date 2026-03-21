@@ -30,7 +30,7 @@ FROM python:3.12-slim-bookworm AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/workspace/apps/backend/.venv/bin:${PATH}" \
-    SCHEDULERS_COMMAND=sessions
+    SCHEDULERS_COMMAND=sessions-cleanup
 
 WORKDIR /workspace/apps/backend
 
@@ -54,8 +54,8 @@ COPY apps/backend/alembic.ini ./alembic.ini
 # `SCHEDULERS_COMMAND` にサブコマンドを入れて切り替える。
 # 指定した scheduler を 1 回実行したらプロセスは終了するため、定期実行を前提にしている。
 # 例:
-# - sessions
-# - audit
-# - jobs
-# - jobs --dry-run
-CMD ["sh", "-c", "exec python -m app.schedulers.scheduler_cleanup ${SCHEDULERS_COMMAND:-sessions}"]
+# - sessions-cleanup
+# - audit-cleanup
+# - jobs-cleanup
+# - jobs-cleanup --dry-run
+CMD ["sh", "-c", "exec python -m app.schedulers.batch_jobs ${SCHEDULERS_COMMAND:-sessions-cleanup}"]

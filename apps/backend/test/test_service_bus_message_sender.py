@@ -28,6 +28,8 @@ def test_enqueue_async_job_message_sends_minimum_service_bus_payload(
         sent["queue_name"] = queue_name
         yield _FakeSender()
 
+    # Service Bus 接続自体はテスト対象ではなく、
+    # 送信 payload の形だけを見たいため sender factory を fake 化する。
     monkeypatch.setattr(
         "app.adapters.queue.message_sender.get_service_bus_sender",
         _fake_get_service_bus_sender,

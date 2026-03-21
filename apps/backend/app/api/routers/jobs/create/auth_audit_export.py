@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session, get_session_factory
 from app.api.schemas.jobs import AsyncJobResponse
-from app.core.security.session import require_session_user
+from app.core.security.http import CurrentUserDep
 from app.core.settings import get_settings
 from app.models.audit.auth_audit_log import AuthAuditEventType
 from app.models.jobs.async_job import AsyncJobType
@@ -44,7 +44,7 @@ class AuthAuditExportCreateRequest(BaseModel):
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def create_auth_audit_export_job(
-    request: Request,
+    user: CurrentUserDep,
     payload: AuthAuditExportCreateRequest,
     session: Session = Depends(get_session),
 ) -> AsyncJobResponse:
@@ -53,7 +53,6 @@ async def create_auth_audit_export_job(
     ensure_async_jobs_enabled()
 
     # まず「誰のジョブか」を確定し、そのユーザー単位で投入可否を判定する。
-    user = await require_session_user(request, session)
     await enforce_async_job_concurrency(
         session=session,
         requested_by_user_id=user.id,

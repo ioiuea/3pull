@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
@@ -20,7 +20,7 @@ from app.api.schemas.health import (
     HealthResponse,
     TcpDependencyHealth,
 )
-from app.core.security.session import require_authenticated_session
+from app.core.security.http import AuthenticatedRequestDep
 from app.core.settings import get_settings
 
 router = APIRouter(tags=["health"])
@@ -79,7 +79,7 @@ def _host_port_from_http_url(
 
 @router.get("/health", response_model=HealthResponse)
 async def get_health(
-    _: None = Depends(require_authenticated_session),
+    _: AuthenticatedRequestDep,
 ) -> HealthResponse:
     """サービスの稼働状態を返す。"""
     settings = get_settings()

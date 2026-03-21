@@ -1,5 +1,5 @@
 """
-定期 cleanup バッチの CLI エントリポイント.
+定期実行バッチジョブの CLI エントリポイント.
 """
 
 from __future__ import annotations

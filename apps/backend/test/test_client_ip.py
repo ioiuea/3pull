@@ -4,7 +4,7 @@ import os
 
 from starlette.requests import Request
 
-from app.core.security.client_ip import resolve_client_ips
+from app.core.security.http import resolve_client_ips
 from app.core.settings import get_settings
 
 
@@ -83,6 +83,8 @@ def test_resolve_client_ips_with_invalid_xff_falls_back_to_connection_ip() -> No
 
 def test_resolve_client_ips_with_untrusted_proxy_ignores_xff() -> None:
     # 目的: 信頼済みプロキシでない接続元の XFF は採用しない仕様を固定する。
+    # 条件: trusted proxy CIDR に含まれない connection_ip と XFF を渡す。
+    # 期待値: client_ip は connection_ip を使い、xff_raw は保持される。
     _set_trusted_proxy_env(enabled=True, cidrs="10.0.1.0/24")
     request = _build_request(host="10.0.0.10", xff="203.0.113.9, 10.1.2.3")
 

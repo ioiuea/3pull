@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from typing import NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.adapters.sql.session import get_session
 from app.adapters.storage import download_blob_bytes
 from app.api.schemas.jobs import AsyncJobArtifactResponse, AsyncJobResponse
-from app.core.security.session import require_session_user
+from app.core.security.http import CurrentUserDep
 from app.core.settings import get_settings
 from app.models.jobs.async_job import AsyncJob, AsyncJobStatus, AsyncJobType
 from app.models.jobs.async_job_artifact import AsyncJobArtifact, AsyncJobArtifactType
@@ -26,6 +27,20 @@ from app.repositories.jobs import (
 )
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+
+def _raise_job_not_found() -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={"code": "job_not_found", "message": "Job not found"},
+    )
+
+
+def _raise_artifact_not_found() -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail={"code": "artifact_not_found", "message": "Artifact not found"},
+    )
 
 
 def ensure_async_jobs_enabled() -> None:
@@ -143,9 +158,57 @@ def to_job_response(
     )
 
 
+def get_owned_job(
+    *,
+    session: Session,
+    job_id: UUID,
+    requested_by_user_id: UUID,
+) -> AsyncJob:
+    """指定 user が所有する job を返す."""
+    job = get_async_job_by_id(session, job_id=job_id)
+    if job is None or job.requested_by_user_id != requested_by_user_id:
+        _raise_job_not_found()
+    return job
+
+
+def get_owned_job_with_artifacts(
+    *,
+    session: Session,
+    job_id: UUID,
+    requested_by_user_id: UUID,
+) -> tuple[AsyncJob, list[AsyncJobArtifact]]:
+    """指定 user が所有する job と成果物一覧を返す."""
+    job = get_owned_job(
+        session=session,
+        job_id=job_id,
+        requested_by_user_id=requested_by_user_id,
+    )
+    artifacts = list_async_job_artifacts_by_job(session, job_id=job.id)
+    return job, artifacts
+
+
+def get_owned_job_artifact(
+    *,
+    session: Session,
+    job_id: UUID,
+    artifact_id: UUID,
+    requested_by_user_id: UUID,
+) -> tuple[AsyncJob, AsyncJobArtifact]:
+    """指定 user が所有する成果物を返す."""
+    job = get_owned_job(
+        session=session,
+        job_id=job_id,
+        requested_by_user_id=requested_by_user_id,
+    )
+    artifact = get_async_job_artifact_by_id(session, artifact_id=artifact_id)
+    if artifact is None or artifact.job_id != job.id:
+        _raise_artifact_not_found()
+    return job, artifact
+
+
 @router.get("/{job_id}/artifacts/{artifact_id}/download")
 async def download_job_artifact(
-    request: Request,
+    user: CurrentUserDep,
     job_id: UUID,
     artifact_id: UUID,
     session: Session = Depends(get_session),
@@ -153,19 +216,12 @@ async def download_job_artifact(
     """成果物を backend 経由でダウンロードする."""
     # Blob の直接 URL を返さず backend 経由にすることで、
     # 認可は常に「このユーザーの成果物か」で統一できる。
-    user = await require_session_user(request, session)
-    job = get_async_job_by_id(session, job_id=job_id)
-    if job is None or job.requested_by_user_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "job_not_found", "message": "Job not found"},
-        )
-    artifact = get_async_job_artifact_by_id(session, artifact_id=artifact_id)
-    if artifact is None or artifact.job_id != job.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "artifact_not_found", "message": "Artifact not found"},
-        )
+    _, artifact = get_owned_job_artifact(
+        session=session,
+        job_id=job_id,
+        artifact_id=artifact_id,
+        requested_by_user_id=user.id,
+    )
 
     data = download_blob_bytes(blob_path=artifact.blob_path)
     # まず全件メモリに載せるシンプル実装。現状の成果物サイズ前提ではこれで十分。
@@ -176,22 +232,3 @@ async def download_job_artifact(
             "Content-Disposition": (f'attachment; filename="{artifact.id}"'),
         },
     )
-
-
-async def get_job_with_owner_check(
-    *,
-    request: Request,
-    session: Session,
-    job_id: UUID,
-) -> tuple[AsyncJob, list[AsyncJobArtifact]]:
-    """ジョブの所有者チェックを行って詳細を返す."""
-    # 参照系 API で毎回同じ所有者確認をするため、共通化して重複を減らす。
-    user = await require_session_user(request, session)
-    job = get_async_job_by_id(session, job_id=job_id)
-    if job is None or job.requested_by_user_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "job_not_found", "message": "Job not found"},
-        )
-    artifacts = list_async_job_artifacts_by_job(session, job_id=job.id)
-    return job, artifacts

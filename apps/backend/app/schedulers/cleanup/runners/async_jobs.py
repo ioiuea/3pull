@@ -8,7 +8,7 @@ from uuid import UUID
 
 from app.adapters.sql.session import get_session_factory
 from app.adapters.storage import delete_blob
-from app.core.logging.config import get_logger
+from app.core.logging import get_logger
 from app.core.settings import get_settings
 from app.repositories.jobs import (
     count_async_job_artifacts_by_job_id,

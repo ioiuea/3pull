@@ -102,19 +102,19 @@ make docker-run-schedulers-jobs-dry-run
 
 ```bash
 docker run --rm --init --env-file apps/backend/.env \
-  -e SCHEDULERS_COMMAND=sessions \
+  -e SCHEDULERS_COMMAND=sessions-cleanup \
   3pull-schedulers:local
 ```
 
 ```bash
 docker run --rm --init --env-file apps/backend/.env \
-  -e SCHEDULERS_COMMAND=audit \
+  -e SCHEDULERS_COMMAND=audit-cleanup \
   3pull-schedulers:local
 ```
 
 ```bash
 docker run --rm --init --env-file apps/backend/.env \
-  -e SCHEDULERS_COMMAND="jobs --dry-run" \
+  -e SCHEDULERS_COMMAND="jobs-cleanup --dry-run" \
   3pull-schedulers:local
 ```
 
@@ -170,4 +170,4 @@ Docker コンテナ内では、ホストの `az login` 状態はそのまま使�
   - `worker.loop.started` が出ることを確認する
   - サンプルジョブ投入時に `worker.message.completed` まで進むかを確認する
 - Cleanup
-  - `jobs --dry-run` で安全に起動確認する
+  - `jobs-cleanup --dry-run` で安全に起動確認する

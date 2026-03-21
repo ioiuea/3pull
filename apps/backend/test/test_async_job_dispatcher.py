@@ -16,6 +16,8 @@ def test_dispatch_async_job_delegates_to_message_sender(monkeypatch) -> None:
         captured["countdown_seconds"] = countdown_seconds
         return "ok"
 
+    # dispatch_async_job 自身の委譲だけを検証したいため、
+    # 実際の Service Bus 送信処理は fake 関数へ差し替える。
     monkeypatch.setattr(
         "app.services.jobs.async_job_dispatcher.enqueue_async_job_message",
         _fake_enqueue_async_job_message,
