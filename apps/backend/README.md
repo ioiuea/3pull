@@ -1,7 +1,8 @@
 # Backend
 
 `apps/backend` は FastAPI + SQLAlchemy + Alembic を使った backend 実装です。  
-認証、監査ログ、非同期ジョブ、cleanup scheduler を 1 つのアプリケーションとして管理します。
+認証、監査ログ、非同期ジョブ、cleanup scheduler を 1 つのアプリケーションとして管理します。  
+本 README は現行実装をもとにした backend 仕様書を兼ねます。
 
 ## 技術スタック
 
@@ -13,6 +14,29 @@
 - Storage: Azure Blob Storage
 - Package manager: `uv`
 - Lint / Typecheck / Test: `ruff`, `pyright`, `pytest`
+
+## 対象範囲
+
+- 認証
+  - Microsoft Entra ID 認証
+  - Email/Password 認証
+  - セッション管理
+  - 認証監査ログ
+- API プロテクト
+  - Cookie セッション
+  - CSRF 対策
+  - IP ベース rate limit
+- 非同期ジョブ
+  - Azure Service Bus 連携
+  - Azure Blob Storage 成果物保存
+  - ジョブ状態管理
+  - cleanup
+
+## 実装上の正本
+
+- アプリケーション本体: `apps/backend/app/*`
+- DB migration: `apps/backend/alembic/versions/*`
+- 設定定義: `apps/backend/app/core/settings/config.py`
 
 ## 開発コマンド
 
@@ -49,6 +73,7 @@
 
 - `deploy.sh` は `auth` / `audit` / `core` schema を作成し、現在の `az login` ユーザーを Azure SQL の external user として登録し、各 schema への権限を付与します。
 - schema 作成は Alembic ではなく `deploy.sh` の責務です。
+- worker が必要な導線は別途 `make dev-worker` を起動します。
 
 ## フォルダ構成
 
@@ -171,6 +196,74 @@ apps/backend
 - `GET /livez`
 - `GET /readyz`
 
+## 設定仕様
+
+設定は `app/core/settings/config.py` の `AppSettings` に集約しています。  
+ローカルでは `apps/backend/.env` があれば読み込み、本番は環境変数注入前提です。
+
+### DB / 接続
+
+- `DATABASE_URL`
+- `DATABASE_DEFAULT_PORT`
+- `DATABASE_ACCESS_TOKEN_SCOPE`
+- `DATABASE_ECHO`
+- `DATABASE_POOL_SIZE`
+- `DATABASE_MAX_OVERFLOW`
+- `DATABASE_POOL_TIMEOUT`
+
+補足:
+
+- 接続ドライバは `pyodbc` 前提です。
+- ローカル開発では `az login` と `ODBC Driver 18 for SQL Server` を前提にします。
+
+### セッション / 認証
+
+- `SESSION_COOKIE_NAME`
+- `SESSION_COOKIE_SECURE`
+- `SESSION_COOKIE_SAMESITE`
+- `SESSION_SECRET_KEY`
+- `SESSION_TTL_HOURS`
+- `SESSION_EXPIRED_GRACE_DAYS`
+- `EMAIL_VERIFICATION_TTL_MINUTES`
+- `PASSWORD_RESET_TTL_MINUTES`
+- `EMAIL_LOGIN_MAX_FAILURES`
+- `EMAIL_LOGIN_LOCK_MINUTES`
+- `AUTH_DEBUG_RETURN_TOKENS`
+- `FRONTEND_BASE_URL`
+- `AUTH_POST_LOGIN_DEFAULT_PATH`
+- `CSRF_TRUSTED_ORIGINS`
+- `ENTRA_TENANT_ID`
+- `ENTRA_CLIENT_ID`
+- `ENTRA_CLIENT_SECRET`
+- `ENTRA_REDIRECT_URI`
+- `ENTRA_INTERNAL_DOMAINS`
+- `ENTRA_TOKEN_ENCRYPTION_KEY`
+
+### 非同期ジョブ / ストレージ / cleanup
+
+- `ASYNC_JOBS_ENABLED`
+- `ASYNC_JOB_MAX_ROWS_PER_JOB`
+- `ASYNC_JOB_DEFAULT_RETENTION_DAYS`
+- `ASYNC_JOB_RETENTION_MAX_DAYS`
+- `ASYNC_JOB_GLOBAL_CONCURRENCY`
+- `ASYNC_JOB_PER_USER_CONCURRENCY`
+- `ASYNC_JOB_RUNNING_TIMEOUT_SECONDS`
+- `SERVICE_BUS_NAMESPACE_FQDN`
+- `SERVICE_BUS_USE_CONNECTION_STRING`
+- `SERVICE_BUS_CONNECTION_STRING`
+- `SERVICE_BUS_AUTH_AUDIT_EXPORT_QUEUE_NAME`
+- `ASYNC_JOB_AUTH_AUDIT_EXPORT_TASK_NAME`
+- `SERVICE_BUS_SAMPLE_WAIT_BLOB_QUEUE_NAME`
+- `ASYNC_JOB_SAMPLE_WAIT_BLOB_TASK_NAME`
+- `AZURE_BLOB_ACCOUNT_URL`
+- `AZURE_BLOB_CONTAINER`
+- `AZURE_BLOB_USE_CONNECTION_STRING`
+- `AZURE_BLOB_CONNECTION_STRING`
+- `AUTH_AUDIT_RETENTION_MONTHS`
+- `SESSION_CLEANUP_ENABLED`
+- `AUDIT_CLEANUP_ENABLED`
+- `CLEANUP_BATCH_SIZE`
+
 ## 認証方針
 
 認証方式は 2 系統です。
@@ -188,6 +281,15 @@ apps/backend
 - Email verification token / password reset token は SHA-256 ハッシュのみ保存
 - Entra の access token / refresh token は暗号化して保存
 - `/backend/auth/entra/profile` は internal ユーザーのみ許可
+
+実装上の種別:
+
+- `UserType`
+  - `internal`
+  - `external`
+- `AuthProvider`
+  - `entra`
+  - `email`
 
 ### API Security
 
@@ -595,6 +697,187 @@ TTL 方針:
 - `core.async_jobs`
 - `core.async_job_artifacts`
 
+### 共通方針
+
+- RDBMS は Azure SQL Database を利用する
+- 日時型は `datetime2(3)` を利用する
+- JSON 可変データは `NVARCHAR(MAX)` に JSON 文字列で保存する
+- enum は DB ネイティブ型を使わず、文字列列とアプリ側 `StrEnum` で管理する
+
+### テーブル仕様
+
+#### `auth.users`
+
+- 主キー: `id`（UUID）
+- 主な列:
+  - `email`
+  - `email_normalized`
+  - `display_name`
+  - `user_type`
+  - `is_active`
+  - `created_at`
+  - `updated_at`
+- 制約 / index:
+  - `email_normalized` unique
+  - `ix_users_is_active`
+
+#### `auth.auth_identities`
+
+- 主キー: `id`（UUID）
+- 外部キー: `user_id -> auth.users.id`
+- 主な列:
+  - `provider`
+  - `provider_subject`
+  - `email_normalized`
+  - `password_hash`
+  - `failed_login_count`
+  - `locked_until`
+  - `email_verified_at`
+  - `last_login_at`
+  - `created_at`
+  - `updated_at`
+- 制約 / index:
+  - `provider + provider_subject` unique
+  - `ix_auth_identities_user_id`
+  - `ix_auth_identities_email_normalized`
+
+#### `auth.sessions`
+
+- 主キー: `id`（UUID）
+- 外部キー:
+  - `user_id -> auth.users.id`
+  - `auth_identity_id -> auth.auth_identities.id`
+- 主な列:
+  - `session_token_hash`
+  - `ip_address`
+  - `user_agent`
+  - `entra_access_token`
+  - `entra_refresh_token`
+  - `entra_access_token_expires_at`
+  - `expires_at`
+  - `revoked_at`
+  - `created_at`
+  - `updated_at`
+- 制約 / index:
+  - `session_token_hash` unique
+  - `ix_sessions_user_id_revoked_at`
+  - `ix_sessions_expires_at`
+
+#### `auth.email_verification_tokens`
+
+- 主キー: `id`（UUID）
+- 外部キー: `identity_id -> auth.auth_identities.id`
+- 主な列:
+  - `token_hash`
+  - `expires_at`
+  - `consumed_at`
+  - `created_at`
+- 制約 / index:
+  - `token_hash` unique
+  - `ix_email_verification_tokens_identity_id_consumed_at`
+
+#### `auth.password_reset_tokens`
+
+- 主キー: `id`（UUID）
+- 外部キー: `identity_id -> auth.auth_identities.id`
+- 主な列:
+  - `token_hash`
+  - `expires_at`
+  - `consumed_at`
+  - `created_at`
+- 制約 / index:
+  - `token_hash` unique
+  - `ix_password_reset_tokens_identity_id_consumed_at`
+
+#### `audit.auth_audit_logs`
+
+- 主キー: `id`（BIGINT IDENTITY）
+- 外部キー:
+  - `user_id -> auth.users.id`
+  - `session_id -> auth.sessions.id`
+- 主な列:
+  - `occurred_at`
+  - `event_type`
+  - `provider`
+  - `client_ip`
+  - `xff_raw`
+  - `connection_ip`
+  - `user_agent`
+  - `reason_code`
+  - `metadata`
+- index:
+  - `ix_auth_audit_logs_occurred_at`
+  - `ix_auth_audit_logs_event_type_occurred_at`
+  - `ix_auth_audit_logs_user_id_occurred_at`
+  - `ix_auth_audit_logs_session_id_occurred_at`
+
+実装済みイベント種別:
+
+- `auth.login.success`
+- `auth.login.fail`
+- `auth.logout.success`
+- `auth.logout.fail`
+- `auth.session_refresh.success`
+- `auth.session_refresh.fail`
+- `auth.session_revoke.success`
+- `auth.session_revoke.fail`
+- `auth.signup.success`
+- `auth.signup.fail`
+- `auth.email_verify.success`
+- `auth.email_verify.fail`
+- `auth.password_change.success`
+- `auth.password_change.fail`
+- `auth.password_reset_request.success`
+- `auth.password_reset_request.fail`
+- `auth.password_reset_confirm.success`
+- `auth.password_reset_confirm.fail`
+- `auth.entra_callback.success`
+- `auth.entra_callback.fail`
+- `auth.entra_profile_fetch.success`
+- `auth.entra_profile_fetch.fail`
+
+#### `core.async_jobs`
+
+- 主キー: `id`（UUID）
+- 外部キー: `requested_by_user_id -> auth.users.id`
+- 主な列:
+  - `job_type`
+  - `status`
+  - `queue_name`
+  - `task_name`
+  - `requested_payload`
+  - `result_payload`
+  - `error_message`
+  - `retry_count`
+  - `started_at`
+  - `finished_at`
+  - `expires_at`
+  - `created_at`
+  - `updated_at`
+- index:
+  - `ix_async_jobs_requested_by_user_id_created_at`
+  - `ix_async_jobs_requested_by_user_id_status_job_type`
+  - `ix_async_jobs_job_type_status_created_at`
+  - `ix_async_jobs_expires_at`
+
+#### `core.async_job_artifacts`
+
+- 主キー: `id`（UUID）
+- 外部キー: `job_id -> core.async_jobs.id`
+- 主な列:
+  - `artifact_type`
+  - `storage_provider`
+  - `container_name`
+  - `blob_path`
+  - `file_name`
+  - `content_type`
+  - `file_size_bytes`
+  - `checksum`
+  - `expires_at`
+  - `created_at`
+- index:
+  - `ix_async_job_artifacts_job_id_created_at`
+
 ### ER 図
 
 ```mermaid
@@ -746,6 +1029,13 @@ erDiagram
 - `canceled`
 - `expired`
 
+### 実行制御
+
+- `queued` ジョブのみ worker が claim して `running` へ遷移する
+- 同時実行数制御は DB 上の状態を基準に判定する
+- キャンセル API は `POST /backend/jobs/{job_id}/cancel`
+- retry 回数は `retry_count` で管理する
+
 ### 関連ファイル
 
 - dispatcher: `app/services/jobs/async_job_dispatcher.py`
@@ -769,19 +1059,6 @@ cleanup は `app.schedulers.scheduler_cleanup` から起動します。
 - `app/schedulers/cleanup/runners/sessions.py`
 - `app/schedulers/cleanup/runners/audit_logs.py`
 - `app/schedulers/cleanup/runners/async_jobs.py`
-
-## 設定管理
-
-設定は `app/core/settings/config.py` の `AppSettings` に集約しています。  
-ローカルでは `apps/backend/.env` があれば読み込み、本番は環境変数注入前提です。
-
-主要設定カテゴリ:
-
-- Azure SQL: `DATABASE_URL`, `DATABASE_*`
-- Auth: `SESSION_*`, `EMAIL_*`, `PASSWORD_*`, `ENTRA_*`
-- Async jobs: `ASYNC_JOB_*`, `SERVICE_BUS_*`
-- Storage: `AZURE_BLOB_*`
-- Cleanup: `SESSION_CLEANUP_ENABLED`, `AUDIT_CLEANUP_ENABLED`, `CLEANUP_BATCH_SIZE`
 
 ## 実装上の注意
 
