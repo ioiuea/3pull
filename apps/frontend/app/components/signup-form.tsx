@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { useSWRConfig } from 'swr';
 import { cn } from '~/lib/utils';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
-import { backendFetch } from '~/lib/api-helper';
+import { type AuthMe, backendFetch } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
 import { PRODUCT_NAME } from '~/constants/product';
 
@@ -15,11 +16,20 @@ type SignupResponse = {
   debug_verification_token?: string | null;
 };
 
+type EmailLoginResponse = {
+  status: 'authenticated';
+  user: AuthMe;
+};
+
 export function SignupForm({ className, ...props }: React.ComponentProps<'div'>) {
   const { t } = useTranslation('auth');
   const navigate = useNavigate();
+  const { mutate } = useSWRConfig();
+  const location = useLocation();
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
+  const searchParams = new URLSearchParams(location.search);
+  const returnTo = searchParams.get('return_to') ?? `/${currentLanguage}`;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -90,8 +100,29 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
           payload?.detail?.message ?? t('signup.errors.verifyDefault', { status: response.status }),
         );
       }
+      const loginResponse = await backendFetch('/auth/email/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      const loginPayload = (await loginResponse.json().catch(() => null)) as
+        | {
+            detail?: { message?: string };
+          }
+        | EmailLoginResponse
+        | null;
+      if (!loginResponse.ok) {
+        const message =
+          loginPayload && 'detail' in loginPayload
+            ? loginPayload.detail?.message
+            : t('login.errors.default', { status: loginResponse.status });
+        throw new Error(message ?? t('login.errors.default', { status: loginResponse.status }));
+      }
+      await mutate('auth-me', (loginPayload as EmailLoginResponse).user, {
+        revalidate: false,
+        populateCache: true,
+      });
       setSuccessMessage(t('signup.successVerified'));
-      navigate(`/${currentLanguage}/login`, { replace: true });
+      navigate(returnTo, { replace: true });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : t('signup.errors.verifyUnknown'));
     } finally {
@@ -164,7 +195,9 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
                 </Button>
                 <FieldDescription className="text-center">
                   {t('signup.hasAccount')}{' '}
-                  <Link to={`/${currentLanguage}/login`}>{t('signup.goLogin')}</Link>
+                  <Link to={`/${currentLanguage}/login?return_to=${encodeURIComponent(returnTo)}`}>
+                    {t('signup.goLogin')}
+                  </Link>
                 </FieldDescription>
               </Field>
             </FieldGroup>

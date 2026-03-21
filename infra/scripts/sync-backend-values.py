@@ -89,7 +89,7 @@ def resolve_trusted_proxy_cidrs(*, common: dict, subnets_config: dict) -> list[s
             }
         )
 
-    aliases = {"agic"}
+    aliases = {"agic", "firewall"}
     if enable_low_latency:
         aliases.add("agicll")
 

@@ -1,14 +1,20 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { useSWRConfig } from 'swr';
 import { cn } from '~/lib/utils';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
-import { backendFetch } from '~/lib/api-helper';
+import { type AuthMe, backendFetch } from '~/lib/api-helper';
 import { isSupportedLanguage } from '~/lib/i18n';
 import { PRODUCT_NAME } from '~/constants/product';
+
+type EmailLoginResponse = {
+  status: 'authenticated';
+  user: AuthMe;
+};
 
 function EntraIcon() {
   return (
@@ -24,6 +30,7 @@ function EntraIcon() {
 export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) {
   const { t } = useTranslation('auth');
   const navigate = useNavigate();
+  const { mutate } = useSWRConfig();
   const location = useLocation();
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
@@ -44,14 +51,23 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            detail?: { message?: string };
+          }
+        | EmailLoginResponse
+        | null;
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          detail?: { message?: string };
-        } | null;
-        throw new Error(
-          payload?.detail?.message ?? t('login.errors.default', { status: response.status }),
-        );
+        const message =
+          payload && 'detail' in payload
+            ? payload.detail?.message
+            : t('login.errors.default', { status: response.status });
+        throw new Error(message ?? t('login.errors.default', { status: response.status }));
       }
+      await mutate('auth-me', (payload as EmailLoginResponse).user, {
+        revalidate: false,
+        populateCache: true,
+      });
       navigate(returnTo, { replace: true });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : t('login.errors.unknown'));
@@ -117,7 +133,9 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
                 </Button>
                 <FieldDescription className="text-center">
                   {t('login.noAccount')}{' '}
-                  <Link to={`/${currentLanguage}/signup`}>{t('login.goSignup')}</Link>
+                  <Link to={`/${currentLanguage}/signup?return_to=${encodeURIComponent(returnTo)}`}>
+                    {t('login.goSignup')}
+                  </Link>
                 </FieldDescription>
               </Field>
             </FieldGroup>
