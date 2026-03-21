@@ -18,6 +18,15 @@ type HealthPayload = {
     sql?: {
       ok?: boolean;
     };
+    redis?: {
+      ok?: boolean;
+    };
+    service_bus?: {
+      ok?: boolean;
+    };
+    storage?: {
+      ok?: boolean;
+    };
   };
 };
 
@@ -61,7 +70,10 @@ const ApiProtectionSamplePage = () => {
     return t('panels.down');
   };
 
-  const toSqlStatusLabel = (result: CheckResult | null): string => {
+  const toDependencyStatusLabel = (
+    result: CheckResult | null,
+    dependency: 'sql' | 'redis' | 'service_bus' | 'storage',
+  ): string => {
     if (!result) {
       return t('panels.notChecked');
     }
@@ -69,11 +81,11 @@ const ApiProtectionSamplePage = () => {
       return t('panels.unauthorized');
     }
     const payload = parseHealthPayload(result);
-    const sqlOk = payload?.dependencies?.sql?.ok;
-    if (sqlOk === true) {
+    const dependencyOk = payload?.dependencies?.[dependency]?.ok;
+    if (dependencyOk === true) {
       return t('panels.up');
     }
-    if (sqlOk === false) {
+    if (dependencyOk === false) {
       return t('panels.down');
     }
     return t('panels.unknown');
@@ -141,7 +153,7 @@ const ApiProtectionSamplePage = () => {
             <Button onClick={() => void requestWithSession()} disabled={isLoadingProtected}>
               {isLoadingProtected ? t('actions.checking') : t('allowed.cta')}
             </Button>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-md border bg-background/40 p-3">
                 <p className="text-xs text-muted-foreground">{t('panels.api')}</p>
                 <p
@@ -153,9 +165,33 @@ const ApiProtectionSamplePage = () => {
               <div className="rounded-md border bg-background/40 p-3">
                 <p className="text-xs text-muted-foreground">{t('panels.sql')}</p>
                 <p
-                  className={`text-sm font-semibold ${toStatusTone(toSqlStatusLabel(protectedResult))}`}
+                  className={`text-sm font-semibold ${toStatusTone(toDependencyStatusLabel(protectedResult, 'sql'))}`}
                 >
-                  {toSqlStatusLabel(protectedResult)}
+                  {toDependencyStatusLabel(protectedResult, 'sql')}
+                </p>
+              </div>
+              <div className="rounded-md border bg-background/40 p-3">
+                <p className="text-xs text-muted-foreground">{t('panels.redis')}</p>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toDependencyStatusLabel(protectedResult, 'redis'))}`}
+                >
+                  {toDependencyStatusLabel(protectedResult, 'redis')}
+                </p>
+              </div>
+              <div className="rounded-md border bg-background/40 p-3">
+                <p className="text-xs text-muted-foreground">{t('panels.serviceBus')}</p>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toDependencyStatusLabel(protectedResult, 'service_bus'))}`}
+                >
+                  {toDependencyStatusLabel(protectedResult, 'service_bus')}
+                </p>
+              </div>
+              <div className="rounded-md border bg-background/40 p-3">
+                <p className="text-xs text-muted-foreground">{t('panels.storage')}</p>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toDependencyStatusLabel(protectedResult, 'storage'))}`}
+                >
+                  {toDependencyStatusLabel(protectedResult, 'storage')}
                 </p>
               </div>
             </div>
@@ -185,7 +221,7 @@ const ApiProtectionSamplePage = () => {
             >
               {isLoadingUnprotected ? t('actions.checking') : t('blocked.cta')}
             </Button>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-md border bg-background/40 p-3">
                 <p className="text-xs text-muted-foreground">{t('panels.api')}</p>
                 <p
@@ -197,9 +233,33 @@ const ApiProtectionSamplePage = () => {
               <div className="rounded-md border bg-background/40 p-3">
                 <p className="text-xs text-muted-foreground">{t('panels.sql')}</p>
                 <p
-                  className={`text-sm font-semibold ${toStatusTone(toSqlStatusLabel(unprotectedResult))}`}
+                  className={`text-sm font-semibold ${toStatusTone(toDependencyStatusLabel(unprotectedResult, 'sql'))}`}
                 >
-                  {toSqlStatusLabel(unprotectedResult)}
+                  {toDependencyStatusLabel(unprotectedResult, 'sql')}
+                </p>
+              </div>
+              <div className="rounded-md border bg-background/40 p-3">
+                <p className="text-xs text-muted-foreground">{t('panels.redis')}</p>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toDependencyStatusLabel(unprotectedResult, 'redis'))}`}
+                >
+                  {toDependencyStatusLabel(unprotectedResult, 'redis')}
+                </p>
+              </div>
+              <div className="rounded-md border bg-background/40 p-3">
+                <p className="text-xs text-muted-foreground">{t('panels.serviceBus')}</p>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toDependencyStatusLabel(unprotectedResult, 'service_bus'))}`}
+                >
+                  {toDependencyStatusLabel(unprotectedResult, 'service_bus')}
+                </p>
+              </div>
+              <div className="rounded-md border bg-background/40 p-3">
+                <p className="text-xs text-muted-foreground">{t('panels.storage')}</p>
+                <p
+                  className={`text-sm font-semibold ${toStatusTone(toDependencyStatusLabel(unprotectedResult, 'storage'))}`}
+                >
+                  {toDependencyStatusLabel(unprotectedResult, 'storage')}
                 </p>
               </div>
             </div>

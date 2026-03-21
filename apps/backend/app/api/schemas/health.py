@@ -23,6 +23,9 @@ class HealthDependencies(BaseModel):
     """依存先サービスごとの健全性."""
 
     sql: TcpDependencyHealth
+    redis: TcpDependencyHealth
+    service_bus: TcpDependencyHealth
+    storage: TcpDependencyHealth
 
 
 class HealthResponse(BaseModel):

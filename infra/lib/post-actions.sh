@@ -113,6 +113,7 @@ EOF_INNER
       echo "==> Skip Generate AGIC/KEDA init scripts (--what-if)"
       echo "==> Skip Generate frontend Helm values file (--what-if)"
       echo "==> Skip Generate backend Helm values file (--what-if)"
+      echo "==> Skip Generate ip rate limit ops env (--what-if)"
     else
       agic_namespace="$(RESOURCE_CONFIG_FILE="$federated_credential_config_file" python - <<'PY'
 import json
@@ -327,10 +328,23 @@ EOF_INNER
       echo "==> Generate backend Helm values file"
       COMMON_FILE="$common_file" \
       AKS_META_FILE="$aks_meta_file" \
+      REDIS_META_FILE="$redis_meta_file" \
       STORAGE_CONFIG_FILE="$storage_config_file" \
+      SUBNETS_CONFIG_FILE="$subnets_config_file" \
       TEMPLATE_FILE="$backend_values_template_file" \
       OUTPUT_FILE="$backend_values_generated_file" \
       "$backend_values_sync_script"
+
+      if [[ "$(meta_bool "$redis_meta_file" "deploy" "false")" == "true" ]]; then
+        echo "==> Generate ip rate limit ops env"
+        COMMON_FILE="$common_file" \
+        MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
+        REDIS_META_FILE="$redis_meta_file" \
+        OUTPUT_FILE="$ip_rate_limit_generated_env_file" \
+        "$ip_rate_limit_env_sync_script"
+      else
+        echo "==> Skip Generate ip rate limit ops env (resourceToggles.redis=false)"
+      fi
 
       cat <<'EOF_INNER'
 ------------------------------------------------------------

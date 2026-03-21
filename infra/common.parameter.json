@@ -19,10 +19,10 @@
     "serviceBus": true,
     "storage": true,
     "sqlDatabase": true,
+    "redis": true,
     "maintenanceVm": true,
     "postgresDatabase": false,
-    "cosmosDatabase": false,
-    "redis": false
+    "cosmosDatabase": false
   },
   "logAnalytics": {
     "dailyQuotaGb": -1
@@ -60,6 +60,10 @@
     "entraAdminLogin": "",
     "entraAdminObjectId": ""
   },
+  "redis": {
+    "skuName": "Balanced_B0",
+    "highAvailabilityEnabled": true
+  },
   "postgres": {
     "skuTier": "Burstable",
     "skuName": "Standard_B2s",
@@ -74,28 +78,6 @@
       "startHour": 3,
       "startMinute": 0
     }
-  },
-  "redis": {
-    "skuName": "Basic",
-    "capacity": 0,
-    "shardCount": 1,
-    "scaleStrategy": "vertical",
-    "zonalAllocationPolicy": "Automatic",
-    "zones": [],
-    "replicasPerMaster": 1,
-    "enableGeoReplication": false,
-    "enableMicrosoftEntraAuthentication": true,
-    "disableAccessKeyAuthentication": false,
-    "enableCustomMaintenanceWindow": false,
-    "maintenanceWindow": {
-      "dayOfWeek": 0,
-      "startHour": 3,
-      "duration": "PT5H"
-    },
-    "enableRdbBackup": false,
-    "rdbBackupFrequencyInMinutes": 60,
-    "rdbBackupMaxSnapshotCount": 1,
-    "rdbStorageConnectionString": ""
   },
   "cosno": {
     "throughputMode": "Serverless",

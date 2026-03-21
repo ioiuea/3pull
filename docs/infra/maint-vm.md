@@ -94,6 +94,7 @@
 ## VM本体の構成
 
 - migration 用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-migration`）を VM に割り当てる。
+- redis 運用用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-redis-ops`）を VM に割り当てる。
 - AKS 日常運用用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-aks-operator`）を VM に割り当てる。
 - AKS 高権限運用用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-aks-admin`）を VM に割り当てる。
 - ログインするアカウントに、本VMに対して以下どちらかの権限が付与されていること。
@@ -103,6 +104,7 @@
 補足:
 
 - migration 用 User Assigned Managed Identity は Azure SQL bootstrap / Alembic 実行用の principal として利用します。
+- redis-ops 用 User Assigned Managed Identity は Azure Managed Redis の block key 確認・解除用 principal として利用します。
 - aks-operator 用 User Assigned Managed Identity は AKS の kubeconfig 取得、日常の `kubectl`、アプリ namespace の `helm` 実行用 principal として利用します。
 - aks-admin 用 User Assigned Managed Identity は AGIC / KEDA 導入や緊急時の cluster-wide 操作用 principal として利用します。
 - runtime 用の API / worker / schedulers Managed Identity は maint-vm には割り当てません。
@@ -167,7 +169,8 @@ az ssh vm -n vm-[common.environmentName]-[common.systemName]-maint -g rg-[common
 - API / worker / schedulers に DDL 権限を持たせない
 - Private Endpoint 経由で Azure SQL へ到達できる管理経路を maint-vm に集約する
 - migration 実行主体を固定し、監査・切り分けをしやすくする
-- VM の identity は DB 用 1 つと AKS 用 2 つの計 3 principal に限定し、責務を明確にする
+- Redis 解除運用主体を runtime principal と分離し、maint-vm に集約する
+- VM の identity は DB 用 1 つ、Redis 用 1 つ、AKS 用 2 つの計 4 principal に分離する
 
 # AKS 運用実行方針
 

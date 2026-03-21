@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.services.health import _host_port_from_url
+from app.api.routers.health import _host_port_from_url
 
 
 def test_host_port_from_url_uses_explicit_port() -> None:

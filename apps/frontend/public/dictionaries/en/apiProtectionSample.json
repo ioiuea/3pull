@@ -22,6 +22,9 @@
   "panels": {
     "api": "API Status",
     "sql": "SQL Database Status",
+    "redis": "Redis Status",
+    "serviceBus": "Service Bus Status",
+    "storage": "Storage Status",
     "up": "Up",
     "down": "Down / Error",
     "blocked": "Blocked by auth",

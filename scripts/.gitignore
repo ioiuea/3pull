@@ -1,3 +1,4 @@
 init/agicController/deploy.sh
 init/kedaController/deploy.sh
 init/sql/param.conf
+ops/ip-rate-limit/generated.env.sh

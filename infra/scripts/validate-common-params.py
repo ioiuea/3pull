@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import re
 import math
 import sys
 from pathlib import Path
@@ -121,8 +122,8 @@ def main() -> int:
     service_bus_values = common.get("serviceBus")
     storage_values = common.get("storage")
     sql_database_values = common.get("sqlDatabase")
-    postgres_values = common.get("postgres")
     redis_values = common.get("redis")
+    postgres_values = common.get("postgres")
     cosno_values = common.get("cosno")
 
     if not isinstance(common_values, dict):
@@ -159,12 +160,14 @@ def main() -> int:
     elif not isinstance(sql_database_values, dict):
         errors.append("sqlDatabase: object で指定してください。")
         sql_database_values = {}
+    if redis_values is None:
+        redis_values = {}
+    elif not isinstance(redis_values, dict):
+        errors.append("redis: object で指定してください。")
+        redis_values = {}
     if not isinstance(postgres_values, dict):
         errors.append("postgres: object で指定してください。")
         postgres_values = {}
-    if not isinstance(redis_values, dict):
-        errors.append("redis: object で指定してください。")
-        redis_values = {}
     if not isinstance(cosno_values, dict):
         errors.append("cosno: object で指定してください。")
         cosno_values = {}
@@ -295,6 +298,21 @@ def main() -> int:
     as_non_empty_str(sql_database_values.get("entraAdminLogin"), "sqlDatabase.entraAdminLogin", errors)
     as_non_empty_str(sql_database_values.get("entraAdminObjectId"), "sqlDatabase.entraAdminObjectId", errors)
 
+    # Azure Managed Redis 設定
+    redis_sku_name = as_non_empty_str(redis_values.get("skuName"), "redis.skuName", errors)
+    if redis_sku_name is not None and not re.fullmatch(
+        r"(Balanced_B[0-9]+|ComputeOptimized_X[0-9]+|MemoryOptimized_M[0-9]+|EnterpriseFlash_F[0-9]+|Enterprise_E[0-9]+|FlashOptimized_A[0-9]+)",
+        redis_sku_name,
+    ):
+        errors.append(
+            "redis.skuName: Azure Managed Redis の SKU 名（例: Balanced_B0 / Enterprise_E10）を指定してください。"
+        )
+
+    as_bool(
+        redis_values.get("highAvailabilityEnabled"),
+        "redis.highAvailabilityEnabled",
+        errors,
+    )
     # PostgreSQL 設定
     sku_tier = as_non_empty_str(postgres_values.get("skuTier"), "postgres.skuTier", errors)
     if sku_tier is not None and sku_tier not in ["Burstable", "GeneralPurpose", "MemoryOptimized"]:
@@ -354,184 +372,6 @@ def main() -> int:
                 errors.append("postgres.maintenanceWindow.startHour: 0〜23 の範囲で指定してください。")
             if start_minute is not None and not (0 <= start_minute <= 59):
                 errors.append("postgres.maintenanceWindow.startMinute: 0〜59 の範囲で指定してください。")
-
-    # Redis メンテナンスウィンドウ設定
-    redis_sku_name = as_non_empty_str(
-        redis_values.get("skuName"),
-        "redis.skuName",
-        errors,
-    )
-    if redis_sku_name is not None and redis_sku_name not in ["Basic", "Standard", "Premium"]:
-        errors.append("redis.skuName: Basic / Standard / Premium のいずれかを指定してください。")
-
-    redis_capacity = as_int(
-        redis_values.get("capacity"),
-        "redis.capacity",
-        errors,
-    )
-    if redis_capacity is not None and redis_capacity < 0:
-        errors.append("redis.capacity: 0 以上の整数を指定してください。")
-
-    redis_shard_count = as_int(
-        redis_values.get("shardCount"),
-        "redis.shardCount",
-        errors,
-    )
-    if redis_shard_count is not None and redis_shard_count < 1:
-        errors.append("redis.shardCount: 1 以上の整数を指定してください。")
-
-    redis_scale_strategy = as_non_empty_str(
-        redis_values.get("scaleStrategy"),
-        "redis.scaleStrategy",
-        errors,
-    )
-    if redis_scale_strategy is not None and redis_scale_strategy not in ["vertical", "horizontal"]:
-        errors.append("redis.scaleStrategy: vertical / horizontal のいずれかを指定してください。")
-
-    if redis_sku_name in ["Basic", "Standard"]:
-        if redis_capacity is not None and not (0 <= redis_capacity <= 6):
-            errors.append("redis.capacity: Basic/Standard の場合は 0〜6 を指定してください。")
-    elif redis_sku_name == "Premium":
-        if redis_capacity is not None and not (1 <= redis_capacity <= 6):
-            errors.append("redis.capacity: Premium の場合は 1〜6 を指定してください。")
-
-    redis_zonal_allocation_policy = as_non_empty_str(
-        redis_values.get("zonalAllocationPolicy"),
-        "redis.zonalAllocationPolicy",
-        errors,
-    )
-    if redis_zonal_allocation_policy is not None and redis_zonal_allocation_policy not in [
-        "Automatic",
-        "NoZones",
-        "UserDefined",
-    ]:
-        errors.append("redis.zonalAllocationPolicy: Automatic / NoZones / UserDefined のいずれかを指定してください。")
-
-    redis_zones = redis_values.get("zones")
-    if not isinstance(redis_zones, list):
-        errors.append("redis.zones: ゾーン番号文字列の配列で指定してください（未指定は空配列）。")
-        redis_zones = []
-    else:
-        for i, zone in enumerate(redis_zones):
-            if not isinstance(zone, str) or zone not in ["1", "2", "3"]:
-                errors.append(f"redis.zones[{i}]: '1' / '2' / '3' のいずれかを指定してください。")
-
-    redis_replicas_per_master = as_int(
-        redis_values.get("replicasPerMaster"),
-        "redis.replicasPerMaster",
-        errors,
-    )
-    if redis_replicas_per_master is not None and redis_replicas_per_master < 0:
-        errors.append("redis.replicasPerMaster: 0 以上の整数を指定してください。")
-
-    redis_enable_geo_replication = as_bool(
-        redis_values.get("enableGeoReplication"),
-        "redis.enableGeoReplication",
-        errors,
-    )
-    redis_enable_microsoft_entra_authentication = as_bool(
-        redis_values.get("enableMicrosoftEntraAuthentication"),
-        "redis.enableMicrosoftEntraAuthentication",
-        errors,
-    )
-    as_bool(
-        redis_values.get("disableAccessKeyAuthentication"),
-        "redis.disableAccessKeyAuthentication",
-        errors,
-    )
-
-    if redis_zonal_allocation_policy == "UserDefined":
-        if redis_sku_name != "Premium":
-            errors.append("redis.zonalAllocationPolicy=UserDefined は redis.skuName=Premium の場合のみ指定できます。")
-        if len(redis_zones) == 0:
-            errors.append("redis.zonalAllocationPolicy=UserDefined の場合は redis.zones を1件以上指定してください。")
-    elif len(redis_zones) > 0:
-        errors.append("redis.zones は redis.zonalAllocationPolicy=UserDefined の場合のみ指定できます。")
-
-    if redis_enable_geo_replication:
-        if redis_sku_name != "Premium":
-            errors.append("redis.enableGeoReplication=true は redis.skuName=Premium の場合のみ指定できます。")
-        if redis_replicas_per_master is not None and redis_replicas_per_master != 1:
-            errors.append("redis.enableGeoReplication=true の場合は redis.replicasPerMaster=1 を指定してください。")
-
-    if (
-        redis_values.get("disableAccessKeyAuthentication") is True
-        and redis_enable_microsoft_entra_authentication is False
-    ):
-        errors.append(
-            "redis.disableAccessKeyAuthentication=true の場合は "
-            "redis.enableMicrosoftEntraAuthentication=true を指定してください。"
-        )
-
-    redis_enable_custom_mw = as_bool(
-        redis_values.get("enableCustomMaintenanceWindow"),
-        "redis.enableCustomMaintenanceWindow",
-        errors,
-    )
-    redis_maintenance_window = redis_values.get("maintenanceWindow")
-    if redis_enable_custom_mw:
-        if not isinstance(redis_maintenance_window, dict):
-            errors.append(
-                "redis.maintenanceWindow: object で指定してください。"
-                "（enableCustomMaintenanceWindow=true の場合は必須）"
-            )
-        else:
-            day_of_week = as_int(
-                redis_maintenance_window.get("dayOfWeek"),
-                "redis.maintenanceWindow.dayOfWeek",
-                errors,
-            )
-            start_hour = as_int(
-                redis_maintenance_window.get("startHour"),
-                "redis.maintenanceWindow.startHour",
-                errors,
-            )
-            duration = redis_maintenance_window.get("duration")
-
-            if day_of_week is not None and not (0 <= day_of_week <= 6):
-                errors.append("redis.maintenanceWindow.dayOfWeek: 0〜6 の範囲で指定してください。")
-            if start_hour is not None and not (0 <= start_hour <= 23):
-                errors.append("redis.maintenanceWindow.startHour: 0〜23 の範囲で指定してください。")
-            if not isinstance(duration, str) or not duration.startswith("PT") or not duration.endswith("H"):
-                errors.append("redis.maintenanceWindow.duration: ISO 8601 形式の時間（例: PT5H）で指定してください。")
-
-    redis_enable_rdb_backup = as_bool(
-        redis_values.get("enableRdbBackup"),
-        "redis.enableRdbBackup",
-        errors,
-    )
-    redis_rdb_backup_frequency = as_int(
-        redis_values.get("rdbBackupFrequencyInMinutes"),
-        "redis.rdbBackupFrequencyInMinutes",
-        errors,
-    )
-    redis_rdb_backup_max_snapshot_count = as_int(
-        redis_values.get("rdbBackupMaxSnapshotCount"),
-        "redis.rdbBackupMaxSnapshotCount",
-        errors,
-    )
-    redis_rdb_storage_connection_string = redis_values.get("rdbStorageConnectionString")
-    if not isinstance(redis_rdb_storage_connection_string, str):
-        errors.append("redis.rdbStorageConnectionString: 文字列で指定してください。")
-
-    if redis_rdb_backup_frequency is not None and redis_rdb_backup_frequency not in [15, 30, 60, 360, 720, 1440]:
-        errors.append(
-            "redis.rdbBackupFrequencyInMinutes: 15 / 30 / 60 / 360 / 720 / 1440 のいずれかを指定してください。"
-        )
-
-    if redis_rdb_backup_max_snapshot_count is not None and redis_rdb_backup_max_snapshot_count < 1:
-        errors.append("redis.rdbBackupMaxSnapshotCount: 1 以上の整数を指定してください。")
-
-    if redis_enable_rdb_backup:
-        if redis_sku_name != "Premium":
-            # Basic/Standard では実装側で無視するため、ここでは停止させない。
-            redis_enable_rdb_backup = False
-
-    if redis_enable_rdb_backup:
-        if isinstance(redis_rdb_storage_connection_string, str) and redis_rdb_storage_connection_string.strip() == "":
-            errors.append(
-                "redis.rdbStorageConnectionString: redis.enableRdbBackup=true の場合は保存先ストレージ接続文字列を指定してください。"
-            )
 
     # Cosmos DB(NoSQL) スループット設定
     throughput_mode = as_non_empty_str(

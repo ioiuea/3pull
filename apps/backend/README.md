@@ -110,8 +110,7 @@ apps/backend
     ├── services/                          # ユースケース層
     │   ├── audit/                         # 監査ログ記録ユースケース
     │   ├── auth/                          # 認証フロー
-    │   ├── jobs/                          # job row 作成と queue dispatch
-    │   └── health.py                      # health 応答の組み立て
+    │   └── jobs/                          # job row 作成と queue dispatch
     └── workers/                           # Service Bus worker 実装
         ├── runtime.py                     # 共通 worker 実行ループ
         ├── job_registry.py                # job_type と実行関数の対応表
@@ -173,10 +172,16 @@ apps/backend
 - セッションは DB の `auth.sessions` で管理
 - Cookie は `HttpOnly` を利用
 - CSRF は `Origin/Referer` 検証ミドルウェアで保護
+- 認証系 API には IP ベース rate limit を適用
 - パスワードは Argon2id でハッシュ化
 - Email verification token / password reset token は SHA-256 ハッシュのみ保存
 - Entra の access token / refresh token は暗号化して保存
 - `/backend/auth/entra/profile` は internal ユーザーのみ許可
+
+関連ドキュメント:
+
+- [docs/apps/auth-rate-limit.md](../../docs/apps/auth-rate-limit.md)
+- [docs/api-security.md](../../docs/api-security.md)
 
 ## データベース設計
 

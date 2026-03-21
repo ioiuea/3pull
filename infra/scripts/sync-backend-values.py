@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import ipaddress
 from pathlib import Path
 
 
@@ -27,6 +28,76 @@ def normalize_image_component(value: str) -> str:
     name = re.sub(r"[^a-z0-9-]", "-", value.lower())
     name = re.sub(r"-{2,}", "-", name).strip("-")
     return name or "app"
+
+
+def normalize_redis_name(environment_name: str, system_name: str) -> str:
+    env = re.sub(r"[^a-z0-9-]", "-", environment_name.lower())
+    system = re.sub(r"[^a-z0-9-]", "-", system_name.lower())
+    return re.sub(r"-{2,}", "-", f"redis-{env}-{system}").strip("-")
+
+
+def resolve_trusted_proxy_cidrs(*, common: dict, subnets_config: dict) -> list[str]:
+    subnet_defs = subnets_config.get("subnetDefinitions", [])
+    vnet_address_prefixes = common.get("network", {}).get("vnetAddressPrefixes", [])
+    enable_low_latency = bool(common.get("network", {}).get("enableLowLatencyApplicationGatewaySubnet", False))
+    shared_bastion_ip = str(common.get("network", {}).get("sharedBastionIp", "")).strip()
+
+    if shared_bastion_ip:
+        subnet_defs = [s for s in subnet_defs if s.get("alias", s.get("name")) != "bastion"]
+    if not enable_low_latency:
+        subnet_defs = [
+            s
+            for s in subnet_defs
+            if s.get("name") != "ApplicationGatewayLowLatencySubnet"
+            and s.get("alias", s.get("name")) != "agicll"
+        ]
+
+    base_prefixes = [ipaddress.ip_network(p) for p in vnet_address_prefixes]
+    range_index = 0
+    current = int(base_prefixes[0].network_address)
+    resolved_subnets: list[dict] = []
+
+    for subnet in sorted(subnet_defs, key=lambda s: s["prefixLength"]):
+        prefix_len = subnet["prefixLength"]
+        allocated = None
+
+        while range_index < len(base_prefixes):
+            rng = base_prefixes[range_index]
+            block = 1 << (32 - prefix_len)
+
+            if current % block != 0:
+                current = ((current // block) + 1) * block
+
+            net = ipaddress.ip_network((current, prefix_len))
+            if net.subnet_of(rng):
+                allocated = net
+                current = int(net.broadcast_address) + 1
+                break
+
+            range_index += 1
+            if range_index < len(base_prefixes):
+                current = int(base_prefixes[range_index].network_address)
+
+        if allocated is None:
+            raise SystemExit(f"subnet '{subnet['name']}' does not fit in vnetAddressPrefixes")
+
+        resolved_subnets.append(
+            {
+                **subnet,
+                "alias": subnet.get("alias", subnet.get("name")),
+                "addressPrefix": str(allocated),
+            }
+        )
+
+    aliases = {"agic"}
+    if enable_low_latency:
+        aliases.add("agicll")
+
+    return [
+        subnet["addressPrefix"]
+        for subnet in resolved_subnets
+        if subnet.get("alias") in aliases
+    ]
 
 
 def run_az(cmd: list[str]) -> str:
@@ -193,6 +264,8 @@ def add_guidance_comments(content: str) -> str:
 common_path = Path(os.environ["COMMON_FILE"])
 aks_meta_path = Path(os.environ["AKS_META_FILE"])
 storage_config_path = Path(os.environ["STORAGE_CONFIG_FILE"])
+redis_meta_path = Path(os.environ["REDIS_META_FILE"])
+subnets_config_path = Path(os.environ["SUBNETS_CONFIG_FILE"])
 template_path_raw = os.environ.get("TEMPLATE_FILE", "").strip()
 output_path_raw = os.environ.get("OUTPUT_FILE", "").strip()
 if not template_path_raw:
@@ -205,6 +278,8 @@ output_path = Path(output_path_raw)
 common = json.loads(common_path.read_text(encoding="utf-8"))
 aks_meta = json.loads(aks_meta_path.read_text(encoding="utf-8"))
 storage_config = json.loads(storage_config_path.read_text(encoding="utf-8"))
+redis_meta = json.loads(redis_meta_path.read_text(encoding="utf-8"))
+subnets_config = json.loads(subnets_config_path.read_text(encoding="utf-8"))
 
 common_values = common.get("common", {})
 network_values = common.get("network", {})
@@ -295,10 +370,15 @@ acr_name = f"cr{normalize_registry_suffix(environment_name)}{normalize_registry_
 image_prefix = f"{acr_name}.azurecr.io"
 system_image_name = normalize_image_component(system_name)
 storage_account_name = normalize_storage_account_name(environment_name, system_name)
+redis_name = str(redis_meta.get("redisName", "")).strip() or normalize_redis_name(environment_name, system_name)
+redis_host = str(redis_meta.get("redisHost", "")).strip() or f"{redis_name}.{common_values.get('location', '')}.redis.azure.net"
+redis_port = int(redis_meta.get("redisPort", 10000))
 blob_container_name = str(storage_config.get("blobContainerName", "async-jobs")).strip() or "async-jobs"
 standard_api_host = f"api-{environment_name}-{system_name}.example.com"
 low_latency_api_host = f"ll-api-{environment_name}-{system_name}.example.com"
 enable_low_latency_subnet = bool(network_values.get("enableLowLatencyApplicationGatewaySubnet", False))
+trusted_proxy_cidrs = resolve_trusted_proxy_cidrs(common=common, subnets_config=subnets_config)
+trusted_proxy_headers = bool(common.get("resourceToggles", {}).get("applicationGateway", True))
 
 replacements = {
     "systemName": yaml_quote(system_name),
@@ -324,6 +404,11 @@ replacements = {
     "config.env.SERVICE_BUS_NAMESPACE_FQDN": yaml_quote(f"sb-{environment_name}-{system_name}.servicebus.windows.net"),
     "config.env.AZURE_BLOB_ACCOUNT_URL": yaml_quote(f"https://{storage_account_name}.blob.core.windows.net/"),
     "config.env.AZURE_BLOB_CONTAINER": yaml_quote(blob_container_name),
+    "config.env.REDIS_HOST": yaml_quote(redis_host),
+    "config.env.REDIS_PORT": yaml_quote(str(redis_port)),
+    "config.env.REDIS_SSL": yaml_quote("true"),
+    "config.env.TRUST_PROXY_HEADERS": yaml_quote("true" if trusted_proxy_headers else "false"),
+    "config.env.TRUSTED_PROXY_CIDRS": yaml_quote(",".join(trusted_proxy_cidrs)),
     "config.env.ENTRA_TENANT_ID": yaml_quote("00000000-0000-0000-0000-000000000000"),
     "config.env.ENTRA_CLIENT_ID": yaml_quote("00000000-0000-0000-0000-000000000000"),
     "config.env.ENTRA_INTERNAL_DOMAINS": yaml_quote("example.com"),

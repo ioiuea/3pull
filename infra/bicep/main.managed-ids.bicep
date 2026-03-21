@@ -47,6 +47,12 @@ resource migrationManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentit
   tags: modulesTags
 }
 
+resource redisOpsManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-redis-ops'
+  location: location
+  tags: modulesTags
+}
+
 resource aksOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'mi-${environmentName}-${systemName}-aks-operator'
   location: location
@@ -81,6 +87,7 @@ output apiManagedIdentityName string = apiManagedIdentity.name
 output workerManagedIdentityName string = workerManagedIdentity.name
 output schedulersManagedIdentityName string = schedulersManagedIdentity.name
 output migrationManagedIdentityName string = migrationManagedIdentity.name
+output redisOpsManagedIdentityName string = redisOpsManagedIdentity.name
 output aksOperatorManagedIdentityName string = aksOperatorManagedIdentity.name
 output aksAdminManagedIdentityName string = aksAdminManagedIdentity.name
 output kedaOperatorManagedIdentityName string = kedaOperatorManagedIdentity.name

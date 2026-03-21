@@ -24,6 +24,7 @@ from app.adapters.idp.entra import (
     validate_entra_settings,
 )
 from app.adapters.sql.session import get_session
+from app.api.dependencies.rate_limit import require_rate_limit
 from app.api.schemas.auth import (
     EmailLoginRequest,
     EmailLoginResponse,
@@ -44,6 +45,7 @@ from app.api.schemas.auth import (
 )
 from app.core.datetime import ensure_utc_datetime
 from app.core.logging.config import get_logger
+from app.core.security import RateLimitPolicyKey, RateLimitService
 from app.core.security.client_ip import resolve_client_ips
 from app.core.security.token_cipher import decrypt_token, encrypt_token
 from app.core.settings import get_settings
@@ -80,6 +82,47 @@ from app.services.auth.session_auth_service import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = get_logger(__name__)
+
+
+async def _record_rate_limit_failure(
+    *,
+    policy_key: RateLimitPolicyKey,
+    request: Request,
+) -> None:
+    """失敗系イベントを rate limit failure counter へ反映する."""
+    resolved_ips = resolve_client_ips(request)
+    client_ip = resolved_ips.client_ip
+    if client_ip is None:
+        logger.warning(
+            "auth.rate_limit.client_ip_unresolved",
+            policy_key=policy_key.value,
+        )
+        return
+
+    service = RateLimitService()
+    try:
+        decision = await service.record_failure(
+            policy_key=policy_key,
+            client_ip=client_ip,
+        )
+    except Exception as error:
+        logger.warning(
+            "auth.rate_limit.failure_record_failed",
+            policy_key=policy_key.value,
+            client_ip=client_ip,
+            reason=str(error),
+        )
+        return
+    finally:
+        await service.close()
+
+    if decision.blocked:
+        logger.warning(
+            "auth.rate_limit.failure_blocked",
+            policy_key=policy_key.value,
+            client_ip=client_ip,
+            reason=decision.reason.value if decision.reason else None,
+        )
 
 
 async def _record_auth_audit(
@@ -400,6 +443,7 @@ async def _require_session_user(
 async def post_email_signup(
     payload: EmailSignupRequest,
     request: Request,
+    _: None = Depends(require_rate_limit(RateLimitPolicyKey.EMAIL_SIGNUP)),
     session: Session = Depends(get_session),
 ) -> EmailSignupResponse:
     """Email サインアップを実行し、検証トークン発行状態を返す."""
@@ -416,6 +460,10 @@ async def post_email_signup(
             session, email=payload.email
         )
     except AuthConflictError as error:
+        await _record_rate_limit_failure(
+            policy_key=RateLimitPolicyKey.EMAIL_SIGNUP,
+            request=request,
+        )
         await _record_auth_audit(
             session,
             event_type=AuthAuditEventType.SIGNUP_FAIL,
@@ -486,6 +534,7 @@ async def post_email_login(
     payload: EmailLoginRequest,
     request: Request,
     response: Response,
+    _: None = Depends(require_rate_limit(RateLimitPolicyKey.EMAIL_LOGIN)),
     session: Session = Depends(get_session),
 ) -> EmailLoginResponse:
     """Email ログインを実行してセッション Cookie を発行する."""
@@ -508,6 +557,10 @@ async def post_email_login(
             raw_token=raw_token,
         )
     except AuthConflictError as error:
+        await _record_rate_limit_failure(
+            policy_key=RateLimitPolicyKey.EMAIL_LOGIN,
+            request=request,
+        )
         # 失敗監査ログ（理由コード付き）。
         logger.warning(
             "auth.audit.login.failure",
@@ -609,6 +662,7 @@ async def post_password_change(
 async def post_password_reset_request(
     payload: PasswordResetRequestRequest,
     request: Request,
+    _: None = Depends(require_rate_limit(RateLimitPolicyKey.PASSWORD_RESET_REQUEST)),
     session: Session = Depends(get_session),
 ) -> PasswordResetRequestResponse:
     """
@@ -643,6 +697,7 @@ async def post_password_reset_request(
 async def post_password_reset_confirm(
     payload: PasswordResetConfirmRequest,
     request: Request,
+    _: None = Depends(require_rate_limit(RateLimitPolicyKey.PASSWORD_RESET_CONFIRM)),
     session: Session = Depends(get_session),
 ) -> PasswordResetConfirmResponse:
     """リセットトークンでパスワード再設定を確定する."""
@@ -654,6 +709,10 @@ async def post_password_reset_confirm(
             new_password=payload.new_password,
         )
     except AuthConflictError as error:
+        await _record_rate_limit_failure(
+            policy_key=RateLimitPolicyKey.PASSWORD_RESET_CONFIRM,
+            request=request,
+        )
         audit_user_id = await resolve_password_reset_user_id_for_audit(
             session,
             token=payload.token,
@@ -686,7 +745,10 @@ async def post_password_reset_confirm(
 
 
 @router.get("/entra/login")
-async def get_auth_entra_login(request: Request) -> Response:
+async def get_auth_entra_login(
+    request: Request,
+    _: None = Depends(require_rate_limit(RateLimitPolicyKey.ENTRA_LOGIN)),
+) -> Response:
     """Entra OIDC ログインへリダイレクトする."""
     # Entra必須設定があるかを先に確認する。
     validate_entra_settings()
@@ -714,6 +776,7 @@ async def get_auth_entra_login(request: Request) -> Response:
 @router.get("/entra/callback")
 async def get_auth_entra_callback(
     request: Request,
+    _: None = Depends(require_rate_limit(RateLimitPolicyKey.ENTRA_CALLBACK)),
     session: Session = Depends(get_session),
 ) -> Response:
     """Entra OIDC コールバックを処理してアプリセッションを発行する."""
@@ -728,6 +791,10 @@ async def get_auth_entra_callback(
         if not claims:
             claims = await oauth.entra.parse_id_token(request, token)
     except OAuthError as error:
+        await _record_rate_limit_failure(
+            policy_key=RateLimitPolicyKey.ENTRA_CALLBACK,
+            request=request,
+        )
         # コールバック失敗監査ログを残す。
         logger.warning(
             "auth.audit.login.failure",
@@ -749,9 +816,16 @@ async def get_auth_entra_callback(
         ) from error
 
     # クレームから subject とログインメールを取り出す。
-    subject, login_email = _resolve_login_identifier(claims)
-    # 許可ドメイン制限（設定時のみ）。
-    _validate_internal_domain(login_email)
+    try:
+        subject, login_email = _resolve_login_identifier(claims)
+        # 許可ドメイン制限（設定時のみ）。
+        _validate_internal_domain(login_email)
+    except HTTPException:
+        await _record_rate_limit_failure(
+            policy_key=RateLimitPolicyKey.ENTRA_CALLBACK,
+            request=request,
+        )
+        raise
 
     try:
         # Entra優先ポリシーでユーザーを解決/統合する。
@@ -776,6 +850,10 @@ async def get_auth_entra_callback(
             raw_token=raw_token,
         )
     except RuntimeError as error:
+        await _record_rate_limit_failure(
+            policy_key=RateLimitPolicyKey.ENTRA_CALLBACK,
+            request=request,
+        )
         await _record_auth_audit(
             session,
             event_type=AuthAuditEventType.ENTRA_CALLBACK_FAIL,
@@ -786,6 +864,10 @@ async def get_auth_entra_callback(
         )
         _raise_token_crypto_error(error)
     except AuthConflictError as error:
+        await _record_rate_limit_failure(
+            policy_key=RateLimitPolicyKey.ENTRA_CALLBACK,
+            request=request,
+        )
         # 競合・業務ルール違反は監査ログを残してHTTP化する。
         logger.warning(
             "auth.audit.login.failure",

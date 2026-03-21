@@ -1,0 +1,13 @@
+{
+  "modulesName": "svc",
+  "lockKind": "CanNotDelete",
+  "minimumTlsVersion": "1.2",
+  "publicNetworkAccess": "Disabled",
+  "skuName": "Balanced_B0",
+  "highAvailability": "Enabled",
+  "accessPolicyName": "default",
+  "accessKeysAuthentication": "Disabled",
+  "clientProtocol": "Encrypted",
+  "clusteringPolicy": "OSSCluster",
+  "privateDnsZoneName": "privatelink.redis.azure.net"
+}

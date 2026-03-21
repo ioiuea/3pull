@@ -84,6 +84,11 @@ resource migrationManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentit
   name: 'mi-${environmentName}-${systemName}-migration'
 }
 
+resource redisOpsManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  scope: resourceGroup(managedIdentityResourceGroupName)
+  name: 'mi-${environmentName}-${systemName}-redis-ops'
+}
+
 resource aksOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
   scope: resourceGroup(managedIdentityResourceGroupName)
   name: 'mi-${environmentName}-${systemName}-aks-operator'
@@ -121,6 +126,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-11-01' = {
     type: 'UserAssigned'
     userAssignedIdentities: {
       '${migrationManagedIdentity.id}': {}
+      '${redisOpsManagedIdentity.id}': {}
       '${aksOperatorManagedIdentity.id}': {}
       '${aksAdminManagedIdentity.id}': {}
     }

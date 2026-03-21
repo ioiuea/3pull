@@ -1,24 +1,22 @@
 """
-セキュリティ共通機能パッケージ.
-
-- パスワードハッシュやトークン検証などを配置する
+認証 API レート制限基盤.
 """
 
-from app.core.security.client_ip import ResolvedClientIP, resolve_client_ips
-from app.core.security.rate_limit import (
+from app.core.security.rate_limit.models import (
     RateLimitDecision,
     RateLimitMode,
     RateLimitPolicy,
     RateLimitPolicyKey,
     RateLimitReason,
-    RateLimitRedisStore,
-    RateLimitService,
     RateLimitWindow,
+)
+from app.core.security.rate_limit.service import (
+    RateLimitService,
     build_rate_limit_policies,
 )
+from app.core.security.rate_limit.store import RateLimitRedisStore
 
 __all__ = [
-    "ResolvedClientIP",
     "RateLimitDecision",
     "RateLimitMode",
     "RateLimitPolicy",
@@ -28,5 +26,4 @@ __all__ = [
     "RateLimitService",
     "RateLimitWindow",
     "build_rate_limit_policies",
-    "resolve_client_ips",
 ]

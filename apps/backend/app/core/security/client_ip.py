@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 from fastapi import Request
 
+from app.core.settings import get_settings
+
 
 @dataclass(slots=True)
 class ResolvedClientIP:
@@ -54,6 +56,21 @@ def _extract_xff_first_ip(xff_raw: str | None) -> str | None:
     return _normalize_ip(first)
 
 
+def _is_trusted_proxy(connection_ip: str | None) -> bool:
+    """
+    直近接続元IPが信頼済みプロキシかどうかを判定する.
+    """
+    settings = get_settings()
+    if not settings.trust_proxy_headers or not connection_ip:
+        return False
+
+    candidate = ipaddress.ip_address(connection_ip)
+    for cidr in settings.trusted_proxy_cidrs:
+        if candidate in ipaddress.ip_network(cidr, strict=False):
+            return True
+    return False
+
+
 def resolve_client_ips(request: Request) -> ResolvedClientIP:
     """
     監査ログ仕様に沿って client_ip / xff_raw / connection_ip を解決する.
@@ -62,9 +79,12 @@ def resolve_client_ips(request: Request) -> ResolvedClientIP:
 
     raw_xff = request.headers.get("x-forwarded-for")
     xff_raw = raw_xff.strip() if raw_xff and raw_xff.strip() else None
-    xff_client_ip = _extract_xff_first_ip(xff_raw)
+    xff_client_ip = (
+        _extract_xff_first_ip(xff_raw) if _is_trusted_proxy(connection_ip) else None
+    )
 
-    # XFF が無い（または先頭が不正）場合は connection_ip を client_ip に採用。
+    # 信頼済みプロキシ配下で有効な XFF がある場合のみ先頭IPを採用する。
+    # それ以外は connection_ip を client_ip に採用する。
     client_ip = xff_client_ip or connection_ip
     return ResolvedClientIP(
         client_ip=client_ip,

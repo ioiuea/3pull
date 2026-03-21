@@ -9,6 +9,7 @@ FastAPI 向けアプリ設定ローダ.
 from __future__ import annotations
 
 from functools import lru_cache
+from ipaddress import ip_network
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -189,6 +190,149 @@ class AppSettings(BaseSettings):
         default=None,
         validation_alias="AZURE_BLOB_CONNECTION_STRING",
     )
+    redis_host: str | None = Field(default=None, validation_alias="REDIS_HOST")
+    redis_port: int = Field(default=10000, validation_alias="REDIS_PORT")
+    redis_ssl: bool = Field(default=True, validation_alias="REDIS_SSL")
+    rate_limit_mode: Literal["observe", "enforce"] = Field(
+        default="enforce",
+        validation_alias="RATE_LIMIT_MODE",
+    )
+    rate_limit_policy_email_login_request_window_1_seconds: int = Field(
+        default=60,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_LOGIN_REQUEST_WINDOW_1_SECONDS",
+    )
+    rate_limit_policy_email_login_request_window_1_max_requests: int = Field(
+        default=10,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_LOGIN_REQUEST_WINDOW_1_MAX_REQUESTS",
+    )
+    rate_limit_policy_email_login_request_window_2_seconds: int = Field(
+        default=300,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_LOGIN_REQUEST_WINDOW_2_SECONDS",
+    )
+    rate_limit_policy_email_login_request_window_2_max_requests: int = Field(
+        default=30,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_LOGIN_REQUEST_WINDOW_2_MAX_REQUESTS",
+    )
+    rate_limit_policy_email_login_failure_window_seconds: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_LOGIN_FAILURE_WINDOW_SECONDS",
+    )
+    rate_limit_policy_email_login_max_failures: int = Field(
+        default=5,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_LOGIN_MAX_FAILURES",
+    )
+    rate_limit_policy_email_login_block_seconds: int = Field(
+        default=900,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_LOGIN_BLOCK_SECONDS",
+    )
+    rate_limit_policy_entra_login_request_window_1_seconds: int = Field(
+        default=60,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_LOGIN_REQUEST_WINDOW_1_SECONDS",
+    )
+    rate_limit_policy_entra_login_request_window_1_max_requests: int = Field(
+        default=20,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_LOGIN_REQUEST_WINDOW_1_MAX_REQUESTS",
+    )
+    rate_limit_policy_entra_login_request_window_2_seconds: int = Field(
+        default=300,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_LOGIN_REQUEST_WINDOW_2_SECONDS",
+    )
+    rate_limit_policy_entra_login_request_window_2_max_requests: int = Field(
+        default=60,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_LOGIN_REQUEST_WINDOW_2_MAX_REQUESTS",
+    )
+    rate_limit_policy_entra_login_block_seconds: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_LOGIN_BLOCK_SECONDS",
+    )
+    rate_limit_policy_entra_callback_request_window_1_seconds: int = Field(
+        default=60,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_CALLBACK_REQUEST_WINDOW_1_SECONDS",
+    )
+    rate_limit_policy_entra_callback_request_window_1_max_requests: int = Field(
+        default=20,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_CALLBACK_REQUEST_WINDOW_1_MAX_REQUESTS",
+    )
+    rate_limit_policy_entra_callback_request_window_2_seconds: int = Field(
+        default=300,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_CALLBACK_REQUEST_WINDOW_2_SECONDS",
+    )
+    rate_limit_policy_entra_callback_request_window_2_max_requests: int = Field(
+        default=60,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_CALLBACK_REQUEST_WINDOW_2_MAX_REQUESTS",
+    )
+    rate_limit_policy_entra_callback_failure_window_seconds: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_CALLBACK_FAILURE_WINDOW_SECONDS",
+    )
+    rate_limit_policy_entra_callback_max_failures: int = Field(
+        default=10,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_CALLBACK_MAX_FAILURES",
+    )
+    rate_limit_policy_entra_callback_block_seconds: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_POLICY_ENTRA_CALLBACK_BLOCK_SECONDS",
+    )
+    rate_limit_policy_password_reset_request_window_seconds: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_POLICY_PASSWORD_RESET_REQUEST_WINDOW_SECONDS",
+    )
+    rate_limit_policy_password_reset_request_max_requests: int = Field(
+        default=5,
+        validation_alias="RATE_LIMIT_POLICY_PASSWORD_RESET_REQUEST_MAX_REQUESTS",
+    )
+    rate_limit_policy_password_reset_request_block_seconds: int = Field(
+        default=1800,
+        validation_alias="RATE_LIMIT_POLICY_PASSWORD_RESET_REQUEST_BLOCK_SECONDS",
+    )
+    rate_limit_policy_password_reset_confirm_window_seconds: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_POLICY_PASSWORD_RESET_CONFIRM_WINDOW_SECONDS",
+    )
+    rate_limit_policy_password_reset_confirm_max_requests: int = Field(
+        default=10,
+        validation_alias="RATE_LIMIT_POLICY_PASSWORD_RESET_CONFIRM_MAX_REQUESTS",
+    )
+    rate_limit_policy_password_reset_confirm_failure_window_seconds: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_POLICY_PASSWORD_RESET_CONFIRM_FAILURE_WINDOW_SECONDS",
+    )
+    rate_limit_policy_password_reset_confirm_max_failures: int = Field(
+        default=5,
+        validation_alias="RATE_LIMIT_POLICY_PASSWORD_RESET_CONFIRM_MAX_FAILURES",
+    )
+    rate_limit_policy_password_reset_confirm_block_seconds: int = Field(
+        default=1800,
+        validation_alias="RATE_LIMIT_POLICY_PASSWORD_RESET_CONFIRM_BLOCK_SECONDS",
+    )
+    rate_limit_policy_email_signup_request_window_1_seconds: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_SIGNUP_REQUEST_WINDOW_1_SECONDS",
+    )
+    rate_limit_policy_email_signup_request_window_1_max_requests: int = Field(
+        default=3,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_SIGNUP_REQUEST_WINDOW_1_MAX_REQUESTS",
+    )
+    rate_limit_policy_email_signup_request_window_2_seconds: int = Field(
+        default=3600,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_SIGNUP_REQUEST_WINDOW_2_SECONDS",
+    )
+    rate_limit_policy_email_signup_request_window_2_max_requests: int = Field(
+        default=10,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_SIGNUP_REQUEST_WINDOW_2_MAX_REQUESTS",
+    )
+    rate_limit_policy_email_signup_failure_window_seconds: int = Field(
+        default=1800,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_SIGNUP_FAILURE_WINDOW_SECONDS",
+    )
+    rate_limit_policy_email_signup_max_failures: int = Field(
+        default=5,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_SIGNUP_MAX_FAILURES",
+    )
+    rate_limit_policy_email_signup_block_seconds: int = Field(
+        default=1200,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_SIGNUP_BLOCK_SECONDS",
+    )
     session_cookie_name: str = Field(
         default="app_session", validation_alias="SESSION_COOKIE_NAME"
     )
@@ -235,6 +379,14 @@ class AppSettings(BaseSettings):
         default_factory=list,
         validation_alias="ENTRA_INTERNAL_DOMAINS",
     )
+    trust_proxy_headers: bool = Field(
+        default=False,
+        validation_alias="TRUST_PROXY_HEADERS",
+    )
+    trusted_proxy_cidrs: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        validation_alias="TRUSTED_PROXY_CIDRS",
+    )
     csrf_trusted_origins: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["http://localhost:3000"],
         validation_alias="CSRF_TRUSTED_ORIGINS",
@@ -260,6 +412,16 @@ class AppSettings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
+    @field_validator("trusted_proxy_cidrs", mode="before")
+    @classmethod
+    def _parse_trusted_proxy_cidrs(cls, value: object) -> object:
+        """
+        TRUSTED_PROXY_CIDRS を list[str] に正規化する.
+        """
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
     @field_validator("entra_internal_domains", mode="before")
     @classmethod
     def _parse_entra_internal_domains(cls, value: object) -> object:
@@ -276,6 +438,16 @@ class AppSettings(BaseSettings):
         """
         if isinstance(value, str):
             return [item.strip().lower() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("trusted_proxy_cidrs")
+    @classmethod
+    def _validate_trusted_proxy_cidrs(cls, value: list[str]) -> list[str]:
+        """
+        TRUSTED_PROXY_CIDRS の CIDR 形式を検証する.
+        """
+        for cidr in value:
+            ip_network(cidr, strict=False)
         return value
 
     @field_validator("session_ttl_hours")
@@ -296,6 +468,14 @@ class AppSettings(BaseSettings):
         """DATABASE_DEFAULT_PORT の範囲を検証する."""
         if not 1 <= value <= 65_535:
             raise ValueError("DATABASE_DEFAULT_PORT must be between 1 and 65535")
+        return value
+
+    @field_validator("redis_port")
+    @classmethod
+    def _validate_redis_port(cls, value: int) -> int:
+        """REDIS_PORT の範囲を検証する."""
+        if not 1 <= value <= 65_535:
+            raise ValueError("REDIS_PORT must be between 1 and 65535")
         return value
 
     @field_validator("session_expired_grace_days")

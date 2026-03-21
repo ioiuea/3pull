@@ -195,7 +195,7 @@ flowchart LR
   - エントリーポイント。パラメータ生成とデプロイを順序制御します。
 - `common.parameter.json`
   - 共通パラメータと、どのリソースをデプロイ対象にするか（実行可否）を管理します。
-  - `common` / `logAnalytics` / `network` / `aks` / `keyVault` / `serviceBus` / `sqlDatabase` / `postgres` / `redis` / `cosno` / `resourceToggles` の親オブジェクトで分類しています。
+  - `common` / `logAnalytics` / `network` / `aks` / `keyVault` / `serviceBus` / `storage` / `sqlDatabase` / `redis` / `postgres` / `cosno` / `resourceToggles` の親オブジェクトで分類しています。
 - `bicep/`
   - リソース単位の Bicep 本体。
 - `scripts/`
@@ -535,6 +535,69 @@ bash infra/main.sh
 
 通常運用のアプリ接続は Microsoft Entra 認証を前提とし、SQL 認証は bootstrap や緊急時対応のために保持します。
 
+### redis.skuName
+
+Azure Managed Redis の SKU 名です。
+
+- デフォルト: `Balanced_B0`
+
+初期実装では検証向けの最小構成を既定とし、環境ごとに上書き可能にしています。
+
+`az redisenterprise` は Azure CLI extension のコマンドです。未導入の場合は先に extension を追加してください。
+
+```bash
+az extension add --name redisenterprise
+```
+
+利用可能な SKU 候補は `az redisenterprise create --help` の `Accepted values` で確認できます。
+
+```bash
+az redisenterprise create --help
+```
+
+`--sku` 周辺だけを抜き出して確認したい場合:
+
+```bash
+az redisenterprise create --help | grep -A 20 -- '--sku'
+```
+
+`skuName` の見方:
+
+- `Balanced_*`
+  - 汎用バランス型
+  - 初期導入ではまずこの系列を優先
+- `ComputeOptimized_*`
+  - CPU 寄り
+- `MemoryOptimized_*`
+  - メモリ寄り
+- `FlashOptimized_*`
+  - Flash ストレージ寄り
+- `Enterprise_*`
+  - Enterprise 系
+  - capacity の概念あり
+- `EnterpriseFlash_*`
+  - Enterprise Flash 系
+  - capacity の概念あり
+
+初期構成では、まず次の順で検討してください。
+
+1. 検証用途なら `Balanced_B0`
+2. CPU 寄り要件が強ければ `ComputeOptimized_*`
+3. メモリ寄り要件が強ければ `MemoryOptimized_*`
+4. Enterprise / EnterpriseFlash 系は、必要性が明確な場合のみ選ぶ
+
+補足:
+
+- `Enterprise_*` / `EnterpriseFlash_*` 以外では capacity は指定しません。
+- 利用可能 SKU はリージョンや Azure 側更新で変わり得るため、実際の候補は都度 `az redisenterprise create --help` で確認してください。
+
+### redis.highAvailabilityEnabled
+
+Azure Managed Redis の高可用性構成を有効化するかどうかです。
+
+- `true`（デフォルト）: 有効
+- `false`: 無効
+
 ### postgres.enableZoneRedundantHa
 
 Azure Database for PostgreSQL Flexible Server のゾーン冗長HA（ZoneRedundant）を有効化するかどうかを指定します。
@@ -628,142 +691,6 @@ Azure Database for PostgreSQL Flexible Server のメンテナンスウィンド�
 - `dayOfWeek`: `0`〜`6`（曜日）
 - `startHour`: `0`〜`23`（UTC）
 - `startMinute`: `0`〜`59`（UTC）
-
-### redis.skuName
-
-Azure Cache for Redis の SKU レベルです。
-
-- デフォルト: `Basic`（Azure の最小構成例）
-- 選択肢: `Basic` / `Standard` / `Premium`
-- `family` は `skuName` に応じて自動決定します。
-  - `Basic` / `Standard` の場合: `C`
-  - `Premium` の場合: `P`
-
-### redis.capacity
-
-Azure Cache for Redis の容量サイズです。
-
-- デフォルト: `0`（`C0`）
-- 制約:
-  - `Basic` / `Standard`: `0`〜`6`
-  - `Premium`: `1`〜`6`
-
-### redis.shardCount
-
-Azure Cache for Redis のシャード数です（主に Premium のクラスタ用途）。
-
-- デフォルト: `1`
-- 設定値: `1` 以上
-- 補足: `redis.skuName` が `Basic` / `Standard` の場合、この値は指定しても無視されます。
-
-### redis.scaleStrategy
-
-Redis のスケール方針（運用設計上の補助パラメータ）です。
-
-- デフォルト: `vertical`
-- 選択肢: `vertical` / `horizontal`
-
-### redis.zonalAllocationPolicy
-
-ゾーン配置ポリシーです。
-
-- デフォルト: `Automatic`
-- 選択肢: `Automatic` / `NoZones` / `UserDefined`
-- 補足:
-  - `Basic` / `Standard` ではこの設定は実質利用されず、`Automatic` 固定で扱います。
-  - `NoZones` / `UserDefined` は Premium のみ指定可能です。
-  - `Basic` / `Standard` の場合、この値を指定しても無視されます。
-
-### redis.zones
-
-`redis.zonalAllocationPolicy=UserDefined` の場合に利用するゾーン指定です。
-
-- デフォルト: `[]`（未指定）
-- 指定値: `"1"` / `"2"` / `"3"` の配列
-- 注意: Premium のみ利用可能です。
-- `Basic` / `Standard` の場合、この値を指定しても無視されます。
-
-### redis.replicasPerMaster
-
-プライマリあたりのレプリカ数です（冗長度設定）。
-
-- デフォルト: `1`（Azure 既定値ベース）
-- 設定値: `0` 以上
-- 注意: Basic / Standard では `1` 固定で扱います。
-- `Basic` / `Standard` の場合、この値を指定しても無視されます。
-
-### redis.enableGeoReplication
-
-リージョン間レプリケーションを有効化するかどうかです。
-
-- デフォルト: `false`（Azure 既定）
-- `true` の場合:
-  - `redis.skuName=Premium` が必要
-  - `redis.replicasPerMaster=1` を指定
-- `Basic` / `Standard` の場合、この値を `true` にしても無視されます。
-
-### redis.enableMicrosoftEntraAuthentication
-
-Microsoft Entra 認証を有効化するかどうかです。
-
-- デフォルト: `true`（有効）
-- `true`: Entra 認証を有効化
-- `false`: Entra 認証を無効化
-
-### redis.disableAccessKeyAuthentication
-
-Access Key 認証（Primary/Secondary Key）を無効化するかどうかです。
-
-- デフォルト: `false`（Entra + Access Key の併用運用）
-- `true`: Access Key 認証を無効化（Entra 認証のみ）
-- 注意: `true` を指定する場合は `redis.enableMicrosoftEntraAuthentication=true` が必要です。
-
-### redis.enableCustomMaintenanceWindow
-
-Azure Cache for Redis のメンテナンスウィンドウをカスタム指定するかどうかです。
-
-- `false`（デフォルト）: システム管理スケジュールを利用
-- `true`: `redis.maintenanceWindow` の値を利用して固定化
-
-### redis.maintenanceWindow
-
-`redis.enableCustomMaintenanceWindow=true` の場合に利用するメンテナンスウィンドウ設定です。
-
-- `dayOfWeek`: `0`〜`6`（曜日）
-- `startHour`: `0`〜`23`（UTC）
-- `duration`: ISO 8601 形式（例: `PT5H`）
-
-### redis.enableRdbBackup
-
-Azure Cache for Redis の RDB 永続化バックアップを有効化するかどうかです。
-
-- `false`（デフォルト）: バックアップ無効（Azure の既定状態）
-- `true`: RDB バックアップ有効
-- 注意: `redis.skuName=Premium` の場合のみ有効です。`Basic` / `Standard` では指定しても無視されます。
-
-### redis.rdbBackupFrequencyInMinutes
-
-`redis.enableRdbBackup=true` の場合に利用するバックアップ間隔（分）です。
-
-- デフォルト: `60`
-- 設定可能値: `15` / `30` / `60` / `360` / `720` / `1440`
-- `redis.skuName=Premium` かつ `redis.enableRdbBackup=true` の場合のみ利用されます。
-
-### redis.rdbBackupMaxSnapshotCount
-
-`redis.enableRdbBackup=true` の場合に保持するスナップショット数です。
-
-- デフォルト: `1`
-- 設定値: `1` 以上の整数
-- `redis.skuName=Premium` かつ `redis.enableRdbBackup=true` の場合のみ利用されます。
-
-### redis.rdbStorageConnectionString
-
-`redis.enableRdbBackup=true` の場合に利用する保存先ストレージの接続文字列です。
-
-- デフォルト: 空文字（未設定）
-- `redis.enableRdbBackup=true` の場合は必須
-- `redis.skuName=Premium` かつ `redis.enableRdbBackup=true` の場合のみ利用されます。
 
 ### cosno.backupPolicyType
 
@@ -881,10 +808,10 @@ Cosmos DB のキーによるメタデータ書き込みを無効化するかど�
 - `serviceBus`
 - `storage`
 - `sqlDatabase`
+- `redis`
 - `maintenanceVm`
 - `postgresDatabase`
 - `cosmosDatabase`
-- `redis`
 - `agicController`
 - `kedaController`
 
@@ -950,15 +877,16 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' \
   - Service Bus
   - Storage Account
   - Azure SQL Database
+  - Azure Managed Redis
   - Maintenance VM
   - PostgreSQL Flexible Server
   - Cosmos DB (NoSQL)
-  - Redis
 - post
   - AGIC コントローラ導入（`resourceToggles.agicController=true` かつ Federated Credential が作成済み かつ AKS が存在する場合のみ）
   - KEDA コントローラ導入（`resourceToggles.kedaController=true` かつ Federated Credential が作成済み かつ AKS が存在する場合のみ）
   - frontend Helm values 生成（`infra/config/frontend-values.template.yaml` から `k8s/charts/frontend/values.yaml` を生成）
   - backend Helm values 生成（`infra/config/backend-values.template.yaml` から `k8s/charts/backend/values.yaml` を生成）
+  - IP rate limit ops 用 env 生成（`scripts/ops/ip-rate-limit/generated.env.sh`）
 
 ## 出力ファイル（params/）
 
@@ -977,7 +905,7 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' \
 - `key-vault.bicepparam`
 - `service-bus.bicepparam`
 - `storage.bicepparam`
-- `redis.bicepparam`
+- `redis-managed.bicepparam`
 - `cosmos-database.bicepparam`
 - `postgres-database.bicepparam`
 - `aks.bicepparam`

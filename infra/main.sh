@@ -112,6 +112,11 @@ storage_config_file="$infra_root/config/storage.json"
 storage_script="$infra_root/scripts/generate-storage-params.py"
 storage_meta_file="$params_dir/storage-meta.json"
 
+# キャッシュ（Azure Managed Redis）
+redis_config_file="$infra_root/config/redis-managed.json"
+redis_script="$infra_root/scripts/generate-redis-managed-params.py"
+redis_meta_file="$params_dir/redis-managed-meta.json"
+
 # RDB（Azure SQL Database）
 sql_database_config_file="$infra_root/config/sql-database.json"
 sql_database_script="$infra_root/scripts/generate-sql-database-params.py"
@@ -133,11 +138,6 @@ cosmos_config_file="$infra_root/config/cosmos-database.json"
 cosmos_script="$infra_root/scripts/generate-cosmos-database-params.py"
 cosmos_meta_file="$params_dir/cosmos-database-meta.json"
 
-# キャッシュ（Redis）
-redis_config_file="$infra_root/config/redis.json"
-redis_script="$infra_root/scripts/generate-redis-params.py"
-redis_meta_file="$params_dir/redis-meta.json"
-
 # AKS デプロイ後に生成する初期化スクリプトの出力先
 init_scripts_root="$repo_root/scripts/init"
 agic_controller_init_dir="$init_scripts_root/agicController"
@@ -149,6 +149,8 @@ sql_init_param_conf_file="$sql_init_dir/param.conf"
 backend_values_template_file="$infra_root/config/backend-values.template.yaml"
 backend_values_generated_file="$repo_root/k8s/charts/backend/values.yaml"
 backend_values_sync_script="$infra_root/scripts/sync-backend-values.py"
+ip_rate_limit_generated_env_file="$repo_root/scripts/ops/ip-rate-limit/generated.env.sh"
+ip_rate_limit_env_sync_script="$infra_root/scripts/sync-ip-rate-limit-ops-env.py"
 
 # Helm values 生成（frontend chart）
 frontend_values_template_file="$infra_root/config/frontend-values.template.yaml"
@@ -782,13 +784,13 @@ if [[ ! -f "$storage_config_file" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$sql_database_config_file" ]]; then
-  echo "sql database config file が見つかりません: $sql_database_config_file" >&2
+if [[ ! -f "$redis_config_file" ]]; then
+  echo "redis config file が見つかりません: $redis_config_file" >&2
   exit 1
 fi
 
-if [[ ! -f "$redis_config_file" ]]; then
-  echo "redis config file が見つかりません: $redis_config_file" >&2
+if [[ ! -f "$sql_database_config_file" ]]; then
+  echo "sql database config file が見つかりません: $sql_database_config_file" >&2
   exit 1
 fi
 
@@ -839,6 +841,11 @@ fi
 
 if [[ ! -f "$backend_values_sync_script" ]]; then
   echo "backend values sync script が見つかりません: $backend_values_sync_script" >&2
+  exit 1
+fi
+
+if [[ ! -f "$ip_rate_limit_env_sync_script" ]]; then
+  echo "ip rate limit env sync script が見つかりません: $ip_rate_limit_env_sync_script" >&2
   exit 1
 fi
 
@@ -930,7 +937,6 @@ param_generation_manifest=(
   "$managed_ids_script|$managed_ids_meta_file|RESOURCE_CONFIG_FILE=$managed_ids_config_file"
   "$application_gateway_script|$application_gateway_meta_file|RESOURCE_CONFIG_FILE=$application_gateway_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
   "$application_gateway_low_latency_script|$application_gateway_low_latency_meta_file|RESOURCE_CONFIG_FILE=$application_gateway_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
-  "$redis_script|$redis_meta_file|RESOURCE_CONFIG_FILE=$redis_config_file"
   "$cosmos_script|$cosmos_meta_file|RESOURCE_CONFIG_FILE=$cosmos_config_file"
   "$aks_script|$aks_meta_file|RESOURCE_CONFIG_FILE=$aks_runtime_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file;APPLICATION_GATEWAY_META_FILE=$application_gateway_meta_file"
   "$application_gateway_rbac_script|$application_gateway_rbac_meta_file|RESOURCE_CONFIG_FILE=$application_gateway_rbac_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file;APPLICATION_GATEWAY_META_FILE=$application_gateway_meta_file;APPLICATION_GATEWAY_LOW_LATENCY_META_FILE=$application_gateway_low_latency_meta_file"
@@ -939,6 +945,7 @@ param_generation_manifest=(
   "$service_bus_script|$service_bus_meta_file|RESOURCE_CONFIG_FILE=$service_bus_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file"
   "$storage_script|$storage_meta_file|RESOURCE_CONFIG_FILE=$storage_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file"
   "$sql_database_script|$sql_database_meta_file|RESOURCE_CONFIG_FILE=$sql_database_config_file"
+  "$redis_script|$redis_meta_file|RESOURCE_CONFIG_FILE=$redis_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file"
   "$route_tables_script|$route_tables_meta_file|RESOURCE_CONFIG_FILE=$route_tables_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file;FIREWALL_META_FILE=$firewall_meta_file"
   "$nsgs_script|$nsgs_meta_file|RESOURCE_CONFIG_FILE=$nsgs_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
   "$subnet_attachments_script|$subnet_attachments_meta_file|SUBNETS_CONFIG_FILE=$subnets_config_file;ROUTE_TABLES_CONFIG_FILE=$route_tables_config_file;NSGS_CONFIG_FILE=$nsgs_config_file"
@@ -1352,6 +1359,22 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# Azure Managed Redis
+# -----------------------------------------------------------------------------
+redis_deploy="$(meta_bool "$redis_meta_file" "deploy")"
+
+redis_params_file="$(meta_get "$redis_meta_file" "paramsFile")"
+
+deploy_group_if_enabled \
+  "$redis_deploy" \
+  "Deploy Azure Managed Redis" \
+  "redis-managed" \
+  "main-service-redis-managed-${timestamp}" \
+  "$redis_resource_group_name" \
+  "$redis_params_file" \
+  "Skip Azure Managed Redis (resourceToggles.redis=false)"
+
+# -----------------------------------------------------------------------------
 # Maintenance VM
 # -----------------------------------------------------------------------------
 maintenance_vm_deploy="$(meta_bool "$maintenance_vm_meta_file" "deploy")"
@@ -1428,23 +1451,6 @@ deploy_group_if_enabled \
   "$cosmos_params_file" \
   "Skip Cosmos DB (resourceToggles.cosmosDatabase=false)"
 
-# -----------------------------------------------------------------------------
-# Redis
-# -----------------------------------------------------------------------------
-redis_deploy="$(meta_bool "$redis_meta_file" "deploy")"
-
-redis_params_file="$(meta_get "$redis_meta_file" "paramsFile")"
-
-deploy_group_if_enabled \
-  "$redis_deploy" \
-  "Deploy Redis" \
-  "redis" \
-  "main-service-redis-${timestamp}" \
-  "$redis_resource_group_name" \
-  "$redis_params_file" \
-  "Skip Redis (resourceToggles.redis=false)"
-
-# -----------------------------------------------------------------------------
 # SQL init bootstrap config
 # -----------------------------------------------------------------------------
 if [[ "$managed_ids_deploy" == "true" && "$sql_database_deploy" == "true" ]]; then
