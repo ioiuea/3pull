@@ -43,6 +43,16 @@ def build_rate_limit_policies() -> dict[RateLimitPolicyKey, RateLimitPolicy]:
             ),
             block_seconds=settings.rate_limit_policy_email_login_block_seconds,
         ),
+        RateLimitPolicyKey.EMAIL_VERIFY_RESEND: RateLimitPolicy(
+            key=RateLimitPolicyKey.EMAIL_VERIFY_RESEND,
+            request_windows=(
+                RateLimitWindow(
+                    seconds=settings.rate_limit_policy_email_verify_resend_window_seconds,
+                    limit=settings.rate_limit_policy_email_verify_resend_max_requests,
+                ),
+            ),
+            block_seconds=settings.rate_limit_policy_email_verify_resend_block_seconds,
+        ),
         RateLimitPolicyKey.ENTRA_LOGIN: RateLimitPolicy(
             key=RateLimitPolicyKey.ENTRA_LOGIN,
             request_windows=(

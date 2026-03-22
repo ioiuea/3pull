@@ -3,9 +3,10 @@ import { type RouteConfig, index, layout, route } from '@react-router/dev/routes
 export default [
   index('routes/language-redirect.tsx'),
   route(':lng', 'routes/layout.tsx', [
-    route('login', 'routes/login.tsx'),
-    route('signup', 'routes/signup.tsx'),
-    route('password-reset', 'routes/password-reset.tsx'),
+    route('login', 'routes/authentication/login.tsx'),
+    route('signup', 'routes/authentication/signup.tsx'),
+    route('verify-email', 'routes/authentication/verify-email.tsx'),
+    route('password-reset', 'routes/authentication/password-reset.tsx'),
     layout('routes/protected-layout.tsx', [
       index('routes/landing-page.tsx'),
       route('profile-sample', 'routes/profile-sample/page.tsx'),

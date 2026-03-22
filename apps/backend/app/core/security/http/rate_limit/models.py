@@ -17,6 +17,7 @@ class RateLimitPolicyKey(StrEnum):
     """対象 API ごとの policy 識別子."""
 
     EMAIL_LOGIN = "email_login"
+    EMAIL_VERIFY_RESEND = "email_verify_resend"
     ENTRA_LOGIN = "entra_login"
     ENTRA_CALLBACK = "entra_callback"
     PASSWORD_RESET_REQUEST = "password_reset_request"

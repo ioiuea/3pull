@@ -1,45 +1,34 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
-import { useSWRConfig } from 'swr';
 import { cn } from '~/lib/utils';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
-import { type AuthMe, backendFetch } from '~/lib/api-helper';
+import { backendFetch } from '~/lib/api-helper';
+import { sanitizeReturnTo } from '~/lib/auth-redirect';
 import { isSupportedLanguage } from '~/lib/i18n';
 import { PRODUCT_NAME } from '~/constants/product';
-
-type SignupResponse = {
-  status: 'verification_required';
-  debug_verification_token?: string | null;
-};
-
-type EmailLoginResponse = {
-  status: 'authenticated';
-  user: AuthMe;
-};
 
 export function SignupForm({ className, ...props }: React.ComponentProps<'div'>) {
   const { t } = useTranslation('auth');
   const navigate = useNavigate();
-  const { mutate } = useSWRConfig();
   const location = useLocation();
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
   const searchParams = new URLSearchParams(location.search);
-  const returnTo = searchParams.get('return_to') ?? `/${currentLanguage}`;
+  const returnTo = sanitizeReturnTo(searchParams.get('return_to'), {
+    currentLanguage,
+    disallowedPaths: [`/${currentLanguage}/login`, `/${currentLanguage}/verify-email`],
+  });
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [verificationToken, setVerificationToken] = useState('');
-  const [issuedToken, setIssuedToken] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -63,70 +52,29 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as {
-          detail?: { message?: string };
+          detail?: { code?: string; message?: string };
         } | null;
+        if (payload?.detail?.code === 'email_account_already_exists') {
+          navigate(
+            `/${currentLanguage}/verify-email?email=${encodeURIComponent(email)}&return_to=${encodeURIComponent(returnTo)}`,
+            { replace: true },
+          );
+          return;
+        }
         throw new Error(
           payload?.detail?.message ?? t('signup.errors.default', { status: response.status }),
         );
       }
-      const payload = (await response.json()) as SignupResponse;
-      setIssuedToken(payload.debug_verification_token ?? null);
+      await response.json();
       setSuccessMessage(t('signup.successRequested'));
+      navigate(
+        `/${currentLanguage}/verify-email?email=${encodeURIComponent(email)}&return_to=${encodeURIComponent(returnTo)}`,
+        { replace: true },
+      );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : t('signup.errors.unknown'));
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const onVerify = async () => {
-    setIsVerifying(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-    try {
-      const token = verificationToken || issuedToken;
-      if (!token) {
-        throw new Error(t('signup.errors.verificationTokenRequired'));
-      }
-      const response = await backendFetch('/auth/email/verify', {
-        method: 'POST',
-        body: JSON.stringify({ token }),
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          detail?: { message?: string };
-        } | null;
-        throw new Error(
-          payload?.detail?.message ?? t('signup.errors.verifyDefault', { status: response.status }),
-        );
-      }
-      const loginResponse = await backendFetch('/auth/email/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-      const loginPayload = (await loginResponse.json().catch(() => null)) as
-        | {
-            detail?: { message?: string };
-          }
-        | EmailLoginResponse
-        | null;
-      if (!loginResponse.ok) {
-        const message =
-          loginPayload && 'detail' in loginPayload
-            ? loginPayload.detail?.message
-            : t('login.errors.default', { status: loginResponse.status });
-        throw new Error(message ?? t('login.errors.default', { status: loginResponse.status }));
-      }
-      await mutate('auth-me', (loginPayload as EmailLoginResponse).user, {
-        revalidate: false,
-        populateCache: true,
-      });
-      setSuccessMessage(t('signup.successVerified'));
-      navigate(returnTo, { replace: true });
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : t('signup.errors.verifyUnknown'));
-    } finally {
-      setIsVerifying(false);
     }
   };
 
@@ -202,28 +150,6 @@ export function SignupForm({ className, ...props }: React.ComponentProps<'div'>)
               </Field>
             </FieldGroup>
           </form>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t('signup.verifyTitle')}</CardTitle>
-          <CardDescription>{t('signup.verifyDescription')}</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input
-            placeholder={t('signup.verificationTokenPlaceholder')}
-            value={verificationToken}
-            onChange={(event) => setVerificationToken(event.target.value)}
-          />
-          {issuedToken && (
-            <FieldDescription>
-              {t('signup.debugTokenLabel')}: <code>{issuedToken}</code>
-            </FieldDescription>
-          )}
-          <Button type="button" variant="outline" onClick={onVerify} disabled={isVerifying}>
-            {isVerifying ? t('signup.verifying') : t('signup.verifySubmit')}
-          </Button>
         </CardContent>
       </Card>
     </div>

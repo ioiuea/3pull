@@ -29,9 +29,11 @@ apps/frontend
 │   │   ├── layout.tsx                    # 共通レイアウト
 │   │   ├── protected-layout.tsx          # 認証必須ページのガードレイアウト
 │   │   ├── landing-page.tsx              # LPページ
-│   │   ├── login.tsx                     # ログインページ
-│   │   ├── signup.tsx                    # サインアップページ
-│   │   ├── password-reset.tsx            # パスワードリセットページ
+│   │   ├── authentication/               # 認証画面ルート
+│   │   │   ├── login.tsx                 # ログインページ
+│   │   │   ├── signup.tsx                # サインアップページ
+│   │   │   ├── verify-email.tsx          # メール確認ページ
+│   │   │   └── password-reset.tsx        # パスワードリセットページ
 │   │   ├── profile-sample/               # Graphプロフィール取得サンプル
 │   │   ├── zustand-sample/               # Zustandサンプル
 │   │   ├── validation-sample/            # バリデーションサンプル
@@ -40,9 +42,11 @@ apps/frontend
 │   │   └── async-job-sample/             # 非同期ジョブサンプル
 │   ├── components/                       # 再利用コンポーネント層
 │   │   ├── ui/                           # shadcnベース共通UI層
-│   │   ├── login-form.tsx                # ログインフォーム部品
-│   │   ├── signup-form.tsx               # サインアップフォーム部品
-│   │   ├── password-reset-form.tsx       # パスワードリセットフォーム部品
+│   │   ├── authentication/               # 認証画面共有コンポーネント
+│   │   │   ├── login-form.tsx            # ログインフォーム部品
+│   │   │   ├── password-reset-form.tsx   # パスワードリセットフォーム部品
+│   │   │   ├── signup-form.tsx           # サインアップフォーム部品
+│   │   │   └── verify-email-form.tsx     # メール確認フォーム部品
 │   │   ├── sample-switcher/              # 共通サンプル切替UI群
 │   │   └── theme-provider.tsx            # テーマプロバイダ
 │   ├── constants/                        # 定数層

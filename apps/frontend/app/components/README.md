@@ -20,10 +20,10 @@
 
 - `ui/`
   - shadcn ベースの共通 UI
+- `authentication/`
+  - 認証画面で共有するフォーム部品
 - `sample-switcher/`
   - サンプル画面で共有する切替 UI
-- `login-form.tsx` `signup-form.tsx` `password-reset-form.tsx`
-  - 認証フォーム部品
 - `theme-provider.tsx`
   - テーマ provider
 

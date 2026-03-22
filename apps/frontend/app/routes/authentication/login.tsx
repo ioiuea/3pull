@@ -1,7 +1,8 @@
 import { Navigate, useLocation, useParams } from 'react-router';
-import { LoginForm } from '~/components/login-form';
+import { LoginForm } from '~/components/authentication/login-form';
 import { Spinner } from '~/components/ui/spinner';
 import { useMe } from '~/hooks/use-me';
+import { sanitizeReturnTo } from '~/lib/auth-redirect';
 import { isSupportedLanguage } from '~/lib/i18n';
 
 export default function LoginPage() {
@@ -10,7 +11,10 @@ export default function LoginPage() {
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
   const { data: me, isLoading } = useMe();
   const searchParams = new URLSearchParams(location.search);
-  const returnTo = searchParams.get('return_to') ?? `/${currentLanguage}`;
+  const returnTo = sanitizeReturnTo(searchParams.get('return_to'), {
+    currentLanguage,
+    disallowedPaths: [`/${currentLanguage}/login`, `/${currentLanguage}/verify-email`],
+  });
 
   if (isLoading) {
     return (

@@ -225,6 +225,18 @@ class AppSettings(BaseSettings):
         default=900,
         validation_alias="RATE_LIMIT_POLICY_EMAIL_LOGIN_BLOCK_SECONDS",
     )
+    rate_limit_policy_email_verify_resend_window_seconds: int = Field(
+        default=600,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_VERIFY_RESEND_WINDOW_SECONDS",
+    )
+    rate_limit_policy_email_verify_resend_max_requests: int = Field(
+        default=5,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_VERIFY_RESEND_MAX_REQUESTS",
+    )
+    rate_limit_policy_email_verify_resend_block_seconds: int = Field(
+        default=1800,
+        validation_alias="RATE_LIMIT_POLICY_EMAIL_VERIFY_RESEND_BLOCK_SECONDS",
+    )
     rate_limit_policy_entra_login_request_window_1_seconds: int = Field(
         default=60,
         validation_alias="RATE_LIMIT_POLICY_ENTRA_LOGIN_REQUEST_WINDOW_1_SECONDS",

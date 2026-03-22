@@ -1,9 +1,9 @@
 {
   "common": {
     "location": "japaneast",
-    "environmentName": "stg",
-    "systemName": "threepull",
-    "enableResourceLock": false
+    "environmentName": "dev",
+    "systemName": "3pull",
+    "enableResourceLock": true
   },
   "resourceToggles": {
     "logAnalytics": true,
@@ -31,7 +31,7 @@
     "enableFirewallIdps": false,
     "enableGatewayRoutePropagation": false,
     "enableCentralizedPrivateDns": false,
-    "enableLowLatencyApplicationGatewaySubnet": true,
+    "enableLowLatencyApplicationGatewaySubnet": false,
     "enableDdosProtection": false,
     "ddosProtectionPlanId": "",
     "vnetAddressPrefixes": [
@@ -57,8 +57,8 @@
     "skuName": "Basic",
     "maxSizeGb": 2,
     "zoneRedundant": false,
-    "entraAdminLogin": "hiroki.ueda@persolazure.onmicrosoft.com",
-    "entraAdminObjectId": "2a616139-5078-4847-9ef5-7676394bf4c1"
+    "entraAdminLogin": "",
+    "entraAdminObjectId": ""
   },
   "redis": {
     "skuName": "Balanced_B0",

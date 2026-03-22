@@ -30,6 +30,8 @@ from app.api.schemas.auth import (
     EmailSignupRequest,
     EmailSignupResponse,
     EmailVerifyRequest,
+    EmailVerifyResendRequest,
+    EmailVerifyResendResponse,
     EmailVerifyResponse,
     EntraGraphProfileResponse,
     LogoutResponse,
@@ -487,6 +489,69 @@ async def post_email_verify(
         metadata={"path": "/backend/auth/email/verify", "method": "POST"},
     )
     return EmailVerifyResponse(status="verified")
+
+
+@router.post("/email/verify/resend", response_model=EmailVerifyResendResponse)
+async def post_email_verify_resend(
+    payload: EmailVerifyResendRequest,
+    request: Request,
+    _: None = Depends(require_rate_limit(RateLimitPolicyKey.EMAIL_VERIFY_RESEND)),
+    session: Session = Depends(get_session),
+) -> EmailVerifyResendResponse:
+    """Email 検証メールを再送する."""
+    debug_token: str | None = None
+    event_type = AuthAuditEventType.EMAIL_VERIFY_RESEND_SUCCESS
+    reason_code: str | None = None
+
+    try:
+        verification_token = await issue_email_verification_token(
+            session,
+            email=payload.email,
+        )
+        if get_settings().auth_debug_return_tokens:
+            debug_token = verification_token
+    except AuthConflictError as error:
+        if error.code not in {
+            AuthConflictCode.EMAIL_IDENTITY_NOT_FOUND,
+            AuthConflictCode.EMAIL_ALREADY_VERIFIED,
+        }:
+            await _record_rate_limit_failure(
+                policy_key=RateLimitPolicyKey.EMAIL_VERIFY_RESEND,
+                request=request,
+            )
+            event_type = AuthAuditEventType.EMAIL_VERIFY_RESEND_FAIL
+            reason_code = error.code.value
+            await _record_auth_audit(
+                session,
+                event_type=event_type,
+                request=request,
+                provider="email",
+                reason_code=reason_code,
+                metadata={
+                    "path": "/backend/auth/email/verify/resend",
+                    "method": "POST",
+                },
+            )
+            _raise_auth_error(error)
+
+        reason_code = error.code.value
+
+    await _record_auth_audit(
+        session,
+        event_type=event_type,
+        request=request,
+        provider="email",
+        reason_code=reason_code,
+        metadata={
+            "path": "/backend/auth/email/verify/resend",
+            "method": "POST",
+            "email": payload.email.strip(),
+        },
+    )
+    return EmailVerifyResendResponse(
+        status="accepted",
+        debug_verification_token=debug_token,
+    )
 
 
 @router.post("/email/login", response_model=EmailLoginResponse)

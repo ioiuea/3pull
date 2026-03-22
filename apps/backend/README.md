@@ -173,6 +173,7 @@ apps/backend
 - `GET /backend/auth/me`
 - `POST /backend/auth/email/signup`
 - `POST /backend/auth/email/verify`
+- `POST /backend/auth/email/verify/resend`
 - `POST /backend/auth/email/login`
 - `POST /backend/auth/password/reset/request`
 - `POST /backend/auth/password/reset/confirm`
@@ -237,6 +238,9 @@ apps/backend
 - `ENTRA_REDIRECT_URI`
 - `ENTRA_INTERNAL_DOMAINS`
 - `ENTRA_TOKEN_ENCRYPTION_KEY`
+- `RATE_LIMIT_POLICY_EMAIL_VERIFY_RESEND_WINDOW_SECONDS`
+- `RATE_LIMIT_POLICY_EMAIL_VERIFY_RESEND_MAX_REQUESTS`
+- `RATE_LIMIT_POLICY_EMAIL_VERIFY_RESEND_BLOCK_SECONDS`
 
 ### 非同期ジョブ / ストレージ / cleanup
 
@@ -280,6 +284,45 @@ apps/backend
 - Email verification token / password reset token は SHA-256 ハッシュのみ保存
 - Entra の access token / refresh token は暗号化して保存
 - `/backend/auth/entra/profile` は internal ユーザーのみ許可
+
+### Email signup / verify フロー
+
+- `POST /backend/auth/email/signup`
+  - 新規 Email account を作成し、`verification_required` を返す。
+  - 未検証の同一 Email identity が既に存在する場合は、最新の `password` / `display_name` を採用して継続する。
+  - 検証済みの同一 Email identity が存在する場合は `email_account_already_exists` を返す。
+  - Entra identity が同一 Email に存在する場合は `entra_account_already_exists` を返す。
+- `POST /backend/auth/email/verify`
+  - 検証トークンを消費して Email identity を検証済みに更新する。
+  - セッション発行は行わない。
+- `POST /backend/auth/email/verify/resend`
+  - 未検証ユーザー向けに検証メールを再送する。
+  - 外向きレスポンスは常に `accepted` を返す。
+  - 未検証 identity が存在する場合のみ新しい検証トークンを発行し、既存未消費トークンは失効させる。
+  - 対象が存在しない場合、または既に検証済みの場合も外向きレスポンスは同一に保つ。
+  - `AUTH_DEBUG_RETURN_TOKENS=true` の場合のみ `debug_verification_token` を返す。
+- `POST /backend/auth/email/login`
+  - 未検証の場合は `email_not_verified` を返し、フロント側で `verify-email` 導線へ誘導する。
+
+### Frontend との契約
+
+- Email 検証再開の正規導線は `/:lng/verify-email` とする。
+- `verify-email` 画面は次を扱う。
+  - 検証メール再送
+  - 検証トークン入力と検証実行
+- `return_to` は相対パスのみ許可し、`login` / `verify-email` 自身へのループは破棄する。
+- 検証完了後は自動ログインせず、`/:lng/login` へ戻す。
+  - `return_to` がある場合は `/:lng/login?return_to=...` に引き継ぐ。
+- `VITE_ENABLE_EMAIL_AUTH=false` の環境では `verify-email` 画面と関連導線を無効化する。
+
+### 監査ログ方針（Email verify resend）
+
+- `auth.email_verify_resend.success`
+  - 再送 API の受付成功を記録する。
+  - `metadata.email` に対象メールアドレスを記録する。
+- `auth.email_verify_resend.fail`
+  - 業務状態を握りつぶさない失敗のみを記録する。
+  - 存在しない Email や既検証は外向き成功扱いのため、通常は fail ではなく success として扱う。
 
 実装上の種別:
 
@@ -450,6 +493,8 @@ apps/backend
 - `auth.signup.fail`
 - `auth.email_verify.success`
 - `auth.email_verify.fail`
+- `auth.email_verify_resend.success`
+- `auth.email_verify_resend.fail`
 - `auth.password_change.success`
 - `auth.password_change.fail`
 - `auth.password_reset_request.success`

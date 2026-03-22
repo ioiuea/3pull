@@ -240,6 +240,21 @@ async def signup_email_user(
         session, existing_user.id, AuthProvider.EMAIL
     )
     if email_identity:
+        if email_identity.email_verified_at is None:
+            update_password_hash(
+                session,
+                identity=email_identity,
+                password_hash=password_hash,
+            )
+            update_user_profile(
+                session,
+                user=existing_user,
+                user_type=UserType.EXTERNAL,
+                display_name=display_name,
+                email=normalized_email,
+            )
+            return existing_user
+
         raise AuthConflictError(
             code=AuthConflictCode.EMAIL_ACCOUNT_ALREADY_EXISTS,
             message="Email signup is rejected because email account already exists",

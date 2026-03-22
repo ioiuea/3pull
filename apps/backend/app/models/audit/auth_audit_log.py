@@ -33,6 +33,8 @@ class AuthAuditEventType(StrEnum):
     SIGNUP_FAIL = "auth.signup.fail"
     EMAIL_VERIFY_SUCCESS = "auth.email_verify.success"
     EMAIL_VERIFY_FAIL = "auth.email_verify.fail"
+    EMAIL_VERIFY_RESEND_SUCCESS = "auth.email_verify_resend.success"
+    EMAIL_VERIFY_RESEND_FAIL = "auth.email_verify_resend.fail"
     PASSWORD_CHANGE_SUCCESS = "auth.password_change.success"
     PASSWORD_CHANGE_FAIL = "auth.password_change.fail"
     PASSWORD_RESET_REQUEST_SUCCESS = "auth.password_reset_request.success"

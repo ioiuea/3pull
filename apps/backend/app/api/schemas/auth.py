@@ -85,6 +85,19 @@ class EmailVerifyResponse(BaseModel):
     status: Literal["verified"]
 
 
+class EmailVerifyResendRequest(BaseModel):
+    """Email 検証メール再送要求."""
+
+    email: str
+
+
+class EmailVerifyResendResponse(BaseModel):
+    """Email 検証メール再送応答."""
+
+    status: Literal["accepted"]
+    debug_verification_token: str | None = None
+
+
 class PasswordResetRequestRequest(BaseModel):
     """パスワードリセット要求送信 API の要求."""
 

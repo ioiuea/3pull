@@ -22,8 +22,10 @@
   - 共通レイアウト
 - `protected-layout.tsx`
   - 認証必須ページのガード
-- `landing-page.tsx` `login.tsx` `signup.tsx` `password-reset.tsx`
-  - 主要画面
+- `authentication/`
+  - 認証関連ページ
+- `landing-page.tsx`
+  - ランディングページ
 - `*/page.tsx`
   - feature ごとのサンプル画面
 

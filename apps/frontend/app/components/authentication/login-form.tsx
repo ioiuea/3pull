@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '~/components/ui/field';
 import { Input } from '~/components/ui/input';
 import { type AuthMe, backendFetch } from '~/lib/api-helper';
+import { sanitizeReturnTo } from '~/lib/auth-redirect';
 import { isSupportedLanguage } from '~/lib/i18n';
 import { ENABLE_EMAIL_AUTH } from '~/constants/auth';
 import { PRODUCT_NAME } from '~/constants/product';
@@ -36,16 +37,21 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
   const { lng } = useParams();
   const currentLanguage = lng && isSupportedLanguage(lng) ? lng : 'en';
   const searchParams = new URLSearchParams(location.search);
-  const returnTo = searchParams.get('return_to') ?? `/${currentLanguage}`;
+  const returnTo = sanitizeReturnTo(searchParams.get('return_to'), {
+    currentLanguage,
+    disallowedPaths: [`/${currentLanguage}/login`, `/${currentLanguage}/verify-email`],
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showVerifyEmailLink, setShowVerifyEmailLink] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
+    setShowVerifyEmailLink(false);
 
     try {
       const response = await backendFetch('/auth/email/login', {
@@ -54,11 +60,15 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
       });
       const payload = (await response.json().catch(() => null)) as
         | {
-            detail?: { message?: string };
+            detail?: { code?: string; message?: string };
           }
         | EmailLoginResponse
         | null;
       if (!response.ok) {
+        if (payload && 'detail' in payload && payload.detail?.code === 'email_not_verified') {
+          setShowVerifyEmailLink(true);
+          throw new Error(t('login.errors.emailNotVerified'));
+        }
         const message =
           payload && 'detail' in payload
             ? payload.detail?.message
@@ -135,6 +145,15 @@ export function LoginForm({ className, ...props }: React.ComponentProps<'div'>) 
               )}
               {errorMessage && (
                 <FieldDescription className="text-destructive">{errorMessage}</FieldDescription>
+              )}
+              {showVerifyEmailLink && (
+                <FieldDescription>
+                  <Link
+                    to={`/${currentLanguage}/verify-email?email=${encodeURIComponent(email)}&return_to=${encodeURIComponent(returnTo)}`}
+                  >
+                    {t('login.actions.goVerifyEmail')}
+                  </Link>
+                </FieldDescription>
               )}
               {ENABLE_EMAIL_AUTH && (
                 <Field>
