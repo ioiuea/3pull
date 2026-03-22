@@ -278,9 +278,13 @@ apps/backend
 
 - セッションは DB の `auth.sessions` で管理
 - Cookie は `HttpOnly` を利用
+- Cookie の `Secure` / `SameSite` は設定で制御し、既定値は `SESSION_COOKIE_SECURE=true`, `SESSION_COOKIE_SAMESITE=lax`
 - CSRF は `Origin/Referer` 検証ミドルウェアで保護
+- `CSRF_TRUSTED_ORIGINS` を設定値として持ち、環境ごとに許可 origin を切り替える
 - 認証系 API には IP ベース rate limit を適用
 - パスワードは Argon2id でハッシュ化
+- セッショントークンは生値を保存せず、SHA-256 ハッシュのみを `auth.sessions.session_token_hash` に保存
+- セッション refresh 時は旧セッションを失効し、新しいセッションを再発行する
 - Email verification token / password reset token は SHA-256 ハッシュのみ保存
 - Entra の access token / refresh token は暗号化して保存
 - `/backend/auth/entra/profile` は internal ユーザーのみ許可

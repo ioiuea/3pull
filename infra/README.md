@@ -888,6 +888,23 @@ MAINT_VM_ADMIN_PASSWORD='YourStrongPassword!' \
   - backend Helm values 生成（`infra/config/backend-values.template.yaml` から `k8s/charts/backend/values.yaml` を生成）
   - IP rate limit ops 用 env 生成（`scripts/ops/ip-rate-limit/generated.env.sh`）
 
+### post フェーズで現在生成・整備されるもの
+
+- `scripts/init/agicController/deploy.sh`
+  - AGIC standard / low-latency を Helm で導入する bootstrap script
+- `scripts/init/kedaController/deploy.sh`
+  - KEDA controller を Helm で導入する bootstrap script
+- `scripts/init/sql/param.conf`
+  - SQL bootstrap 用の接続パラメータ
+- `k8s/charts/frontend/values.yaml`
+  - `infra/config/frontend-values.template.yaml` から生成する frontend chart 用 values
+- `k8s/charts/backend/values.yaml`
+  - `infra/config/backend-values.template.yaml` から生成する backend chart 用 values
+
+補足:
+
+- 現時点では `infra/main.sh` がインフラ作成に加えて bootstrap script / Helm values 生成まで担います。
+
 ## 出力ファイル（params/）
 
 - `log-analytics.bicepparam`

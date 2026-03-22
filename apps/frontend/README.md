@@ -293,6 +293,13 @@ return <Profile me={data} onReload={() => void mutate()} />;
 - `403`: 権限不足メッセージ
 - `5xx`: 一時障害メッセージと再試行導線
 
+## ブラウザセキュリティの現状
+
+- BFF + Cookie セッション前提で、frontend は認証トークンを保持せず Cookie 送信のみを担当します。
+- 認証付き API 呼び出しは `backendFetch` に集約し、`credentials: "include"` を標準化しています。
+- 現在のルートドキュメントでは Google Fonts を外部参照しています。将来 CSP を強制導入する場合は、この許可方針を見直します。
+- `apps/frontend/app/components/ui/chart.tsx` では `<style>` タグ生成のために `dangerouslySetInnerHTML` を使用しています。現状は既存 UI 部品の利用に留め、外部起源データをそのまま流し込まない前提です。
+
 ### Entra Graph プロファイル取得時の注意
 
 - フロントは Graph API を直接呼ばず、`GET /backend/auth/entra/profile` を利用します。
