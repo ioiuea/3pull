@@ -689,6 +689,25 @@ erDiagram
 - worker がキューからメッセージを受け取り、DB を正本として job を実行する
 - 成果物本体は Blob Storage、メタデータは `core.async_job_artifacts` に保持する
 
+実行方針:
+
+- Service Bus / Blob Storage は `DefaultAzureCredential` を標準とし、接続文字列はローカル検証用フォールバックとして扱う
+- worker は共通 runtime で queue message を受信し、`job_registry` から job handler を解決する
+- queue message は `job_id` 中心の最小構成を前提とし、worker は DB を正本として詳細を再取得する
+- `claim_queued_job_for_run()` による条件付き更新で `queued -> running` を claim し、二重実行を避ける
+- 同時実行制御は `job_type` 単位で行い、`queued` / `running` を枠消費中として扱う
+- 成果物ダウンロードは backend 経由の API を維持する
+
+現時点の実装対象:
+
+- `auth-audit-export`
+- `sample-wait-blob`
+
+cleanup 連携:
+
+- `jobs` cleanup では期限切れ artifact の cleanup と stuck `running` job の `failed` 化を行う
+- 自動再投入ではなく、状態更新と運用判断を分離する
+
 詳細は次を参照してください。
 
 - jobs API の入口
@@ -699,6 +718,18 @@ erDiagram
   - [app/workers/README.md](/Users/hiroki.ueda/Dev/3pull/apps/backend/app/workers/README.md)
 - schedulers
   - [app/schedulers/README.md](/Users/hiroki.ueda/Dev/3pull/apps/backend/app/schedulers/README.md)
+
+## cleanup 運用方針
+
+- cleanup の共通入口は `python -m app.schedulers.batch_jobs` とし、カテゴリ切替は `app.schedulers.cleanup.runner_registry` で行う
+- 現在の cleanup 対象は `sessions` / `audit` / `jobs` の 3 系統
+- `sessions`
+  - 期限切れかつ grace 超過のセッションを batch 削除する
+- `audit`
+  - retention 超過の監査ログを cleanup する
+- `jobs`
+  - 期限切れ成果物の cleanup と stale `running` job の失敗化を行う
+- 定期実行処理は API request 経路ではなく scheduler CLI から起動する前提とする
 
 ## 実装上の注意
 

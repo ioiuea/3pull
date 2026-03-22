@@ -4,10 +4,10 @@
 
 - `backend/`
   - FastAPI API / worker / schedulers を載せるための chart
-  - 現時点では API 用 `Deployment` / `Service`、worker 用 `Deployment`、schedulers 用 `CronJob` まで実装済み
+  - API / worker / schedulers / KEDA / Ingress を含む配備構成を実装済み
 - `frontend/`
   - frontend web を載せるための chart
-  - `Deployment` / `Service` の最小構成を実装済み
+  - web / Ingress を含む配備構成を実装済み
 
 ## Chart の基本構成
 
@@ -123,10 +123,9 @@ Kubernetes manifest のテンプレートです。
   - KEDA が Azure Service Bus を読むための `TriggerAuthentication` を生成
 - `templates/keda-scaledobjects.yaml`
   - worker 用 `ScaledObject` を生成
-
-未実装の主な対象:
-
-- worker / schedulers 用の個別スケール調整値の詳細化
+- `templates/ingress.yaml`
+  - backend 用 Ingress を生成
+  - 通常系 / 低遅延系の 2 系統を values で切り替える
 
 ## frontend chart の各ファイル
 
@@ -147,6 +146,20 @@ Kubernetes manifest のテンプレートです。
   - frontend 用 `Deployment` を生成
 - `templates/service.yaml`
   - frontend 用 `Service` を生成
+- `templates/ingress.yaml`
+  - frontend 用 Ingress を生成
+  - 通常系のみ公開する
+
+## 現在の chart 実装方針
+
+- backend / frontend の `Service` は chart 上 `ClusterIP` を前提とする
+- worker は job type ごとに `Deployment` を分ける
+- schedulers は `sessions / audit / jobs` の 3 `CronJob` を持つ
+- backend は KEDA による worker スケールを前提に `TriggerAuthentication` / `ScaledObject` を持つ
+- backend Ingress は通常系 / 低遅延系を分離できる
+- frontend Ingress は通常系のみを持つ
+- backend の API / worker / schedulers は Helm 管理の `ServiceAccount` と Workload Identity を前提とする
+- Key Vault 連携は `SecretProviderClass` + CSI Driver を前提とする
 
 ## 実行時の流れ
 
@@ -273,13 +286,14 @@ helm upgrade --install 3pull-frontend ./k8s/charts/frontend \
 
 ## このプロジェクトでの注意点
 
-- backend chart は API / worker / schedulers / KEDA `ScaledObject` までは実装済み
+- backend chart は API / worker / schedulers / KEDA / Ingress まで実装済み
 - `serviceAccounts.*.create=true` を既定とし、`ServiceAccount` も Helm 管理を正とする
   - すでに手動作成済みの同名 `ServiceAccount` がある場合は、Helm 再適用前に削除して切り替える
 - `keyVault.enabled=true` の場合は、AKS 側で `azure-keyvault-secrets-provider` add-on が有効であることが前提
   - 例: `az aks enable-addons --addons azure-keyvault-secrets-provider --resource-group 3pull-app --name 3pull-test-cluster`
 - `SecretProviderClass` による Kubernetes `Secret` 同期は、Pod が CSI volume を mount して初めて生成される
   - そのため API Pod は `backend-secrets` を `envFrom` 参照しつつ、同時に `secrets-store.csi.k8s.io` volume も mount する
+- API / worker / schedulers の Pod / CronJob template では `azure.workload.identity/use: "true"` を付与する
 - frontend は現在 `Vite` の静的 build を `nginx` で配信している
   - `VITE_*` は本来 build 時に確定する値
   - そのため frontend chart では `VITE_*` を runtime values としては持たない

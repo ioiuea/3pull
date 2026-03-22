@@ -435,6 +435,27 @@ Kubernetes Service（ClusterIP）用の IP 範囲（CIDR）です。
 - Key Vault では `api` / `worker` に `Key Vault Secrets User` に加えて `Key Vault Crypto User` も付与します。
   Azure SQL Always Encrypted で Azure Key Vault のキーを利用する前提です。
 
+### AGIC / Ingress / KEDA の現状
+
+- AGIC は AKS addon ではなく Helm bootstrap script で導入する前提です
+- `infra/main.sh` の post フェーズで、以下を生成します
+  - `scripts/init/agicController/deploy.sh`
+  - `scripts/init/kedaController/deploy.sh`
+  - `k8s/charts/frontend/values.yaml`
+  - `k8s/charts/backend/values.yaml`
+- AGIC 用 Managed Identity は通常系 / 低遅延系で分離し、App Gateway 更新権限は `main.application-gateway-rbac.bicep` で付与します
+- AGIC / KEDA / backend workloads 用 federated credential は `main.federated-credential.bicep` で作成します
+- backend / frontend の Ingress manifest 自体は app chart 側で管理します
+  - backend は通常系 / 低遅延系の 2 系統
+  - frontend は通常系のみ
+- backend chart は KEDA 用の `TriggerAuthentication` / `ScaledObject` を持ち、values 生成時に `keda.workloadIdentity.clientId` を自動反映します
+- AGIC 用 namespace はアプリ namespace と分離可能で、`ingress` 専用 namespace を使う前提で bootstrap できます
+- 公開方針は以下を前提にします
+  - 通常系 / 低遅延系はドメインで分離する
+  - 低遅延系は限定 API のみを公開する
+  - frontend は通常系 App Gateway のみで公開する
+  - TLS 終端は App Gateway 側で管理する
+
 ### sqlDatabase.skuTier
 
 Azure SQL Database の価格レベルです。

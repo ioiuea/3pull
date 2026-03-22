@@ -266,6 +266,13 @@ return <Profile me={data} onReload={() => void mutate()} />;
 - サインアウトは `POST /backend/auth/logout` を利用します。
 - 認証済みユーザー情報は `GET /backend/auth/me` で取得します。
 
+### Email 認証 UI 切替（現行実装）
+
+- frontend には `VITE_ENABLE_EMAIL_AUTH` があり、Email 認証 UI の表示可否を切り替えます。
+- `VITE_ENABLE_EMAIL_AUTH=false` の場合、ログイン画面では Email/Password フォームと signup 導線を表示しません。
+- `verify-email` 画面は `VITE_ENABLE_EMAIL_AUTH=false` の場合に `/:lng/login` へリダイレクトします。
+- 現時点の切替は signup 単体ではなく、Email 認証 UI 全体を対象にしています。
+
 ### ストレージ方針（現行実装）
 
 - フロントエンドで認証トークンを `localStorage` に保持しません。
