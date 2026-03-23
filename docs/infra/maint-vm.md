@@ -164,6 +164,8 @@ az ssh vm -n vm-[common.environmentName]-[common.systemName]-maint -g rg-[common
 - `make alembic-upgrade`
 - 必要に応じた SQL / Alembic の手動実行
 
+セットアップ手順は [maint-vm-setup.md](/Users/hiroki.ueda/Dev/3pull/docs/infra/maint-vm-setup.md) を参照する。
+
 ## 設計意図
 
 - API / worker / schedulers に DDL 権限を持たせない
@@ -233,42 +235,3 @@ az aks get-credentials \
 - Azure SQL Database: [azure-sql-database.md](./azure-sql-database.md)
 - Managed Identity: [managed-id.md](./managed-id.md)
 - AKS: [aks.md](./aks.md)
-
-# パッケージインストール手順
-
-## azure-cliインストール
-
-以下コマンドを実行する
-
-```shell
-sudo apt-get update
-sudo apt-get install apt-transport-https ca-certificates curl gnupg lsb-release
-
-sudo mkdir -p /etc/apt/keyrings
-curl -sLS https://packages.microsoft.com/keys/microsoft.asc |
-  gpg --dearmor | sudo tee /etc/apt/keyrings/microsoft.gpg > /dev/null
-sudo chmod go+r /etc/apt/keyrings/microsoft.gpg
-
-AZ_DIST=$(lsb_release -cs)
-echo "Types: deb
-URIs: https://packages.microsoft.com/repos/azure-cli/
-Suites: ${AZ_DIST}
-Components: main
-Architectures: $(dpkg --print-architecture)
-Signed-by: /etc/apt/keyrings/microsoft.gpg" | sudo tee /etc/apt/sources.list.d/azure-cli.sources
-
-sudo apt-get update
-sudo apt-get install azure-cli
-```
-
-## AKS 運用ツール
-
-AKS 運用を行う場合は、少なくとも以下を maint-vm へ導入します。
-
-- `kubectl`
-- `helm`
-- `kubelogin`
-
-補足:
-
-- `kubelogin` は Azure RBAC/AAD ベースの kubeconfig を `kubectl` から利用するために必要です。

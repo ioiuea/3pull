@@ -50,7 +50,7 @@
    フロントエンド/バックエンドの依存関係をまとめてセットアップします。
 
 3. Azure SQL Database の初期設定とマイグレーションを適用する
-   まず `./scripts/init/sql/deploy.sh -local` を実行して `auth` / `audit` / `core` schema と現在の Entra ユーザー権限を作成し、その後 `make alembic-upgrade` を実行します。
+   まず `./scripts/init/sql/deploy.sh --local` を実行して `auth` / `audit` / `core` schema と現在の Entra ユーザー権限を作成し、その後 `make alembic-upgrade` を実行します。
 
 4. 非同期ジョブ用の Blob コンテナを作成する
    `scripts/README.md` を参照して、非同期ジョブ成果物の保存先となる Blob コンテナを作成します。

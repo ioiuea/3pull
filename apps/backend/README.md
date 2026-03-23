@@ -97,7 +97,7 @@
    `make env`
 2. `az login` を済ませる
 3. Azure SQL の schema / Entra user / schema 権限を投入する  
-   `./scripts/init/sql/deploy.sh -local`
+   `./scripts/init/sql/deploy.sh --local`
 4. Alembic を適用する  
    `make alembic-upgrade`
 5. API を起動する  

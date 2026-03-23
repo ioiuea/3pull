@@ -16,6 +16,7 @@
   - `--local` 付き:
     - `auth` / `audit` / `core` スキーマを存在しない場合のみ作成します。
     - `az login` 中の個人 Entra principal を Azure SQL Database ユーザーとして作成し、各スキーマへの権限を付与します。
+    - 接続先 DB 名 / SQL Server FQDN を対話入力で受け取ります。
   - `--local` なし:
     - `param.conf` を読み込みます。
     - `SQL_ADMIN_LOGIN` を使って SQL 認証で接続し、パスワードは対話入力で受け取ります。
