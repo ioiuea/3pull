@@ -50,10 +50,13 @@ class AppSettings(BaseSettings):
         default="INFO",
         validation_alias="API_LOG_LEVEL",
     )
-
-    service_name: str = Field(
-        default="3pull-api",
-        validation_alias="SERVICE_NAME",
+    system_name: str = Field(
+        default="threepull",
+        validation_alias="SYSTEM_NAME",
+    )
+    applicationinsights_connection_string: str | None = Field(
+        default=None,
+        validation_alias="APPLICATIONINSIGHTS_CONNECTION_STRING",
     )
 
     database_url: str | None = Field(default=None, validation_alias="DATABASE_URL")
@@ -405,6 +408,21 @@ class AppSettings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(case_sensitive=False, extra="ignore")
+
+    @property
+    def api_service_name(self) -> str:
+        """API の service.name を返す."""
+        return f"{self.system_name}-api"
+
+    def worker_service_name(self, job_name: str) -> str:
+        """worker の service.name を返す."""
+        normalized_job_name = job_name.replace("_", "-")
+        return f"{self.system_name}-worker-{normalized_job_name}"
+
+    def scheduler_service_name(self, job_name: str) -> str:
+        """scheduler の service.name を返す."""
+        normalized_job_name = job_name.replace("_", "-")
+        return f"{self.system_name}-scheduler-{normalized_job_name}"
 
     @field_validator("csrf_trusted_origins", mode="before")
     @classmethod

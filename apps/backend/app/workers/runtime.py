@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from app.adapters.queue.service_bus_client import get_service_bus_receiver
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
+from app.core.telemetry import configure_telemetry
 from app.workers.job_registry import WorkerHandlerSpec, get_worker_handler
 from app.workers.messages import AsyncJobQueueMessage
 
@@ -25,6 +26,17 @@ class WorkerRuntimeConfig:
     queue_name: str
     expected_job_type: str
     poll_wait_seconds: int = 5
+
+
+def _resolve_worker_service_name(*, settings: object, expected_job_type: str) -> str:
+    """settings から worker の service.name を解決する."""
+    worker_service_name = getattr(settings, "worker_service_name", None)
+    if callable(worker_service_name):
+        return str(worker_service_name(expected_job_type))
+
+    system_name = str(getattr(settings, "system_name", "app")).strip() or "app"
+    normalized_job_name = expected_job_type.replace("_", "-")
+    return f"{system_name}-worker-{normalized_job_name}"
 
 
 def _extract_message_id(message: object) -> str | None:
@@ -67,9 +79,35 @@ def run_worker_loop(*, config: WorkerRuntimeConfig) -> None:
     """
     settings = get_settings()
     configure_logging(level=settings.api_log_level)
+    service_name = _resolve_worker_service_name(
+        settings=settings,
+        expected_job_type=config.expected_job_type,
+    )
+
+    try:
+        telemetry_enabled = configure_telemetry(
+            service_name=service_name,
+            connection_string=getattr(
+                settings,
+                "applicationinsights_connection_string",
+                None,
+            ),
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.exception(
+            "telemetry.init.failed",
+            service=service_name,
+            error=str(exc),
+        )
+    else:
+        if telemetry_enabled:
+            logger.info("telemetry.init.completed", service=service_name)
+        else:
+            logger.info("telemetry.init.skipped", service=service_name)
 
     logger.info(
         "worker.loop.started",
+        service=service_name,
         queue_name=config.queue_name,
         expected_job_type=config.expected_job_type,
         poll_wait_seconds=config.poll_wait_seconds,
@@ -105,6 +143,7 @@ def run_worker_loop(*, config: WorkerRuntimeConfig) -> None:
 
                 logger.info(
                     "worker.message.received",
+                    service=service_name,
                     queue_name=config.queue_name,
                     message_id=message_id,
                     delivery_count=delivery_count,
@@ -120,6 +159,7 @@ def run_worker_loop(*, config: WorkerRuntimeConfig) -> None:
                 receiver.complete_message(message)
                 logger.info(
                     "worker.message.completed",
+                    service=service_name,
                     queue_name=config.queue_name,
                     message_id=message_id,
                     delivery_count=delivery_count,
@@ -130,6 +170,7 @@ def run_worker_loop(*, config: WorkerRuntimeConfig) -> None:
                 receiver.abandon_message(message)
                 logger.warning(
                     "worker.message.abandoned",
+                    service=service_name,
                     queue_name=config.queue_name,
                     message_id=message_id,
                     delivery_count=delivery_count,
@@ -152,6 +193,7 @@ def run_worker_loop(*, config: WorkerRuntimeConfig) -> None:
                 )
                 logger.warning(
                     "worker.message.dead_lettered",
+                    service=service_name,
                     queue_name=config.queue_name,
                     message_id=message_id,
                     delivery_count=delivery_count,
@@ -165,6 +207,7 @@ def run_worker_loop(*, config: WorkerRuntimeConfig) -> None:
                 receiver.complete_message(message)
                 logger.info(
                     "worker.message.skipped",
+                    service=service_name,
                     queue_name=config.queue_name,
                     message_id=message_id,
                     delivery_count=delivery_count,
@@ -176,6 +219,7 @@ def run_worker_loop(*, config: WorkerRuntimeConfig) -> None:
                 receiver.abandon_message(message)
                 logger.exception(
                     "worker.message.failed",
+                    service=service_name,
                     queue_name=config.queue_name,
                     message_id=message_id,
                     delivery_count=delivery_count,

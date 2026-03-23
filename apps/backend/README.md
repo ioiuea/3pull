@@ -258,6 +258,79 @@ apps/backend
 - `ASYNC_JOB_AUTH_AUDIT_EXPORT_TASK_NAME`
 - `SERVICE_BUS_SAMPLE_WAIT_BLOB_QUEUE_NAME`
 - `ASYNC_JOB_SAMPLE_WAIT_BLOB_TASK_NAME`
+
+## 監視実装
+
+KQL の具体例は [`docs/kql-sample.md`](/Users/hiroki.ueda/Dev/3pull/docs/kql-sample.md) を参照します。
+
+### 方針
+
+- telemetry 実装は `Azure Monitor OpenTelemetry Distro` を採用する
+- 接続先は `APPLICATIONINSIGHTS_CONNECTION_STRING` で指定する
+- secret の正本は Key Vault とする
+- ローカルでは `apps/backend/.env` を許可する
+- `APPLICATIONINSIGHTS_CONNECTION_STRING` 未設定時は telemetry 初期化をスキップする
+- 既存の `structlog` JSON stdout は維持しつつ、`Application Insights` にも logging telemetry を送る
+
+### 実装済みの対象
+
+- API
+- worker
+- scheduler
+- request telemetry
+- exception telemetry
+- logging telemetry
+- dependency telemetry
+- rate limit 関連ログ
+
+### service.name 方針
+
+- `SYSTEM_NAME` を正本とする
+- API: `<system-name>-api`
+- worker: `<system-name>-worker-<job>`
+- scheduler: `<system-name>-scheduler-<job>`
+- `SERVICE_NAME` は使用しない
+
+例:
+
+- `threepull-api`
+- `threepull-worker-auth-audit-export`
+- `threepull-worker-sample-wait-blob`
+- `threepull-scheduler-sessions-cleanup`
+- `threepull-scheduler-audit-cleanup`
+- `threepull-scheduler-jobs-cleanup`
+
+### 設定項目
+
+- `SYSTEM_NAME`
+- `APPLICATIONINSIGHTS_CONNECTION_STRING`
+
+関連する反映先:
+
+- `apps/backend/.env`
+- `apps/backend/.env.example`
+- `app/core/settings/config.py`
+- `infra/config/backend-values.template.yaml`
+- `infra/scripts/sync-backend-values.py`
+- `k8s/charts/backend/templates/secretproviderclass.yaml`
+- `k8s/charts/backend/values.yaml`
+
+### 実装済みの内容
+
+- API / worker / scheduler の telemetry 初期化
+- Key Vault / Helm / infra values 自動生成経路の反映
+- `AppTraces` / `AppRequests` / `AppExceptions` / `AppDependencies` での確認
+- worker / scheduler での `telemetry.init.completed` 確認
+- dependency telemetry の流入確認
+- Alert 方針の叩き台整理
+
+### 実装上の補足
+
+- workspace-based `Application Insights` を前提とする
+- `structlog` の JSON ログは `AppTraces.Message` に入る前提で扱う
+- request telemetry は logging telemetry より反映が遅れる場合がある
+- Azure SDK / exporter / OpenTelemetry の内部ログは stdout ノイズになるため抑制している
+- dependency telemetry は Azure SDK 系が先に取りやすく、SQLAlchemy / pyodbc / Redis は追加計装要否を別途判断する
 - `AZURE_BLOB_ACCOUNT_URL`
 - `AZURE_BLOB_CONTAINER`
 - `AZURE_BLOB_USE_CONNECTION_STRING`

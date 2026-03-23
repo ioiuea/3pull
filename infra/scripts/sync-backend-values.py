@@ -400,7 +400,7 @@ replacements = {
     "serviceAccounts.worker.clientId": yaml_quote(worker_client_id),
     "serviceAccounts.schedulers.name": yaml_quote(f"sa-{environment_name}-{system_name}-schedulers"),
     "serviceAccounts.schedulers.clientId": yaml_quote(schedulers_client_id),
-    "config.env.SERVICE_NAME": yaml_quote(f"{system_image_name}-api"),
+    "config.env.SYSTEM_NAME": yaml_quote(system_image_name),
     "config.env.SERVICE_BUS_NAMESPACE_FQDN": yaml_quote(f"sb-{environment_name}-{system_name}.servicebus.windows.net"),
     "config.env.AZURE_BLOB_ACCOUNT_URL": yaml_quote(f"https://{storage_account_name}.blob.core.windows.net/"),
     "config.env.AZURE_BLOB_CONTAINER": yaml_quote(blob_container_name),

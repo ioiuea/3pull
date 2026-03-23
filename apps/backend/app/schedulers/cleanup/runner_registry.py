@@ -11,6 +11,7 @@ from time import perf_counter
 
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
+from app.core.telemetry import configure_telemetry
 from app.schedulers.cleanup.helpers import CleanupResult, batch_size_type
 from app.schedulers.cleanup.runners import (
     run_audit_cleanup,
@@ -96,9 +97,33 @@ async def _run(args: argparse.Namespace) -> int:
     except RuntimeError:
         return 2
 
+    service_name = settings.scheduler_service_name(spec.command)
+
+    try:
+        telemetry_enabled = configure_telemetry(
+            service_name=service_name,
+            connection_string=getattr(
+                settings,
+                "applicationinsights_connection_string",
+                None,
+            ),
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.exception(
+            "telemetry.init.failed",
+            service=service_name,
+            error=str(exc),
+        )
+    else:
+        if telemetry_enabled:
+            logger.info("telemetry.init.completed", service=service_name)
+        else:
+            logger.info("telemetry.init.skipped", service=service_name)
+
     run_start = perf_counter()
     logger.info(
         "cleanup.started",
+        service=service_name,
         job_name=spec.job_name,
         run_at=datetime.now(timezone.utc).isoformat(),
         dry_run=args.dry_run,
@@ -115,6 +140,7 @@ async def _run(args: argparse.Namespace) -> int:
         duration_ms = (perf_counter() - run_start) * 1000
         logger.exception(
             "cleanup.failed",
+            service=service_name,
             job_name=spec.job_name,
             status="error",
             error=str(exc),
@@ -124,6 +150,7 @@ async def _run(args: argparse.Namespace) -> int:
 
     logger.info(
         "cleanup.completed",
+        service=service_name,
         job_name=result.job_name,
         status=result.status,
         deleted_count=result.deleted_count,

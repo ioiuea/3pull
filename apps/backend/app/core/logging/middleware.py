@@ -19,7 +19,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: Any) -> None:
         """ミドルウェア初期化時に専用ロガーを準備する。"""
         super().__init__(app)
-        self.logger = structlog.get_logger("access")
+        self.logger = structlog.get_logger("app.access")
 
     async def dispatch(
         self,

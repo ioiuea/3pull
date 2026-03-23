@@ -36,7 +36,7 @@ from fastapi import FastAPI
 from app.core.settings import get_settings
 
 settings = get_settings()
-app = FastAPI(title=settings.service_name)
+app = FastAPI(title=settings.api_service_name)
 ```
 
 テストや設定スキーマ自体の検証では、`AppSettings` を直接生成して使います。

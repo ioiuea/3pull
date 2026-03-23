@@ -9,6 +9,15 @@ import logging
 
 import structlog
 
+_NOISY_LOGGER_LEVELS: dict[str, int] = {
+    "azure": logging.WARNING,
+    "azure.core.pipeline.policies.http_logging_policy": logging.WARNING,
+    "azure.core.pipeline.policies.network_trace": logging.WARNING,
+    "azure.monitor.opentelemetry": logging.WARNING,
+    "azure.monitor.opentelemetry.exporter": logging.WARNING,
+    "opentelemetry": logging.WARNING,
+}
+
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
     """
@@ -52,3 +61,8 @@ def configure_logging(level: str = "INFO") -> None:
         level=getattr(logging, level.upper(), logging.INFO),
         format="%(message)s",
     )
+
+    # Azure SDK / exporter / OpenTelemetry の内部ログは WARNING 以上に絞り、
+    # stdout をアプリケーションログ中心に保つ。
+    for logger_name, logger_level in _NOISY_LOGGER_LEVELS.items():
+        logging.getLogger(logger_name).setLevel(logger_level)

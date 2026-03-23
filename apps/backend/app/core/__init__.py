@@ -7,6 +7,8 @@
   - FastAPI アプリの起動・終了処理を提供する
 - `settings`
   - 環境変数ベースの設定スキーマと設定ロードを提供する
+- `telemetry`
+  - Azure Monitor OpenTelemetry の初期化を提供する
 - `security`
   - HTTP 保護と認証用 crypto を提供する
 - `datetime`

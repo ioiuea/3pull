@@ -120,6 +120,9 @@ keyVault:
     databaseUrl:
       keyVaultName: database-url
       secretKey: DATABASE_URL
+    applicationInsightsConnectionString:
+      keyVaultName: applicationinsights-connection-string
+      secretKey: APPLICATIONINSIGHTS_CONNECTION_STRING
     sessionSecretKey:
       keyVaultName: session-secret-key
       secretKey: SESSION_SECRET_KEY
@@ -150,7 +153,7 @@ serviceAccounts:
 config:
   enabled: true
   env:
-    SERVICE_NAME: sample-system-api
+    SYSTEM_NAME: sample-system
     API_LOG_LEVEL: INFO
     FRONTEND_BASE_URL: https://app.example.com
     AUTH_POST_LOGIN_DEFAULT_PATH: /en
@@ -217,6 +220,7 @@ secretRefs:
   name: backend-secrets
   keys:
     databaseUrl: DATABASE_URL
+    applicationInsightsConnectionString: APPLICATIONINSIGHTS_CONNECTION_STRING
     sessionSecretKey: SESSION_SECRET_KEY
     entraClientSecret: ENTRA_CLIENT_SECRET
     entraTokenEncryptionKey: ENTRA_TOKEN_ENCRYPTION_KEY

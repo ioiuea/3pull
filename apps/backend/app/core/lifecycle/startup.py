@@ -14,6 +14,7 @@ from fastapi import FastAPI
 
 from app.core.logging import configure_logging, get_logger
 from app.core.settings import get_settings
+from app.core.telemetry import configure_api_telemetry
 
 logger = get_logger(__name__)
 
@@ -30,11 +31,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # 起動直後にログ基盤を初期化する。
     configure_logging(level=settings.api_log_level)
+    try:
+        telemetry_enabled = configure_api_telemetry()
+    except Exception as exc:
+        telemetry_enabled = False
+        logger.warning(
+            "telemetry.init.failed",
+            service=settings.api_service_name,
+            reason=str(exc),
+        )
+    else:
+        if telemetry_enabled:
+            logger.info(
+                "telemetry.init.completed",
+                service=settings.api_service_name,
+            )
+        else:
+            logger.info(
+                "telemetry.init.skipped",
+                service=settings.api_service_name,
+                reason="connection_string_not_configured",
+            )
+
     # どの API プレフィックスで起動したかを記録する。
     logger.info(
         "application.startup",
         api_prefix=getattr(app.state, "api_prefix", None),
-        service=settings.service_name,
+        service=settings.api_service_name,
     )
     try:
         yield
@@ -43,5 +66,5 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info(
             "application.shutdown",
             api_prefix=getattr(app.state, "api_prefix", None),
-            service=settings.service_name,
+            service=settings.api_service_name,
         )

@@ -20,16 +20,18 @@ from app.core.lifecycle import lifespan
 from app.core.logging import AccessLogMiddleware
 from app.core.security.http import install_security_middleware
 from app.core.settings import get_settings
+from app.core.telemetry import instrument_api_app
 
 SETTINGS = get_settings()
 API_PREFIX = "/backend"
 
 # アプリ生成時に lifecycle を紐づけ、起動/終了処理を一元管理する。
 app = FastAPI(
-    title=SETTINGS.service_name,
+    title=SETTINGS.api_service_name,
     version="v1",
     lifespan=lifespan,
 )
+instrument_api_app(app)
 # lifespan 側から参照する設定値を state に保持する。
 app.state.api_prefix = API_PREFIX
 # OIDC 認可フローの state / nonce を安全に保持するためセッションミドルウェアを追加する。
