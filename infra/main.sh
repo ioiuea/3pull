@@ -221,6 +221,39 @@ sys.exit(0 if enabled else 1)
 ' "$common_file" "$toggle_name"
 }
 
+is_redis_high_availability_enabled() {
+  python3 -c '
+import json
+import sys
+from pathlib import Path
+
+common_file = Path(sys.argv[1])
+data = json.loads(common_file.read_text(encoding="utf-8"))
+enabled = bool(data.get("redis", {}).get("highAvailabilityEnabled", False))
+sys.exit(0 if enabled else 1)
+' "$common_file"
+}
+
+ensure_redis_provider_registered() {
+  local provider_state
+
+  if ! is_resource_toggle_enabled "redis"; then
+    return
+  fi
+
+  if ! is_redis_high_availability_enabled; then
+    return
+  fi
+
+  provider_state="$(az provider show --namespace Microsoft.Cache --query registrationState -o tsv --only-show-errors 2>/dev/null || true)"
+  if [[ "$provider_state" == "Registered" ]]; then
+    return
+  fi
+
+  echo "==> Register Microsoft.Cache resource provider"
+  az provider register --namespace Microsoft.Cache --wait --only-show-errors >/dev/null
+}
+
 # Resource Group を重複排除しながら作成（存在時は noop）する。
 # 引数:
 #   $1: location
@@ -703,6 +736,10 @@ fi
 #    必須キー不足や型不整合を、この時点で明示的に失敗させる。
 echo "==> Validate common parameters"
 "$common_validation_script" "$common_file"
+
+# 4.5) Azure Managed Redis を使う場合は Microsoft.Cache provider を自動登録する。
+#      これは provider 未登録の失敗を防ぐ目的であり、Availability Zone 情報の有無は解決しない。
+ensure_redis_provider_registered
 
 # 5) ログ出力先ディレクトリを作成する（既存の場合は何もしない）。
 mkdir -p "$logs_dir"
