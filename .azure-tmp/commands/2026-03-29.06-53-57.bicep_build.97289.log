@@ -1,3 +1,0 @@
-CMD-LOG-LINE-BEGIN 97289 | 2026-03-29 06:53:57,027 | INFO | az_command_data_logger | command args: bicep build --file {} --stdout
-CMD-LOG-LINE-BEGIN 97289 | 2026-03-29 06:53:57,114 | ERROR | az_command_data_logger | Error while attempting to retrieve the latest Bicep version: HTTPSConnectionPool(host='aka.ms', port=443): Max retries exceeded with url: /BicepLatestRelease (Caused by NameResolutionError("HTTPSConnection(host='aka.ms', port=443): Failed to resolve 'aka.ms' ([Errno 8] nodename nor servname provided, or not known)")).
-CMD-LOG-LINE-BEGIN 97289 | 2026-03-29 06:53:57,114 | INFO | az_command_data_logger | exit code: 1
