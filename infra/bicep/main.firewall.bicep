@@ -33,6 +33,9 @@ param egressNextHopIp string = ''
 @description('AKS ノードサブネットの CIDR（egressNextHopIp 未指定時に Firewall ポリシーで許可）')
 param aksEgressSourceAddressPrefixes array = []
 
+@description('maint-vm サブネットの CIDR（egressNextHopIp 未指定時に Firewall ポリシーで許可）')
+param maintEgressSourceAddressPrefixes array = []
+
 @description('Public IP 名')
 param publicIPName string
 
@@ -73,6 +76,44 @@ var modulesTags = {
   createdBy: 'bicep'
   billing: 'infra'
 }
+
+var aksEgressRules = length(aksEgressSourceAddressPrefixes) > 0 ? [
+  {
+    ruleType: 'NetworkRule'
+    name: 'allow-aks-egress-any'
+    ipProtocols: [
+      'Any'
+    ]
+    sourceAddresses: [
+      ...aksEgressSourceAddressPrefixes
+    ]
+    destinationAddresses: [
+      '*'
+    ]
+    destinationPorts: [
+      '*'
+    ]
+  }
+] : []
+
+var maintEgressRules = length(maintEgressSourceAddressPrefixes) > 0 ? [
+  {
+    ruleType: 'NetworkRule'
+    name: 'allow-maint-egress-any'
+    ipProtocols: [
+      'Any'
+    ]
+    sourceAddresses: [
+      ...maintEgressSourceAddressPrefixes
+    ]
+    destinationAddresses: [
+      '*'
+    ]
+    destinationPorts: [
+      '*'
+    ]
+  }
+] : []
 
 resource firewallSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-07-01' existing = {
   name: '${vnetName}/AzureFirewallSubnet'
@@ -150,37 +191,20 @@ resource firewallPolicyDeleteLock 'Microsoft.Authorization/locks@2020-05-01' = i
   }
 }
 
-resource aksEgressRuleCollectionGroup 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2024-07-01' = if (!skipFirewallPolicyDeployment && empty(egressNextHopIp) && length(aksEgressSourceAddressPrefixes) > 0) {
+resource egressRuleCollectionGroup 'Microsoft.Network/firewallPolicies/ruleCollectionGroups@2024-07-01' = if (!skipFirewallPolicyDeployment && empty(egressNextHopIp) && (length(aksEgressSourceAddressPrefixes) > 0 || length(maintEgressSourceAddressPrefixes) > 0)) {
   parent: firewallPolicy
-  name: 'rcg-aks-egress'
+  name: 'rcg-egress'
   properties: {
     priority: 100
     ruleCollections: [
       {
-        name: 'allow-aks-egress'
+        name: 'allow-egress'
         priority: 100
         ruleCollectionType: 'FirewallPolicyFilterRuleCollection'
         action: {
           type: 'Allow'
         }
-        rules: [
-          {
-            ruleType: 'NetworkRule'
-            name: 'allow-aks-egress-any'
-            ipProtocols: [
-              'Any'
-            ]
-            sourceAddresses: [
-              ...aksEgressSourceAddressPrefixes
-            ]
-            destinationAddresses: [
-              '*'
-            ]
-            destinationPorts: [
-              '*'
-            ]
-          }
-        ]
+        rules: concat(aksEgressRules, maintEgressRules)
       }
     ]
   }

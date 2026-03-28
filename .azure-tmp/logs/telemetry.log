@@ -1,0 +1,8 @@
+97643 : 2026-03-29 06:53:57,472 : INFO : telemetry.main : Attempt start. Configuration directory [/Users/hiroki.ueda/Dev/3pull/.azure-tmp]. Cache directory [/Users/hiroki.ueda/Dev/3pull/.azure-tmp/telemetry/20260329065357242].
+97643 : 2026-03-29 06:53:57,472 : INFO : telemetry.records : 1 cache files to upload.
+97643 : 2026-03-29 06:53:57,473 : INFO : telemetry.records : Processed file /Users/hiroki.ueda/Dev/3pull/.azure-tmp/telemetry/20260329065357242/cache into 1 records.
+97643 : 2026-03-29 06:53:57,473 : INFO : telemetry.records : Remove directory /Users/hiroki.ueda/Dev/3pull/.azure-tmp/telemetry/20260329065357242
+97643 : 2026-03-29 06:53:57,473 : INFO : telemetry.client : Accumulated 1 events. Flush the clients.
+97643 : 2026-03-29 06:53:57,474 : INFO : telemetry.client : Flush client c4395b75-49cc-422c-bc95-c7d51aef5d46.
+97643 : 2026-03-29 06:53:57,490 : ERROR : telemetry.sender : Upload failed. OSError: <urlopen error [Errno 8] nodename nor servname provided, or not known>
+97643 : 2026-03-29 06:53:57,491 : INFO : telemetry.sender : Finish uploading in 0.016687 seconds.

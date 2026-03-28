@@ -30,11 +30,11 @@ EOF_INNER
 ------------------------------------------------------------
 NOTICE: Firewall Outbound Rule (Initial Provisioning)
 [EN] Because network.egressNextHopIp is not specified, outbound traffic in Firewall Policy is temporarily allowed to Any
-     to permit required external communication during the initial Azure Kubernetes Service provisioning.
+     to permit required external communication during the initial Azure Kubernetes Service / maintenance VM provisioning.
      After provisioning, review and tighten Firewall Policy allow/deny rules according to your enterprise policy.
      Edit Firewall Policy from Azure Portal: https://portal.azure.com/
 
-[JA] network.egressNextHopIp が未指定のため、初期構築段階では Azure Kubernetes Service の構築に必要な外部通信を許可する目的で、
+[JA] network.egressNextHopIp が未指定のため、初期構築段階では Azure Kubernetes Service / メンテナンス VM の構築に必要な外部通信を許可する目的で、
      Firewall Policy のアウトバウンド通信が宛先 Any で許可される構成になります。
      構築完了後は、企業ポリシーに合わせて Firewall Policy の許可/遮断ルールを見直して運用してください。
      Firewall Policy の編集は Azure Portal（https://portal.azure.com/）から実施してください。

@@ -130,12 +130,17 @@ enable_ddos_protection = bool(network_values.get("enableDdosProtection", True))
 egress_next_hop_ip = network_values.get("egressNextHopIp", "")
 deploy = bool(common.get("resourceToggles", {}).get("firewall", True))
 
-# Firewall ポリシーで AKS 由来通信を扱うための送信元レンジ。
+# Firewall ポリシーで AKS/maint-vm 由来通信を扱うための送信元レンジ。
 aks_egress_source_prefixes = []
 for alias in ("agentnode", "usernode"):
     prefix = subnet_prefix_map.get(alias, "")
     if prefix:
         aks_egress_source_prefixes.append(prefix)
+
+maint_egress_source_prefixes = []
+maint_prefix = subnet_prefix_map.get("maint", "")
+if maint_prefix:
+    maint_egress_source_prefixes.append(maint_prefix)
 
 params_dir.mkdir(parents=True, exist_ok=True)
 params_file = params_dir / "firewall.bicepparam"
@@ -154,6 +159,7 @@ lines = [
     f"param enableFirewallIdps = {'true' if enable_firewall_idps else 'false'}",
     f"param egressNextHopIp = {quote(egress_next_hop_ip)}",
     f"param aksEgressSourceAddressPrefixes = {to_bicep_string_array(aks_egress_source_prefixes)}",
+    f"param maintEgressSourceAddressPrefixes = {to_bicep_string_array(maint_egress_source_prefixes)}",
     f"param publicIPName = {quote(f'pip-afw-{environment_name}-{system_name}')}",
     f"param firewallPolicyName = {quote(f'afwp-{environment_name}-{system_name}')}",
     f"param firewallName = {quote(f'afw-{environment_name}-{system_name}')}",
