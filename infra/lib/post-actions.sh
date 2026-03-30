@@ -336,7 +336,7 @@ helm upgrade --install keda kedacore/keda \\
   --set 'nodeSelector.kubernetes\.azure\.com/mode=system' \\
   --set serviceAccount.operator.create=true \\
   --set-string serviceAccount.operator.name="$keda_operator_service_account_name" \\
-  --set-string serviceAccount.operator.annotations.azure\\.workload\\.identity/client-id="$keda_operator_client_id_for_init" \\
+  --set-string 'serviceAccount.operator.annotations.azure\.workload\.identity/client-id=$keda_operator_client_id_for_init' \\
   --set podIdentity.azureWorkload.enabled=true \\
   --set-string podIdentity.azureWorkload.clientId="$keda_operator_client_id_for_init"
 print_and_run helm list -n "$keda_namespace"
