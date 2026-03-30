@@ -70,6 +70,12 @@ Ubuntu で、以下を実行できる状態にするためのセットアップ�
 
 ## 手順
 
+前段のツール導入は、まとめて [`scripts/init/maintvm/setup.sh`](/Users/hiroki.ueda/Dev/3pull/scripts/init/maintvm/setup.sh) でも実行できる。
+
+```bash
+./scripts/init/maintvm/setup.sh
+```
+
 ### 1. APT 用の前提パッケージを入れる
 
 APT 外部リポジトリを追加する前に、鍵管理と HTTPS 通信に必要なパッケージだけ先に入れる。
