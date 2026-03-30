@@ -19,9 +19,9 @@
     - 接続先 DB 名 / SQL Server FQDN を対話入力で受け取ります。
   - `--local` なし:
     - `param.conf` を読み込みます。
-    - `SQL_ADMIN_LOGIN` を使って SQL 認証で接続し、パスワードは対話入力で受け取ります。
+    - `az login` 中の Entra principal で接続します。
     - API / worker / schedulers / migration 用 Managed Identity principal を Azure SQL Database ユーザーとして作成し、設計済みの schema 権限を付与します。
-  - `--local` は `az account get-access-token` + `pyodbc`、通常モードは SQL 認証 + `pyodbc` を使います。
+  - `--local` / 通常モードともに `az account get-access-token` + `pyodbc` を使います。
 - `param.conf`
   - `infra/main.sh` が動的生成する設定ファイルです。
   - SQL Server FQDN、データベース名、SQL admin login、Managed Identity 名を保持します。
@@ -47,6 +47,6 @@ bootstrap 用（maint-vm など、generated `param.conf` を利用）:
 - 既存 DB を `dbo` 前提 migration で一度作成済みの場合は、テーブルと `alembic_version` をいったんリセットしてから新しい initial migration を適用してください。
 - `deploy.sh --local` は `az ad signed-in-user show --query userPrincipalName -o tsv` を優先し、取得できない場合のみ `az account show --query user.name -o tsv` をフォールバックとして使います。
 - `deploy.sh` は `uv --directory apps/backend run python` を優先して使います。事前に `apps/backend` の依存が入っていることを前提にしています。
-- 通常モードでは、`param.conf` の `SQL_ADMIN_LOGIN` で接続し、SQL admin password を対話入力します。
+- 通常モードでは、`az login` 済みであり、その principal が対象 Azure SQL Server の Entra administrator であるか、同等の権限を持つ必要があります。
 - `--local` を実行する principal は、対象 Azure SQL Database 上で `CREATE USER` と権限付与を行える権限を持っている必要があります。
 - `param.conf` は `infra/main.sh` 実行時に `scripts/init/sql/param.conf` へ上書き生成されます。

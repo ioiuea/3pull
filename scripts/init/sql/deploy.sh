@@ -8,7 +8,6 @@ PARAM_CONF_PATH="${SCRIPT_DIR}/param.conf"
 SQL_SERVER_FQDN="${SQL_SERVER_FQDN:-}"
 SQL_DATABASE_NAME="${SQL_DATABASE_NAME:-}"
 SQL_ADMIN_LOGIN="${SQL_ADMIN_LOGIN:-}"
-SQL_ADMIN_PASSWORD="${SQL_ADMIN_PASSWORD:-}"
 LOCAL_MODE="false"
 
 usage() {
@@ -23,7 +22,7 @@ Options:
 
 Behavior:
   デフォルト実行:
-      scripts/init/sql/param.conf を読み込み、SQL 管理者ログイン + 対話入力したパスワードで接続して
+      scripts/init/sql/param.conf を読み込み、az login 中の Entra principal で接続して
       Managed Identity principal を作成して権限を付与する
   --local:
       対話入力した接続先に対して、az login 中の個人 principal を作成して権限を付与する
@@ -105,24 +104,6 @@ load_param_conf() {
     : "${SQL_MIGRATION_MI_NAME:?SQL_MIGRATION_MI_NAME is required in param.conf}"
 }
 
-prompt_sql_admin_password() {
-    local input
-
-    if [[ -n "${SQL_ADMIN_PASSWORD}" ]]; then
-        return 0
-    fi
-
-    read -r -s -p "SQL admin password for ${SQL_ADMIN_LOGIN}: " input
-    echo
-
-    if [[ -z "${input}" ]]; then
-        echo "SQL admin password is required." >&2
-        exit 1
-    fi
-
-    SQL_ADMIN_PASSWORD="${input}"
-}
-
 resolve_python_runner() {
     if command -v uv >/dev/null 2>&1 && [[ -f "${BACKEND_DIR}/pyproject.toml" ]]; then
         printf 'uv --directory %q run python' "${BACKEND_DIR}"
@@ -202,60 +183,6 @@ with pyodbc.connect(
     attrs_before={SQL_COPT_SS_ACCESS_TOKEN: create_access_token_struct(access_token)},
     autocommit=True,
 ) as connection:
-    cursor = connection.cursor()
-    for batch in batches:
-        cursor.execute(batch)
-PY
-}
-
-run_sql_file_with_sql_auth() {
-    local file_path="$1"
-    local python_runner
-    python_runner="$(resolve_python_runner)"
-
-    SQL_SERVER_FQDN="${SQL_SERVER_FQDN}" \
-    SQL_DATABASE_NAME="${SQL_DATABASE_NAME}" \
-    SQL_FILE_PATH="${file_path}" \
-    SQL_ADMIN_LOGIN="${SQL_ADMIN_LOGIN}" \
-    SQL_ADMIN_PASSWORD="${SQL_ADMIN_PASSWORD}" \
-    eval "${python_runner}" - <<'PY'
-import os
-import re
-
-try:
-    import pyodbc
-except ModuleNotFoundError as exc:
-    raise SystemExit(
-        "pyodbc is required to run deploy.sh. "
-        "Use `uv --directory apps/backend sync` or install pyodbc in python3."
-    ) from exc
-
-
-def split_batches(sql_text: str) -> list[str]:
-    parts = re.split(r"(?im)^\s*GO\s*?$", sql_text)
-    return [part.strip() for part in parts if part.strip()]
-
-
-server = os.environ["SQL_SERVER_FQDN"]
-database = os.environ["SQL_DATABASE_NAME"]
-sql_file_path = os.environ["SQL_FILE_PATH"]
-admin_login = os.environ["SQL_ADMIN_LOGIN"]
-admin_password = os.environ["SQL_ADMIN_PASSWORD"]
-
-connection_string = (
-    "Driver={ODBC Driver 18 for SQL Server};"
-    f"Server=tcp:{server},1433;"
-    f"Database={database};"
-    f"UID={admin_login};"
-    f"PWD={admin_password};"
-    "Encrypt=yes;"
-    "TrustServerCertificate=no;"
-)
-
-with open(sql_file_path, "r", encoding="utf-8") as fp:
-    batches = split_batches(fp.read())
-
-with pyodbc.connect(connection_string, autocommit=True) as connection:
     cursor = connection.cursor()
     for batch in batches:
         cursor.execute(batch)
@@ -400,8 +327,9 @@ main() {
         esac
     done
 
+    require_command az
+
     if [[ "${LOCAL_MODE}" == "true" ]]; then
-        require_command az
         prompt_local_overrides
     else
         load_param_conf
@@ -420,9 +348,13 @@ main() {
         echo "Creating / granting Azure SQL user for local Entra principal: ${principal_name}"
         write_local_principal_sql "${temp_sql}" "${principal_name}"
     else
-        prompt_sql_admin_password
+        local principal_name
+        principal_name="$(resolve_current_principal)"
         echo "Applying schema bootstrap and managed identity grants to ${SQL_SERVER_FQDN}/${SQL_DATABASE_NAME}"
-        echo "Connecting with SQL admin login: ${SQL_ADMIN_LOGIN}"
+        echo "Connecting with Entra principal from az login: ${principal_name}"
+        if [[ -n "${SQL_ADMIN_LOGIN}" ]]; then
+            echo "SQL admin login ${SQL_ADMIN_LOGIN} is retained for bootstrap / emergency use, but not used for CREATE USER FROM EXTERNAL PROVIDER"
+        fi
         echo "Creating / granting Azure SQL users for Managed Identities:"
         echo "  - ${SQL_API_MI_NAME}"
         echo "  - ${SQL_WORKER_MI_NAME}"
@@ -462,13 +394,9 @@ main() {
             "true"
     fi
 
-    if [[ "${LOCAL_MODE}" == "true" ]]; then
-        local access_token
-        access_token="$(resolve_sql_access_token)"
-        run_sql_file_with_token "${temp_sql}" "${access_token}"
-    else
-        run_sql_file_with_sql_auth "${temp_sql}"
-    fi
+    local access_token
+    access_token="$(resolve_sql_access_token)"
+    run_sql_file_with_token "${temp_sql}" "${access_token}"
 
     echo "Completed."
 }
