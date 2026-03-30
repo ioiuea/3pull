@@ -228,6 +228,128 @@ with pyodbc.connect(
 PY
 }
 
+run_verification_queries_with_token() {
+    local access_token="$1"
+    local python_runner
+    python_runner="$(resolve_python_runner)"
+
+    SQL_SERVER_FQDN="${SQL_SERVER_FQDN}" \
+    SQL_DATABASE_NAME="${SQL_DATABASE_NAME}" \
+    AZURE_SQL_ACCESS_TOKEN="${access_token}" \
+    SQL_API_MI_NAME="${SQL_API_MI_NAME:-}" \
+    SQL_WORKER_MI_NAME="${SQL_WORKER_MI_NAME:-}" \
+    SQL_SCHEDULERS_MI_NAME="${SQL_SCHEDULERS_MI_NAME:-}" \
+    SQL_MIGRATION_MI_NAME="${SQL_MIGRATION_MI_NAME:-}" \
+    eval "${python_runner}" - <<'PY'
+import os
+import struct
+
+try:
+    import pyodbc
+except ModuleNotFoundError as exc:
+    raise SystemExit(
+        "pyodbc is required to verify deploy.sh results. "
+        "Use `uv --directory apps/backend sync` or install pyodbc in python3."
+    ) from exc
+
+SQL_COPT_SS_ACCESS_TOKEN = 1256
+
+
+def create_access_token_struct(token: str) -> bytes:
+    token_bytes = token.encode("utf-16-le")
+    return struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
+
+
+def print_result(title: str, rows: list[tuple[object, ...]]) -> None:
+    print(title)
+    if not rows:
+        print("(no rows)")
+        print()
+        return
+
+    for row in rows:
+        print(" | ".join("" if value is None else str(value) for value in row))
+    print()
+
+
+server = os.environ["SQL_SERVER_FQDN"]
+database = os.environ["SQL_DATABASE_NAME"]
+access_token = os.environ["AZURE_SQL_ACCESS_TOKEN"]
+managed_identity_names = [
+    os.environ.get("SQL_API_MI_NAME", ""),
+    os.environ.get("SQL_WORKER_MI_NAME", ""),
+    os.environ.get("SQL_SCHEDULERS_MI_NAME", ""),
+    os.environ.get("SQL_MIGRATION_MI_NAME", ""),
+]
+managed_identity_names = [name for name in managed_identity_names if name]
+
+connection_string = (
+    "Driver={ODBC Driver 18 for SQL Server};"
+    f"Server=tcp:{server},1433;"
+    f"Database={database};"
+    "Encrypt=yes;"
+    "TrustServerCertificate=no;"
+)
+
+schema_query = """
+SELECT s.name
+FROM sys.schemas AS s
+WHERE s.name IN (N'auth', N'audit', N'core')
+ORDER BY s.name;
+"""
+
+principal_query = """
+SELECT dp.name, dp.type_desc, dp.authentication_type_desc
+FROM sys.database_principals AS dp
+WHERE dp.name IN ({placeholders})
+ORDER BY dp.name;
+"""
+
+role_query = """
+SELECT roles.name AS role_name, members.name AS member_name
+FROM sys.database_role_members AS drm
+INNER JOIN sys.database_principals AS roles
+    ON roles.principal_id = drm.role_principal_id
+INNER JOIN sys.database_principals AS members
+    ON members.principal_id = drm.member_principal_id
+WHERE members.name IN ({placeholders})
+ORDER BY roles.name, members.name;
+"""
+
+permission_query = """
+SELECT dp.name, perm.permission_name, perm.state_desc, OBJECT_SCHEMA_NAME(perm.major_id) AS schema_name
+FROM sys.database_permissions AS perm
+INNER JOIN sys.database_principals AS dp
+    ON dp.principal_id = perm.grantee_principal_id
+WHERE perm.class_desc = 'SCHEMA'
+  AND dp.name IN ({placeholders})
+ORDER BY dp.name, schema_name, perm.permission_name;
+"""
+
+with pyodbc.connect(
+    connection_string,
+    attrs_before={SQL_COPT_SS_ACCESS_TOKEN: create_access_token_struct(access_token)},
+    autocommit=True,
+) as connection:
+    cursor = connection.cursor()
+
+    cursor.execute(schema_query)
+    print_result("==> Verification: schemas", cursor.fetchall())
+
+    if managed_identity_names:
+        placeholders = ", ".join("?" for _ in managed_identity_names)
+
+        cursor.execute(principal_query.format(placeholders=placeholders), managed_identity_names)
+        print_result("==> Verification: principals", cursor.fetchall())
+
+        cursor.execute(role_query.format(placeholders=placeholders), managed_identity_names)
+        print_result("==> Verification: role memberships", cursor.fetchall())
+
+        cursor.execute(permission_query.format(placeholders=placeholders), managed_identity_names)
+        print_result("==> Verification: schema permissions", cursor.fetchall())
+PY
+}
+
 write_schema_bootstrap_sql() {
     local target_file="$1"
 
@@ -435,6 +557,7 @@ main() {
     local access_token
     access_token="$(resolve_sql_access_token)"
     run_sql_file_with_token "${temp_sql}" "${access_token}"
+    run_verification_queries_with_token "${access_token}"
 
     echo "Completed."
 }
