@@ -253,7 +253,7 @@ helm upgrade --install agic-standard oci://mcr.microsoft.com/azure-application-g
   --namespace "$agic_namespace" \\
   --create-namespace \\
   --set-string appgw.applicationGatewayID="$standard_application_gateway_id_for_init" \\
-  --set 'kubernetes.nodeSelector.kubernetes.azure.com/mode=system' \\
+  --set 'kubernetes.nodeSelector.kubernetes\.azure\.com/mode=system' \\
   --set-string kubernetes.ingressClass="azure-application-gateway" \\
   --set-string serviceAccount.name="$agic_standard_service_account_name" \\
   --set serviceAccount.create=true \\
@@ -268,7 +268,7 @@ helm upgrade --install agic-lowlatency oci://mcr.microsoft.com/azure-application
   --namespace "$agic_namespace" \\
   --create-namespace \\
   --set-string appgw.applicationGatewayID="$low_latency_application_gateway_id_for_init" \\
-  --set 'kubernetes.nodeSelector.kubernetes.azure.com/mode=system' \\
+  --set 'kubernetes.nodeSelector.kubernetes\.azure\.com/mode=system' \\
   --set-string kubernetes.ingressClass="azure-application-gateway-low-latency" \\
   --set-string serviceAccount.name="$agic_low_latency_service_account_name" \\
   --set serviceAccount.create=true \\
@@ -323,7 +323,7 @@ helm repo update >/dev/null
 helm upgrade --install keda kedacore/keda \\
   --namespace "$keda_namespace" \\
   --create-namespace \\
-  --set 'nodeSelector.kubernetes.azure.com/mode=system' \\
+  --set 'nodeSelector.kubernetes\.azure\.com/mode=system' \\
   --set serviceAccount.operator.create=true \\
   --set-string serviceAccount.operator.name="$keda_operator_service_account_name" \\
   --set-string serviceAccount.operator.annotations.azure\\.workload\\.identity/client-id="$keda_operator_client_id_for_init" \\
