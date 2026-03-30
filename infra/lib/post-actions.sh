@@ -237,6 +237,12 @@ PY
 #!/usr/bin/env bash
 set -euo pipefail
 
+print_and_run() {
+  echo "\$ \$*"
+  "\$@"
+  echo
+}
+
 az aks get-credentials \\
   --resource-group "$aks_resource_group_name" \\
   --name "$aks_name_for_post" \\
@@ -247,7 +253,7 @@ helm upgrade --install agic-standard oci://mcr.microsoft.com/azure-application-g
   --namespace "$agic_namespace" \\
   --create-namespace \\
   --set-string appgw.applicationGatewayID="$standard_application_gateway_id_for_init" \\
-  --set-string nodeSelector.kubernetes\\.azure\\.com/mode="system" \\
+  --set 'kubernetes.nodeSelector.kubernetes.azure.com/mode=system' \\
   --set-string kubernetes.ingressClass="azure-application-gateway" \\
   --set-string serviceAccount.name="$agic_standard_service_account_name" \\
   --set serviceAccount.create=true \\
@@ -262,7 +268,7 @@ helm upgrade --install agic-lowlatency oci://mcr.microsoft.com/azure-application
   --namespace "$agic_namespace" \\
   --create-namespace \\
   --set-string appgw.applicationGatewayID="$low_latency_application_gateway_id_for_init" \\
-  --set-string nodeSelector.kubernetes\\.azure\\.com/mode="system" \\
+  --set 'kubernetes.nodeSelector.kubernetes.azure.com/mode=system' \\
   --set-string kubernetes.ingressClass="azure-application-gateway-low-latency" \\
   --set-string serviceAccount.name="$agic_low_latency_service_account_name" \\
   --set serviceAccount.create=true \\
@@ -276,6 +282,11 @@ EOF_INNER
 echo "==> Skip AGIC Helm release: agic-lowlatency (required resources not found)"
 EOF_INNER
         fi
+        cat >>"$agic_controller_init_script" <<EOF_INNER
+print_and_run helm list -n "$agic_namespace"
+print_and_run kubectl get pods -n "$agic_namespace" -o wide
+print_and_run kubectl get deployment -n "$agic_namespace"
+EOF_INNER
         chmod +x "$agic_controller_init_script"
         echo "==> Generate init script: $agic_controller_init_script"
       else
@@ -295,6 +306,12 @@ EOF_INNER
 #!/usr/bin/env bash
 set -euo pipefail
 
+print_and_run() {
+  echo "\$ \$*"
+  "\$@"
+  echo
+}
+
 az aks get-credentials \\
   --resource-group "$aks_resource_group_name" \\
   --name "$aks_name_for_post" \\
@@ -306,12 +323,15 @@ helm repo update >/dev/null
 helm upgrade --install keda kedacore/keda \\
   --namespace "$keda_namespace" \\
   --create-namespace \\
-  --set-string nodeSelector.kubernetes\\.azure\\.com/mode="system" \\
+  --set 'nodeSelector.kubernetes.azure.com/mode=system' \\
   --set serviceAccount.operator.create=true \\
   --set-string serviceAccount.operator.name="$keda_operator_service_account_name" \\
   --set-string serviceAccount.operator.annotations.azure\\.workload\\.identity/client-id="$keda_operator_client_id_for_init" \\
   --set podIdentity.azureWorkload.enabled=true \\
   --set-string podIdentity.azureWorkload.clientId="$keda_operator_client_id_for_init"
+print_and_run helm list -n "$keda_namespace"
+print_and_run kubectl get pods -n "$keda_namespace" -o wide
+print_and_run kubectl get deployment -n "$keda_namespace"
 EOF_INNER
         chmod +x "$keda_controller_init_script"
         echo "==> Generate init script: $keda_controller_init_script"
