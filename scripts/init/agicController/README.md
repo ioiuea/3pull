@@ -21,3 +21,5 @@ Kubernetes 側で Ingress を更新すると、AGIC が Application Gateway の�
 
 - `deploy.sh` は `infra/main.sh` 再実行時に上書きされます。
 - 手動編集は推奨しません。変更が必要な場合は `infra/main.sh` 側を修正してください。
+- AGIC は chart 実装上の ServiceAccount 名として `agic-standard-sa-ingress-azure` / `agic-lowlatency-sa-ingress-azure` を使う前提です。federated credential 側も同じ subject に揃える必要があります。
+- `kubectl logs -n ingress deploy/agic-standard-ingress-azure` などで `AADSTS700213` が出る場合は、Managed Identity 側 federated credential の subject と実際の ServiceAccount 名が不一致です。

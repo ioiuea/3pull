@@ -74,7 +74,7 @@ maint-vm には以下 4 つの User Assigned Managed Identity を割り当て、
 ## ServiceAccount / Federated Credential との対応
 
 - アプリ SA（`sa-[env]-[system]-api|worker|schedulers`）は backend Helm で作成
-- AGIC/KEDA SA（`sa-agic-standard`, `sa-agic-lowlatency`, `keda-operator`）は `infra/main.sh` の Helm で作成
+- AGIC/KEDA SA（`agic-standard-sa-ingress-azure`, `agic-lowlatency-sa-ingress-azure`, `keda-operator`）は `infra/main.sh` の Helm で作成
 - federated credential は `infra/bicep/main.federated-credential.bicep` で一括作成
 
 補足:

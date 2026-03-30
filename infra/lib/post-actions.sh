@@ -259,6 +259,7 @@ helm upgrade --install agic-standard oci://mcr.microsoft.com/azure-application-g
   --set-string kubernetes.ingressClassResource.name="azure-application-gateway" \\
   --set kubernetes.ingressClassResource.default=false \\
   --set-string kubernetes.ingressClassResource.controllerValue="azure/application-gateway" \\
+  --set rbac.enabled=true \\
   --set-string serviceAccount.name="$agic_standard_service_account_name" \\
   --set serviceAccount.create=true \\
   --set-string serviceAccount.annotations.azure\\.workload\\.identity/client-id="$agic_standard_client_id_for_init" \\
@@ -278,6 +279,7 @@ helm upgrade --install agic-lowlatency oci://mcr.microsoft.com/azure-application
   --set-string kubernetes.ingressClassResource.name="azure-application-gateway-low-latency" \\
   --set kubernetes.ingressClassResource.default=false \\
   --set-string kubernetes.ingressClassResource.controllerValue="azure/application-gateway" \\
+  --set rbac.enabled=true \\
   --set-string serviceAccount.name="$agic_low_latency_service_account_name" \\
   --set serviceAccount.create=true \\
   --set-string serviceAccount.annotations.azure\\.workload\\.identity/client-id="$agic_low_latency_client_id_for_init" \\

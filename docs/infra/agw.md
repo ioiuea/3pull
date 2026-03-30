@@ -44,8 +44,8 @@ AKS addon AGIC は使わず、`infra/main.sh` で Helm リリースを導入し�
 
 | AGIC リリース | ingressClass | 制御対象 AppGW | SA |
 | --- | --- | --- | --- |
-| `agic-standard` | `azure-application-gateway` | 通常系 AppGW | `sa-agic-standard` |
-| `agic-lowlatency` | `azure-application-gateway-low-latency` | 低遅延系 AppGW | `sa-agic-lowlatency` |
+| `agic-standard` | `azure-application-gateway` | 通常系 AppGW | `agic-standard-sa-ingress-azure` |
+| `agic-lowlatency` | `azure-application-gateway-low-latency` | 低遅延系 AppGW | `agic-lowlatency-sa-ingress-azure` |
 
 ## RBAC（App Gateway 更新権限）
 
