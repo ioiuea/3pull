@@ -71,6 +71,12 @@ runtime では API / worker / schedulers を別 principal として扱い、migr
 Azure SQL Server には Microsoft Entra admin を設定する。  
 加えて、サーバー作成時に bootstrap / 緊急時用の SQL 管理者ログインを設定し、平常時のアプリ接続では利用しない。
 
+bootstrap を migration 用 Managed Identity で開始する場合、その principal 自体が Azure SQL へ Entra ログインできる必要がある。  
+そのため、migration 用 Managed Identity は Azure SQL Server の Microsoft Entra administrator とするか、administrator group に所属させる。
+
+runtime principal の DB user 作成は、`CREATE USER ... FROM EXTERNAL PROVIDER` による Graph 解決ではなく、Managed Identity の object ID を `SID` として指定する without-validation 方式を基本とする。  
+これにより、Azure SQL Server の server identity に Microsoft Graph 参照権限を追加しなくても bootstrap を進められるようにする。
+
 ## 権限設計
 
 ### principal 構成

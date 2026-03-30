@@ -360,6 +360,11 @@ run_param_generator() {
 generate_sql_init_param_conf() {
   local environment_name
   local system_name
+  local managed_ids_log_file
+  local api_mi_object_id
+  local worker_mi_object_id
+  local schedulers_mi_object_id
+  local migration_mi_object_id
 
   read -r environment_name system_name < <(
     COMMON_FILE="$common_file" python - <<'PY'
@@ -376,6 +381,45 @@ PY
   require_non_empty "common.environmentName" "$environment_name" "infra/common.parameter.json を確認してください。"
   require_non_empty "common.systemName" "$system_name" "infra/common.parameter.json を確認してください。"
 
+  managed_ids_log_file="$logs_dir/${timestamp}-managed-ids.log"
+  if [[ ! -f "$managed_ids_log_file" ]]; then
+    echo "managed-ids deployment log not found: $managed_ids_log_file" >&2
+    echo "managed-ids を deploy した実行ログから SQL init param.conf を生成する前提です。" >&2
+    exit 1
+  fi
+
+  read -r api_mi_object_id worker_mi_object_id schedulers_mi_object_id migration_mi_object_id < <(
+    MANAGED_IDS_LOG_FILE="$managed_ids_log_file" python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+log_file = Path(os.environ["MANAGED_IDS_LOG_FILE"])
+data = json.loads(log_file.read_text(encoding="utf-8"))
+outputs = data.get("properties", {}).get("outputs", {})
+
+keys = [
+    "apiManagedIdentityPrincipalId",
+    "workerManagedIdentityPrincipalId",
+    "schedulersManagedIdentityPrincipalId",
+    "migrationManagedIdentityPrincipalId",
+]
+values = []
+for key in keys:
+    value = str(outputs.get(key, {}).get("value", "")).strip()
+    if not value:
+        raise SystemExit(f"required output '{key}' not found in {log_file}")
+    values.append(value)
+
+print(*values)
+PY
+  )
+
+  require_non_empty "apiManagedIdentityPrincipalId" "$api_mi_object_id" "infra/logs の managed-ids.log を確認してください。"
+  require_non_empty "workerManagedIdentityPrincipalId" "$worker_mi_object_id" "infra/logs の managed-ids.log を確認してください。"
+  require_non_empty "schedulersManagedIdentityPrincipalId" "$schedulers_mi_object_id" "infra/logs の managed-ids.log を確認してください。"
+  require_non_empty "migrationManagedIdentityPrincipalId" "$migration_mi_object_id" "infra/logs の managed-ids.log を確認してください。"
+
   mkdir -p "$sql_init_dir"
 
   cat >"$sql_init_param_conf_file" <<EOF
@@ -384,9 +428,13 @@ SQL_SERVER_FQDN='sql-${environment_name}-${system_name}.database.windows.net'
 SQL_DATABASE_NAME='sqldb-${environment_name}-${system_name}'
 SQL_ADMIN_LOGIN='${SQL_ADMIN_LOGIN}'
 SQL_API_MI_NAME='mi-${environment_name}-${system_name}-api'
+SQL_API_MI_OBJECT_ID='${api_mi_object_id}'
 SQL_WORKER_MI_NAME='mi-${environment_name}-${system_name}-worker'
+SQL_WORKER_MI_OBJECT_ID='${worker_mi_object_id}'
 SQL_SCHEDULERS_MI_NAME='mi-${environment_name}-${system_name}-schedulers'
+SQL_SCHEDULERS_MI_OBJECT_ID='${schedulers_mi_object_id}'
 SQL_MIGRATION_MI_NAME='mi-${environment_name}-${system_name}-migration'
+SQL_MIGRATION_MI_OBJECT_ID='${migration_mi_object_id}'
 EOF
 
   chmod 600 "$sql_init_param_conf_file"

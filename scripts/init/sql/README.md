@@ -20,24 +20,36 @@
   - `--local` なし:
     - `param.conf` を読み込みます。
     - `az login` 中の Entra principal で接続します。
-    - API / worker / schedulers / migration 用 Managed Identity principal を Azure SQL Database ユーザーとして作成し、設計済みの schema 権限を付与します。
+    - `param.conf` に入った Managed Identity の object ID を `SID` として使い、Graph 検証なしで Azure SQL Database ユーザーを作成します。
+    - API / worker / schedulers / migration 用 Managed Identity principal へ設計済みの schema 権限を付与します。
   - `--local` / 通常モードともに `az account get-access-token` + `pyodbc` を使います。
 - `param.conf`
   - `infra/main.sh` が動的生成する設定ファイルです。
-  - SQL Server FQDN、データベース名、SQL admin login、Managed Identity 名を保持します。
+  - SQL Server FQDN、データベース名、SQL admin login、Managed Identity 名、Managed Identity の object ID を保持します。
   - Git 管理対象外です。
+
+前提:
+
+- `az` がインストール済みであること
+- 実行前に `az login` 済みであること
+- maint-vm では、通常モード実行前に migration 用 Managed Identity で `az login --identity --client-id <MIGRATION_MI_CLIENT_ID>` を済ませておくこと
+- 通常モードの初回 bootstrap では、その migration 用 Managed Identity が Azure SQL Server の Microsoft Entra administrator であるか、その administrator group のメンバーとして Azure SQL へログイン可能であること
+- `apps/backend` の依存導入が完了し、`pyodbc` を import できること
 
 実行例:
 
 bootstrap 用（maint-vm など、generated `param.conf` を利用）:
 
 ```bash
+export AZURE_CLIENT_ID="<MIGRATION_MI_CLIENT_ID>"
+az login --identity --client-id "$AZURE_CLIENT_ID"
 ./scripts/init/sql/deploy.sh
 ```
 
 ローカル向けに対話で DB 名を入れたい場合:
 
 ```bash
+az login
 ./scripts/init/sql/deploy.sh --local
 ```
 
@@ -48,5 +60,7 @@ bootstrap 用（maint-vm など、generated `param.conf` を利用）:
 - `deploy.sh --local` は `az ad signed-in-user show --query userPrincipalName -o tsv` を優先し、取得できない場合のみ `az account show --query user.name -o tsv` をフォールバックとして使います。
 - `deploy.sh` は `uv --directory apps/backend run python` を優先して使います。事前に `apps/backend` の依存が入っていることを前提にしています。
 - 通常モードでは、`az login` 済みであり、その principal が対象 Azure SQL Server の Entra administrator であるか、同等の権限を持つ必要があります。
+- 通常モードの Managed Identity user 作成は `CREATE USER ... WITH SID = <object-id>, TYPE = E` を使うため、SQL Server 側の Microsoft Graph 参照権限は不要です。
+- `Login failed for user '<token-identified principal>' (18456)` の場合は、取得したトークン自体ではなく、その principal が Azure SQL へログインできていないことを意味します。migration 用 Managed Identity を Microsoft Entra administrator に設定するか、administrator group に含めてください。
 - `--local` を実行する principal は、対象 Azure SQL Database 上で `CREATE USER` と権限付与を行える権限を持っている必要があります。
 - `param.conf` は `infra/main.sh` 実行時に `scripts/init/sql/param.conf` へ上書き生成されます。

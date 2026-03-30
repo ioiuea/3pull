@@ -8,6 +8,10 @@ PARAM_CONF_PATH="${SCRIPT_DIR}/param.conf"
 SQL_SERVER_FQDN="${SQL_SERVER_FQDN:-}"
 SQL_DATABASE_NAME="${SQL_DATABASE_NAME:-}"
 SQL_ADMIN_LOGIN="${SQL_ADMIN_LOGIN:-}"
+SQL_API_MI_OBJECT_ID="${SQL_API_MI_OBJECT_ID:-}"
+SQL_WORKER_MI_OBJECT_ID="${SQL_WORKER_MI_OBJECT_ID:-}"
+SQL_SCHEDULERS_MI_OBJECT_ID="${SQL_SCHEDULERS_MI_OBJECT_ID:-}"
+SQL_MIGRATION_MI_OBJECT_ID="${SQL_MIGRATION_MI_OBJECT_ID:-}"
 LOCAL_MODE="false"
 
 usage() {
@@ -48,6 +52,37 @@ escape_sql_identifier() {
 escape_sql_nstring() {
     local value="$1"
     printf '%s' "${value//\'/\'\'}"
+}
+
+write_create_external_user_without_validation_sql() {
+    local target_file="$1"
+    local principal_name="$2"
+    local principal_object_id="$3"
+    local principal_identifier
+    local principal_literal
+    local object_id_literal
+
+    principal_identifier="$(escape_sql_identifier "${principal_name}")"
+    principal_literal="$(escape_sql_nstring "${principal_name}")"
+    object_id_literal="$(escape_sql_nstring "${principal_object_id}")"
+
+    cat >>"${target_file}" <<EOF
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.database_principals
+    WHERE name = N'${principal_literal}'
+)
+BEGIN
+    DECLARE @principal_object_id UNIQUEIDENTIFIER = '${object_id_literal}';
+    DECLARE @principal_sid VARBINARY(16) = CONVERT(VARBINARY(16), @principal_object_id);
+    DECLARE @create_user_sql NVARCHAR(MAX) =
+        N'CREATE USER [${principal_identifier}] WITH SID = ' +
+        CONVERT(NVARCHAR(34), @principal_sid, 1) +
+        N', TYPE = E';
+    EXEC(@create_user_sql);
+END;
+GO
+EOF
 }
 
 resolve_current_principal() {
@@ -99,9 +134,13 @@ load_param_conf() {
     : "${SQL_DATABASE_NAME:?SQL_DATABASE_NAME is required in param.conf}"
     : "${SQL_ADMIN_LOGIN:?SQL_ADMIN_LOGIN is required in param.conf}"
     : "${SQL_API_MI_NAME:?SQL_API_MI_NAME is required in param.conf}"
+    : "${SQL_API_MI_OBJECT_ID:?SQL_API_MI_OBJECT_ID is required in param.conf}"
     : "${SQL_WORKER_MI_NAME:?SQL_WORKER_MI_NAME is required in param.conf}"
+    : "${SQL_WORKER_MI_OBJECT_ID:?SQL_WORKER_MI_OBJECT_ID is required in param.conf}"
     : "${SQL_SCHEDULERS_MI_NAME:?SQL_SCHEDULERS_MI_NAME is required in param.conf}"
+    : "${SQL_SCHEDULERS_MI_OBJECT_ID:?SQL_SCHEDULERS_MI_OBJECT_ID is required in param.conf}"
     : "${SQL_MIGRATION_MI_NAME:?SQL_MIGRATION_MI_NAME is required in param.conf}"
+    : "${SQL_MIGRATION_MI_OBJECT_ID:?SQL_MIGRATION_MI_OBJECT_ID is required in param.conf}"
 }
 
 resolve_python_runner() {
@@ -261,26 +300,21 @@ EOF
 write_managed_identity_principal_sql() {
     local target_file="$1"
     local principal_name="$2"
-    local auth_permissions="$3"
-    local audit_permissions="$4"
-    local core_permissions="$5"
-    local enable_ddladmin="$6"
+    local principal_object_id="$3"
+    local auth_permissions="$4"
+    local audit_permissions="$5"
+    local core_permissions="$6"
+    local enable_ddladmin="$7"
     local principal_identifier
-    local principal_literal
 
     principal_identifier="$(escape_sql_identifier "${principal_name}")"
-    principal_literal="$(escape_sql_nstring "${principal_name}")"
+
+    write_create_external_user_without_validation_sql \
+        "${target_file}" \
+        "${principal_name}" \
+        "${principal_object_id}"
 
     cat >>"${target_file}" <<EOF
-IF NOT EXISTS (
-    SELECT 1
-    FROM sys.database_principals
-    WHERE name = N'${principal_literal}'
-)
-BEGIN
-    EXEC(N'CREATE USER [${principal_identifier}] FROM EXTERNAL PROVIDER');
-END;
-GO
 
 GRANT CONNECT TO [${principal_identifier}];
 GO
@@ -353,7 +387,7 @@ main() {
         echo "Applying schema bootstrap and managed identity grants to ${SQL_SERVER_FQDN}/${SQL_DATABASE_NAME}"
         echo "Connecting with Entra principal from az login: ${principal_name}"
         if [[ -n "${SQL_ADMIN_LOGIN}" ]]; then
-            echo "SQL admin login ${SQL_ADMIN_LOGIN} is retained for bootstrap / emergency use, but not used for CREATE USER FROM EXTERNAL PROVIDER"
+            echo "SQL admin login ${SQL_ADMIN_LOGIN} is retained for bootstrap / emergency use, but not used for managed identity user creation"
         fi
         echo "Creating / granting Azure SQL users for Managed Identities:"
         echo "  - ${SQL_API_MI_NAME}"
@@ -364,6 +398,7 @@ main() {
         write_managed_identity_principal_sql \
             "${temp_sql}" \
             "${SQL_API_MI_NAME}" \
+            "${SQL_API_MI_OBJECT_ID}" \
             "SELECT, INSERT, UPDATE, DELETE" \
             "SELECT, INSERT" \
             "SELECT, INSERT, UPDATE, DELETE" \
@@ -372,6 +407,7 @@ main() {
         write_managed_identity_principal_sql \
             "${temp_sql}" \
             "${SQL_WORKER_MI_NAME}" \
+            "${SQL_WORKER_MI_OBJECT_ID}" \
             "SELECT, INSERT, UPDATE" \
             "SELECT, INSERT" \
             "SELECT, INSERT, UPDATE, DELETE" \
@@ -380,6 +416,7 @@ main() {
         write_managed_identity_principal_sql \
             "${temp_sql}" \
             "${SQL_SCHEDULERS_MI_NAME}" \
+            "${SQL_SCHEDULERS_MI_OBJECT_ID}" \
             "SELECT, UPDATE, DELETE" \
             "SELECT, DELETE" \
             "SELECT, UPDATE, DELETE" \
@@ -388,6 +425,7 @@ main() {
         write_managed_identity_principal_sql \
             "${temp_sql}" \
             "${SQL_MIGRATION_MI_NAME}" \
+            "${SQL_MIGRATION_MI_OBJECT_ID}" \
             "ALTER, CONTROL, DELETE, EXECUTE, INSERT, REFERENCES, SELECT, UPDATE" \
             "ALTER, CONTROL, DELETE, EXECUTE, INSERT, REFERENCES, SELECT, UPDATE" \
             "ALTER, CONTROL, DELETE, EXECUTE, INSERT, REFERENCES, SELECT, UPDATE" \

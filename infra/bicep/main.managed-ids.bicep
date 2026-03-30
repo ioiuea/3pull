@@ -84,9 +84,13 @@ resource agicLowLatencyManagedIdentity 'Microsoft.ManagedIdentity/userAssignedId
 }
 
 output apiManagedIdentityName string = apiManagedIdentity.name
+output apiManagedIdentityPrincipalId string = apiManagedIdentity.properties.principalId
 output workerManagedIdentityName string = workerManagedIdentity.name
+output workerManagedIdentityPrincipalId string = workerManagedIdentity.properties.principalId
 output schedulersManagedIdentityName string = schedulersManagedIdentity.name
+output schedulersManagedIdentityPrincipalId string = schedulersManagedIdentity.properties.principalId
 output migrationManagedIdentityName string = migrationManagedIdentity.name
+output migrationManagedIdentityPrincipalId string = migrationManagedIdentity.properties.principalId
 output redisOpsManagedIdentityName string = redisOpsManagedIdentity.name
 output aksOperatorManagedIdentityName string = aksOperatorManagedIdentity.name
 output aksAdminManagedIdentityName string = aksAdminManagedIdentity.name
