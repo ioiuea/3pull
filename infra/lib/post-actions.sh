@@ -379,7 +379,7 @@ EOF_INNER
 
       acr_name_for_init="$(meta_get "$acr_meta_file" "acrName")"
       if [[ -n "$acr_name_for_init" && "$(meta_bool "$acr_meta_file" "deploy" "false")" == "true" ]]; then
-        system_image_name_for_init="$(printf '%s' "$system_name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9-]+/-/g; s/-+/-/g; s/^-+//; s/-+$//')"
+        system_image_name_for_init="$(printf '%s' "$system_name_for_agic" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9-]+/-/g; s/-+/-/g; s/^-+//; s/-+$//')"
         if [[ -z "$system_image_name_for_init" ]]; then
           system_image_name_for_init="app"
         fi
