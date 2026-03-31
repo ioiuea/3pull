@@ -16,6 +16,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 | aks-operator | `mi-[common.environmentName]-[common.systemName]-aks-operator` |
 | aks-admin | `mi-[common.environmentName]-[common.systemName]-aks-admin` |
 | acr-admin | `mi-[common.environmentName]-[common.systemName]-acr-admin` |
+| kv-admin | `mi-[common.environmentName]-[common.systemName]-kv-admin` |
 | keda-operator | `mi-[common.environmentName]-[common.systemName]-keda-operator` |
 | AGIC通常系 | `mi-[common.environmentName]-[common.systemName]-agic-standard` |
 | AGIC低遅延系 | `mi-[common.environmentName]-[common.systemName]-agic-lowlatency`（低遅延オプション有効時） |
@@ -24,7 +25,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 
 - `infra/bicep/main.managed-ids.bicep` で作成
 - デプロイ順は `Managed IDs -> Application Gateway -> Application Gateway RBAC -> AKS`
-- maint-vm へは `migration`、`redis-ops`、`aks-operator`、`aks-admin`、`acr-admin` をアタッチする
+- maint-vm へは `migration`、`redis-ops`、`aks-operator`、`aks-admin`、`acr-admin`、`kv-admin` をアタッチする
 
 ## RBAC 方針（最小権限）
 
@@ -38,6 +39,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 | aks-operator | - | - | - | - | - | Cluster User, RBAC Reader, RBAC Writer | - |
 | aks-admin | - | - | - | - | - | RBAC Cluster Admin | - |
 | acr-admin | - | - | - | - | - | - | AcrPush |
+| kv-admin | Secrets Officer | - | - | - | - | - | - |
 | keda-operator | - | Data Receiver | - | - | - | - | - |
 | agic-standard | - | - | - | - | AppGateway Contributor（通常系） | - | - |
 | agic-lowlatency | - | - | - | - | AppGateway Contributor（低遅延系） | - | - |
@@ -51,6 +53,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 - aks-operator MI は maint-vm 上で日常運用の `az aks get-credentials`、`kubectl`、`helm` を実行する principal です。
 - aks-admin MI は maint-vm 上で初期構築時の cluster-wide Helm 導入や緊急時の高権限作業を行う principal です。
 - acr-admin MI は maint-vm 上で `az acr login`、`docker buildx build --push` を実行する principal です。
+- kv-admin MI は maint-vm 上で `az keyvault secret set` による secret 登録・更新を実行する principal です。
 - API / worker MI は、Key Vault Secret 参照に加えて Azure SQL Always Encrypted で Azure Key Vault のキーを利用するため `Crypto User` を付与します。
 - migration MI の主目的は Azure SQL 接続時の Entra principal であり、AKS workload identity 用ではありません。
 - migration MI の Azure RBAC は、DB 接続設定を Key Vault から取得するための `Secrets User` を基本とします。Azure SQL 内の DDL 権限は DB user 作成後に別途付与します。
@@ -60,7 +63,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 
 ## maint-vm 割り当て方針
 
-maint-vm には以下 5 つの User Assigned Managed Identity を割り当て、用途を分離します。
+maint-vm には以下 6 つの User Assigned Managed Identity を割り当て、用途を分離します。
 
 | 用途 | Managed Identity | 主な利用内容 |
 | --- | --- | --- |
@@ -69,6 +72,7 @@ maint-vm には以下 5 つの User Assigned Managed Identity を割り当て、
 | AKS 日常運用 | `mi-[env]-[system]-aks-operator` | `az aks get-credentials` / `kubectl get, describe, logs` / app Helm |
 | AKS 高権限運用 | `mi-[env]-[system]-aks-admin` | AGIC/KEDA 初期導入 / cluster-wide 変更 / 緊急対応 |
 | ACR 運用 | `mi-[env]-[system]-acr-admin` | `az acr login` / `docker buildx build --push` |
+| Key Vault 運用 | `mi-[env]-[system]-kv-admin` | `az keyvault secret set` / secret 更新 |
 
 補足:
 
@@ -83,7 +87,7 @@ maint-vm には以下 5 つの User Assigned Managed Identity を割り当て、
 
 補足:
 
-- migration MI / redis-ops MI / aks-operator MI / aks-admin MI / acr-admin MI は maint-vm に割り当てるため、Kubernetes ServiceAccount や federated credential の対象外です。
+- migration MI / redis-ops MI / aks-operator MI / aks-admin MI / acr-admin MI / kv-admin MI は maint-vm に割り当てるため、Kubernetes ServiceAccount や federated credential の対象外です。
 
 ## 関連
 

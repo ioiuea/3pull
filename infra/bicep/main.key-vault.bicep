@@ -132,6 +132,11 @@ resource schedulersManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdenti
   name: schedulersManagedIdentityName
 }
 
+resource kvAdminManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  scope: resourceGroup(managedIdentityResourceGroupName)
+  name: 'mi-${environmentName}-${systemName}-kv-admin'
+}
+
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: keyVaultName
   location: location
@@ -255,6 +260,16 @@ resource keyVaultSecretsOfficerRoleAssignment 'Microsoft.Authorization/roleAssig
   properties: {
     roleDefinitionId: keyVaultSecretsOfficerRoleDefinitionId
     principalId: keyVaultOfficerObjectId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource keyVaultSecretsOfficerForKvAdminManagedIdentity 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(keyVault.id, kvAdminManagedIdentity.id, 'KeyVaultSecretsOfficerKvAdmin')
+  scope: keyVault
+  properties: {
+    roleDefinitionId: keyVaultSecretsOfficerRoleDefinitionId
+    principalId: kvAdminManagedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }

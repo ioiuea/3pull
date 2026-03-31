@@ -22,6 +22,7 @@
 | `mi-[env]-[system]-api` | `Key Vault Secrets User`, `Key Vault Crypto User` | Key Vault | API 実行時のSecret参照 / Always Encrypted 用キー参照 |
 | `mi-[env]-[system]-worker` | `Key Vault Secrets User`, `Key Vault Crypto User` | Key Vault | worker 実行時のSecret参照 / Always Encrypted 用キー参照 |
 | `mi-[env]-[system]-schedulers` | `Key Vault Secrets User` | Key Vault | schedulers 実行時のSecret参照 |
+| `mi-[env]-[system]-kv-admin` | `Key Vault Secrets Officer` | Key Vault | maint-vm からの secret 登録 / 更新 |
 | bootstrap/CI principal | `Key Vault Secrets Officer` | Key Vault | Secret 登録/更新 |
 
 補足:

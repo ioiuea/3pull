@@ -71,6 +71,12 @@ resource acrAdminManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentiti
   tags: modulesTags
 }
 
+resource kvAdminManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'mi-${environmentName}-${systemName}-kv-admin'
+  location: location
+  tags: modulesTags
+}
+
 resource kedaOperatorManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'mi-${environmentName}-${systemName}-keda-operator'
   location: location
@@ -102,6 +108,8 @@ output aksOperatorManagedIdentityName string = aksOperatorManagedIdentity.name
 output aksAdminManagedIdentityName string = aksAdminManagedIdentity.name
 output acrAdminManagedIdentityName string = acrAdminManagedIdentity.name
 output acrAdminManagedIdentityPrincipalId string = acrAdminManagedIdentity.properties.principalId
+output kvAdminManagedIdentityName string = kvAdminManagedIdentity.name
+output kvAdminManagedIdentityPrincipalId string = kvAdminManagedIdentity.properties.principalId
 output kedaOperatorManagedIdentityName string = kedaOperatorManagedIdentity.name
 output agicStandardManagedIdentityName string = agicStandardManagedIdentity.name
 output agicLowLatencyManagedIdentityName string = enableLowLatencyApplicationGatewaySubnet ? agicLowLatencyManagedIdentity!.name : ''

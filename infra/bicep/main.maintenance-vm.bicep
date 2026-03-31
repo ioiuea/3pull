@@ -104,6 +104,11 @@ resource acrAdminManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentiti
   name: 'mi-${environmentName}-${systemName}-acr-admin'
 }
 
+resource kvAdminManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  scope: resourceGroup(managedIdentityResourceGroupName)
+  name: 'mi-${environmentName}-${systemName}-kv-admin'
+}
+
 resource nic 'Microsoft.Network/networkInterfaces@2024-07-01' = {
   name: maintNicName
   location: location
@@ -135,6 +140,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-11-01' = {
       '${aksOperatorManagedIdentity.id}': {}
       '${aksAdminManagedIdentity.id}': {}
       '${acrAdminManagedIdentity.id}': {}
+      '${kvAdminManagedIdentity.id}': {}
     }
   }
   properties: {
