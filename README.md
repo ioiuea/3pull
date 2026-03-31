@@ -29,16 +29,6 @@
 - 設定管理 / バリデーション: Pydantic（pydantic-settings）
 - ASGI プロセスマネージャ: Gunicorn
 
-## 前提要件
-
-- Node.js / pnpm
-- Python 3.12+ / uv
-- Azure CLI（`az login` 済み）
-- ODBC Driver 18 for SQL Server
-- OpenSSL（JWT 鍵生成で使用）
-- `kubectl`（AKS / Kubernetes 操作で使用）
-- `helm`（Helm chart の render / deploy で使用）
-
 ## セットアップ手順
 
 Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL の初期化を行う一連の流れです。  
@@ -417,6 +407,16 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    将来的には、Docker image の build / push を GitHub Actions、AKS への deploy をメンテナンス VM または self-hosted runner 側へ寄せる構成を想定します。
 
 ## セットアップ手順（ローカル環境）
+
+### 前提要件
+
+- Node.js / pnpm
+- Python 3.12+ / uv
+- Azure CLI（`az login` 済み）
+- ODBC Driver 18 for SQL Server
+- OpenSSL（JWT 鍵生成で使用）
+- `kubectl`（AKS / Kubernetes 操作で使用）
+- `helm`（Helm chart の render / deploy で使用）
 
 1. インフラを構築する
    `infra/README.md` を参照し、`infra/common.parameter.json` を環境に合わせて編集してから `infra/main.sh` を実行します。  
