@@ -5,6 +5,7 @@ Ubuntu で、以下を実行できる状態にするためのセットアップ�
 - `scripts/init/sql/deploy.sh`
 - `make alembic-upgrade`
 - AKS の日常運用で使う `kubectl` / `helm`
+- Docker image の `buildx` build / ACR push
 
 前提:
 
@@ -19,6 +20,7 @@ Ubuntu で、以下を実行できる状態にするためのセットアップ�
 
 - `git`
 - `make`
+- `docker.io`
 - `apt-transport-https`
 - `python-is-python3`
 - `python3.12`
@@ -38,6 +40,7 @@ Ubuntu で、以下を実行できる状態にするためのセットアップ�
 - `uv`
 - `kubectl`
 - `kubelogin`
+- `docker buildx`
 
 ### 後段で導入・利用するもの
 
@@ -50,6 +53,8 @@ Ubuntu で、以下を実行できる状態にするためのセットアップ�
 
 - `git`: このリポジトリを VM 上に clone / pull するために必要
 - `make`: `make alembic-upgrade` の実行に必要
+- `docker.io`: `make docker-build` / `make docker-push`、`az acr login` 後の image push に必要
+- `docker buildx`: Docker image の build / push を CI/CD と同じ系統のコマンドで実行するために必要
 - `apt-transport-https`: APT で HTTPS リポジトリを扱うために必要
 - `python-is-python3`: `python` コマンドを `python3` に向けるために必要
 - `python3.12`: backend / Alembic / `deploy.sh` の Python 実行基盤として必要
@@ -133,6 +138,7 @@ echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://packages.buildkite.co
 ```bash
 sudo apt-get update
 sudo ACCEPT_EULA=Y apt-get install -y \
+  docker.io \
   git \
   make \
   python-is-python3 \
@@ -150,6 +156,35 @@ sudo ACCEPT_EULA=Y apt-get install -y \
 - Ubuntu 24.04 では `python3.12` は標準系だが、明示的に入れておく。
 - Ubuntu では `python3` はあっても `python` が未定義なことがあるため、`python-is-python3` も合わせて入れて `python` コマンドを通す。
 - `scripts/init/sql/deploy.sh` と backend 側の DB 接続は `ODBC Driver 18 for SQL Server` を前提とする。
+
+### 3.1 Docker サービスと実行権限を設定する
+
+`docker buildx build` をメンテナンス VM の一般ユーザーで実行できるようにする。
+
+```bash
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+グループ追加後は、再ログインして反映する。
+
+### 3.2 `docker buildx` を確認または導入する
+
+`buildx` を前提に image build / push する。`docker.io` に同梱されていない場合は、plugin をユーザー領域へ導入する。
+
+```bash
+docker buildx version
+```
+
+入っていない場合の導入例:
+
+```bash
+mkdir -p ~/.docker/cli-plugins
+curl -fsSL https://github.com/docker/buildx/releases/download/v0.28.0/buildx-v0.28.0.linux-amd64 \
+  -o ~/.docker/cli-plugins/docker-buildx
+chmod +x ~/.docker/cli-plugins/docker-buildx
+docker buildx version
+```
 
 ### 4. `uv` を入れる
 
@@ -197,6 +232,8 @@ sudo az aks install-cli \
 
 ```bash
 git --version
+docker --version
+docker buildx version
 make --version
 python --version
 python3.12 --version
@@ -218,6 +255,7 @@ odbcinst -q -d | grep "ODBC Driver 18 for SQL Server"
 
 ```bash
 which python
+which docker
 which uv
 which az
 which kubectl

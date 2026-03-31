@@ -102,32 +102,53 @@ schedulers-jobs-dry-run:
 # ------------------------------
 # Docker targets
 # ------------------------------
-.PHONY: docker-build docker-build-api docker-build-worker docker-build-schedulers docker-build-web docker-run-api docker-run-worker-auth-audit-export docker-run-worker-sample-wait-blob docker-run-schedulers-sessions docker-run-schedulers-audit docker-run-schedulers-jobs-dry-run docker-run-web
+.PHONY: docker-build docker-build-api docker-build-worker docker-build-schedulers docker-build-web docker-push docker-push-api docker-push-worker docker-push-schedulers docker-push-web docker-run-api docker-run-worker-auth-audit-export docker-run-worker-sample-wait-blob docker-run-schedulers-sessions docker-run-schedulers-audit docker-run-schedulers-jobs-dry-run docker-run-web
 
 DOCKER_API_IMAGE ?= 3pull-api:local
 DOCKER_WORKER_IMAGE ?= 3pull-worker:local
 DOCKER_SCHEDULERS_IMAGE ?= 3pull-schedulers:local
 DOCKER_WEB_IMAGE ?= 3pull-web:local
+DOCKER_BUILD_PLATFORM ?= linux/amd64
 
 docker-build-api:
-	docker build -f docker/api.Dockerfile -t $(DOCKER_API_IMAGE) .
+	docker buildx build --platform $(DOCKER_BUILD_PLATFORM) --load -f docker/api.Dockerfile -t $(DOCKER_API_IMAGE) .
 
 docker-build-worker:
-	docker build -f docker/worker.Dockerfile -t $(DOCKER_WORKER_IMAGE) .
+	docker buildx build --platform $(DOCKER_BUILD_PLATFORM) --load -f docker/worker.Dockerfile -t $(DOCKER_WORKER_IMAGE) .
 
 docker-build-schedulers:
-	docker build -f docker/schedulers.Dockerfile -t $(DOCKER_SCHEDULERS_IMAGE) .
+	docker buildx build --platform $(DOCKER_BUILD_PLATFORM) --load -f docker/schedulers.Dockerfile -t $(DOCKER_SCHEDULERS_IMAGE) .
 
 docker-build-web:
 	@test -n "$(VITE_BACKEND_BASE_URL)" || (echo 'VITE_BACKEND_BASE_URL must be set for docker-build-web' && exit 1)
 	@test -n "$(VITE_PRODUCT_NAME)" || (echo 'VITE_PRODUCT_NAME must be set for docker-build-web' && exit 1)
-	docker build -f docker/web.Dockerfile \
+	docker buildx build --platform $(DOCKER_BUILD_PLATFORM) --load -f docker/web.Dockerfile \
 		--build-arg VITE_BACKEND_BASE_URL="$(VITE_BACKEND_BASE_URL)" \
 		--build-arg VITE_PRODUCT_NAME="$(VITE_PRODUCT_NAME)" \
 		--build-arg VITE_ENABLE_EMAIL_AUTH="$(if $(VITE_ENABLE_EMAIL_AUTH),$(VITE_ENABLE_EMAIL_AUTH),true)" \
 		-t $(DOCKER_WEB_IMAGE) .
 
 docker-build: docker-build-api docker-build-worker docker-build-schedulers docker-build-web
+
+docker-push-api:
+	docker buildx build --platform $(DOCKER_BUILD_PLATFORM) --push -f docker/api.Dockerfile -t $(DOCKER_API_IMAGE) .
+
+docker-push-worker:
+	docker buildx build --platform $(DOCKER_BUILD_PLATFORM) --push -f docker/worker.Dockerfile -t $(DOCKER_WORKER_IMAGE) .
+
+docker-push-schedulers:
+	docker buildx build --platform $(DOCKER_BUILD_PLATFORM) --push -f docker/schedulers.Dockerfile -t $(DOCKER_SCHEDULERS_IMAGE) .
+
+docker-push-web:
+	@test -n "$(VITE_BACKEND_BASE_URL)" || (echo 'VITE_BACKEND_BASE_URL must be set for docker-push-web' && exit 1)
+	@test -n "$(VITE_PRODUCT_NAME)" || (echo 'VITE_PRODUCT_NAME must be set for docker-push-web' && exit 1)
+	docker buildx build --platform $(DOCKER_BUILD_PLATFORM) --push -f docker/web.Dockerfile \
+		--build-arg VITE_BACKEND_BASE_URL="$(VITE_BACKEND_BASE_URL)" \
+		--build-arg VITE_PRODUCT_NAME="$(VITE_PRODUCT_NAME)" \
+		--build-arg VITE_ENABLE_EMAIL_AUTH="$(if $(VITE_ENABLE_EMAIL_AUTH),$(VITE_ENABLE_EMAIL_AUTH),true)" \
+		-t $(DOCKER_WEB_IMAGE) .
+
+docker-push: docker-push-api docker-push-worker docker-push-schedulers docker-push-web
 
 docker-run-api:
 	docker run --rm --init -p 8000:8000 --env-file $(BACKEND_DIR)/.env $(DOCKER_API_IMAGE)

@@ -5,6 +5,7 @@ set -euo pipefail
 UBUNTU_VERSION="${UBUNTU_VERSION:-24.04}"
 KUBECTL_VERSION="${KUBECTL_VERSION:-latest}"
 KUBELOGIN_VERSION="${KUBELOGIN_VERSION:-latest}"
+BUILDX_VERSION="${BUILDX_VERSION:-v0.28.0}"
 UV_INSTALL_DIR="${UV_INSTALL_DIR:-$HOME/.local/bin}"
 HELM_KEYRING_PATH="/usr/share/keyrings/helm.gpg"
 HELM_SOURCE_LIST_PATH="/etc/apt/sources.list.d/helm-stable-debian.list"
@@ -23,6 +24,8 @@ Environment variables:
       az aks install-cli に渡す kubectl version。デフォルト: latest
   KUBELOGIN_VERSION
       az aks install-cli に渡す kubelogin version。デフォルト: latest
+  BUILDX_VERSION
+      docker buildx plugin が未導入の場合に取得する version。デフォルト: v0.28.0
   UV_INSTALL_DIR
       uv のインストール先ディレクトリ。デフォルト: $HOME/.local/bin
 EOF
@@ -134,6 +137,7 @@ install_apt_packages() {
   log "Install system packages"
   run_as_root apt-get update
   run_as_root env ACCEPT_EULA=Y apt-get install -y \
+    docker.io \
     git \
     make \
     python-is-python3 \
@@ -144,6 +148,53 @@ install_apt_packages() {
     msodbcsql18 \
     azure-cli \
     helm
+}
+
+configure_docker_access() {
+  log "Configure Docker service and group access"
+
+  run_as_root systemctl enable --now docker
+
+  local target_user
+  target_user="${SUDO_USER:-$USER}"
+
+  if id -nG "${target_user}" | tr ' ' '\n' | grep -qx docker; then
+    return
+  fi
+
+  run_as_root usermod -aG docker "${target_user}"
+  log "Added ${target_user} to docker group. Re-login is required for group change to take effect."
+}
+
+install_docker_buildx_if_needed() {
+  if docker buildx version >/dev/null 2>&1; then
+    return
+  fi
+
+  log "Install docker buildx plugin"
+
+  local arch
+  case "$(uname -m)" in
+    x86_64)
+      arch="amd64"
+      ;;
+    aarch64|arm64)
+      arch="arm64"
+      ;;
+    *)
+      echo "Unsupported architecture for docker buildx: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+
+  local plugin_dir="${HOME}/.docker/cli-plugins"
+  local plugin_path="${plugin_dir}/docker-buildx"
+
+  mkdir -p "${plugin_dir}"
+  curl -fsSL \
+    "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-${arch}" \
+    -o "${plugin_path}"
+  chmod +x "${plugin_path}"
 }
 
 ensure_path_in_bashrc() {
@@ -189,6 +240,8 @@ install_kubectl_and_kubelogin() {
 verify_installed_commands() {
   log "Verify installed commands"
 
+  docker --version
+  docker buildx version
   git --version
   make --version
   python --version
@@ -202,6 +255,7 @@ verify_installed_commands() {
 
   odbcinst -q -d | grep "ODBC Driver 18 for SQL Server"
 
+  which docker
   which python
   which uv
   which az
@@ -226,6 +280,8 @@ main() {
   register_azure_cli_repo
   register_helm_repo
   install_apt_packages
+  configure_docker_access
+  install_docker_buildx_if_needed
   install_uv
   install_kubectl_and_kubelogin
   verify_installed_commands
