@@ -15,6 +15,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 | redis-ops | `mi-[common.environmentName]-[common.systemName]-redis-ops` |
 | aks-operator | `mi-[common.environmentName]-[common.systemName]-aks-operator` |
 | aks-admin | `mi-[common.environmentName]-[common.systemName]-aks-admin` |
+| acr-admin | `mi-[common.environmentName]-[common.systemName]-acr-admin` |
 | keda-operator | `mi-[common.environmentName]-[common.systemName]-keda-operator` |
 | AGIC通常系 | `mi-[common.environmentName]-[common.systemName]-agic-standard` |
 | AGIC低遅延系 | `mi-[common.environmentName]-[common.systemName]-agic-lowlatency`（低遅延オプション有効時） |
@@ -23,22 +24,23 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 
 - `infra/bicep/main.managed-ids.bicep` で作成
 - デプロイ順は `Managed IDs -> Application Gateway -> Application Gateway RBAC -> AKS`
-- maint-vm へは `migration`、`redis-ops`、`aks-operator`、`aks-admin` をアタッチする
+- maint-vm へは `migration`、`redis-ops`、`aks-operator`、`aks-admin`、`acr-admin` をアタッチする
 
 ## RBAC 方針（最小権限）
 
-| Managed Identity | Key Vault | Service Bus | Storage | Redis | App Gateway | AKS |
-| --- | --- | --- | --- | --- | --- | --- |
-| API | Secrets User, Crypto User | Data Sender | Blob Data Contributor | default Access Policy | - | - |
-| worker | Secrets User, Crypto User | Data Receiver | Blob Data Contributor | - | - | - |
-| schedulers | Secrets User | - | Blob Data Contributor | - | - | - |
-| migration | Secrets User | - | - | - | - | - |
-| redis-ops | - | - | - | default Access Policy | - | - |
-| aks-operator | - | - | - | - | - | Cluster User, RBAC Reader, RBAC Writer |
-| aks-admin | - | - | - | - | - | RBAC Cluster Admin |
-| keda-operator | - | Data Receiver | - | - | - | - |
-| agic-standard | - | - | - | - | AppGateway Contributor（通常系） | - |
-| agic-lowlatency | - | - | - | - | AppGateway Contributor（低遅延系） | - |
+| Managed Identity | Key Vault | Service Bus | Storage | Redis | App Gateway | AKS | ACR |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| API | Secrets User, Crypto User | Data Sender | Blob Data Contributor | default Access Policy | - | - | - |
+| worker | Secrets User, Crypto User | Data Receiver | Blob Data Contributor | - | - | - | - |
+| schedulers | Secrets User | - | Blob Data Contributor | - | - | - | - |
+| migration | Secrets User | - | - | - | - | - | - |
+| redis-ops | - | - | - | default Access Policy | - | - | - |
+| aks-operator | - | - | - | - | - | Cluster User, RBAC Reader, RBAC Writer | - |
+| aks-admin | - | - | - | - | - | RBAC Cluster Admin | - |
+| acr-admin | - | - | - | - | - | - | AcrPush |
+| keda-operator | - | Data Receiver | - | - | - | - | - |
+| agic-standard | - | - | - | - | AppGateway Contributor（通常系） | - | - |
+| agic-lowlatency | - | - | - | - | AppGateway Contributor（低遅延系） | - | - |
 
 補足:
 
@@ -48,6 +50,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 - redis-ops MI は maint-vm 上で Azure Managed Redis の block key 確認・解除に利用します。
 - aks-operator MI は maint-vm 上で日常運用の `az aks get-credentials`、`kubectl`、`helm` を実行する principal です。
 - aks-admin MI は maint-vm 上で初期構築時の cluster-wide Helm 導入や緊急時の高権限作業を行う principal です。
+- acr-admin MI は maint-vm 上で `az acr login`、`docker buildx build --push` を実行する principal です。
 - API / worker MI は、Key Vault Secret 参照に加えて Azure SQL Always Encrypted で Azure Key Vault のキーを利用するため `Crypto User` を付与します。
 - migration MI の主目的は Azure SQL 接続時の Entra principal であり、AKS workload identity 用ではありません。
 - migration MI の Azure RBAC は、DB 接続設定を Key Vault から取得するための `Secrets User` を基本とします。Azure SQL 内の DDL 権限は DB user 作成後に別途付与します。
@@ -57,7 +60,7 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 
 ## maint-vm 割り当て方針
 
-maint-vm には以下 4 つの User Assigned Managed Identity を割り当て、用途を分離します。
+maint-vm には以下 5 つの User Assigned Managed Identity を割り当て、用途を分離します。
 
 | 用途 | Managed Identity | 主な利用内容 |
 | --- | --- | --- |
@@ -65,6 +68,7 @@ maint-vm には以下 4 つの User Assigned Managed Identity を割り当て、
 | Redis 運用 | `mi-[env]-[system]-redis-ops` | Azure Managed Redis block key 確認 / 解除 |
 | AKS 日常運用 | `mi-[env]-[system]-aks-operator` | `az aks get-credentials` / `kubectl get, describe, logs` / app Helm |
 | AKS 高権限運用 | `mi-[env]-[system]-aks-admin` | AGIC/KEDA 初期導入 / cluster-wide 変更 / 緊急対応 |
+| ACR 運用 | `mi-[env]-[system]-acr-admin` | `az acr login` / `docker buildx build --push` |
 
 補足:
 
@@ -79,7 +83,7 @@ maint-vm には以下 4 つの User Assigned Managed Identity を割り当て、
 
 補足:
 
-- migration MI / redis-ops MI / aks-operator MI / aks-admin MI は maint-vm に割り当てるため、Kubernetes ServiceAccount や federated credential の対象外です。
+- migration MI / redis-ops MI / aks-operator MI / aks-admin MI / acr-admin MI は maint-vm に割り当てるため、Kubernetes ServiceAccount や federated credential の対象外です。
 
 ## 関連
 

@@ -97,6 +97,7 @@
 - redis 運用用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-redis-ops`）を VM に割り当てる。
 - AKS 日常運用用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-aks-operator`）を VM に割り当てる。
 - AKS 高権限運用用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-aks-admin`）を VM に割り当てる。
+- ACR 運用用 User Assigned Managed Identity（`mi-[common.environmentName]-[common.systemName]-acr-admin`）を VM に割り当てる。
 - ログインするアカウントに、本VMに対して以下どちらかの権限が付与されていること。
   - 仮想マシン管理者ログイン
   - 仮想マシンユーザーログイン
@@ -107,6 +108,7 @@
 - redis-ops 用 User Assigned Managed Identity は Azure Managed Redis の block key 確認・解除用 principal として利用します。
 - aks-operator 用 User Assigned Managed Identity は AKS の kubeconfig 取得、日常の `kubectl`、アプリ namespace の `helm` 実行用 principal として利用します。
 - aks-admin 用 User Assigned Managed Identity は AGIC / KEDA 導入や緊急時の cluster-wide 操作用 principal として利用します。
+- acr-admin 用 User Assigned Managed Identity は ACR ログイン、Docker image の build / push 用 principal として利用します。
 - runtime 用の API / worker / schedulers Managed Identity は maint-vm には割り当てません。
 - maint-vm の SystemAssigned は利用しません。
 
@@ -172,7 +174,46 @@ az ssh vm -n vm-[common.environmentName]-[common.systemName]-maint -g rg-[common
 - Private Endpoint 経由で Azure SQL へ到達できる管理経路を maint-vm に集約する
 - migration 実行主体を固定し、監査・切り分けをしやすくする
 - Redis 解除運用主体を runtime principal と分離し、maint-vm に集約する
-- VM の identity は DB 用 1 つ、Redis 用 1 つ、AKS 用 2 つの計 4 principal に分離する
+- VM の identity は DB 用 1 つ、Redis 用 1 つ、AKS 用 2 つ、ACR 用 1 つの計 5 principal に分離する
+
+# ACR 運用実行方針
+
+## 位置づけ
+
+- maint-vm は ACR への image push 実行地点とする。
+- 個人アカウントではなく、ACR 用 Managed Identity を使って `az acr login` と `docker buildx build --push` を実行する。
+- ACR 運用 principal は DB / AKS 運用 principal と分離する。
+
+## 利用する Managed Identity
+
+| 用途 | Managed Identity | 備考 |
+| --- | --- | --- |
+| ACR 運用 | `mi-[common.environmentName]-[common.systemName]-acr-admin` | User Assigned Managed Identity |
+
+## 想定する実行内容
+
+- `az acr login --name cr[environmentName][systemName]`
+- `make docker-build`
+- `make docker-push`
+
+## 実行時の前提
+
+- VM に複数 UAMI を割り当てるため、Azure CLI ログイン時は `--client-id` を付けて利用する principal を明示する。
+- ACR は Private Endpoint 前提のため、maint-vm から ACR Private Endpoint へ名前解決・疎通できることを前提とする。
+- ACR 側には `AcrPush` RBAC を付与する。
+
+例:
+
+```shell
+az login --identity --client-id <ACR_ADMIN_MANAGED_IDENTITY_CLIENT_ID>
+az acr login --name cr[environmentName][systemName]
+```
+
+## 設計意図
+
+- 個人アカウントを使った ACR ログインを避け、条件付きアクセスの影響を受けにくい運用経路を持つ
+- image build / push を専用 principal に分離し、AKS や DB の権限と混在させない
+- 将来 GitHub Actions や self-hosted runner へ寄せる際の principal 分離方針を先に揃える
 
 # AKS 運用実行方針
 

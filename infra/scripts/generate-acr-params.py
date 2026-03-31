@@ -50,10 +50,12 @@ if not environment_name or not system_name or not location:
     )
 
 modules_name = config.get("modulesName", "svc")
+managed_identity_modules_name = config.get("managedIdentityModulesName", "svc")
 enable_resource_lock = bool(common_values.get("enableResourceLock", True))
 lock_kind = config.get("lockKind", "CanNotDelete") if enable_resource_lock else ""
 resource_group_name = f"rg-{environment_name}-{system_name}-{modules_name}"
 vnet_resource_group_name = f"rg-{environment_name}-{system_name}-nw"
+managed_identity_resource_group_name = f"rg-{environment_name}-{system_name}-{managed_identity_modules_name}"
 aks_resource_group_name = aks_meta.get("resourceGroupName", "")
 aks_name = aks_meta.get("aksName", "")
 if not aks_resource_group_name or not aks_name:
@@ -98,6 +100,7 @@ lines = [
     f"param vnetResourceGroupName = {quote(vnet_resource_group_name)}",
     f"param aksName = {quote(aks_name)}",
     f"param aksResourceGroupName = {quote(aks_resource_group_name)}",
+    f"param managedIdentityResourceGroupName = {quote(managed_identity_resource_group_name)}",
     f"param enableAksAcrAttach = {'true' if enable_aks_acr_attach else 'false'}",
     f"param containerRegistryName = {quote(registry_name)}",
     f"param privateEndpointName = {quote(private_endpoint_name)}",

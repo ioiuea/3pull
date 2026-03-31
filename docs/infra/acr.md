@@ -23,6 +23,13 @@
 - Private Endpoint に削除ロックを適用
 - Private DNS ゾーンに削除ロックを適用（`network.enableCentralizedPrivateDns=false` の場合のみ）
 
+## RBAC
+
+| principal | ロール | スコープ | 用途 |
+| --- | --- | --- | --- |
+| AKS kubelet identity | `AcrPull` | ACR | AKS workload の image pull |
+| `mi-[env]-[system]-acr-admin` | `AcrPush` | ACR | maint-vm からの `az acr login` / `docker buildx build --push` |
+
 ## リソース命名規則
 
 - CAF の省略形ルールに準拠し、Container Registry は `cr` を利用します。

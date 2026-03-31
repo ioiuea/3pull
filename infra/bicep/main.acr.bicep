@@ -33,6 +33,9 @@ param aksName string
 @description('AKS を配置したリソースグループ名')
 param aksResourceGroupName string
 
+@description('Managed Identity のリソースグループ名')
+param managedIdentityResourceGroupName string
+
 @description('AKS kubelet への AcrPull 付与を有効化')
 param enableAksAcrAttach bool = true
 
@@ -82,6 +85,11 @@ var acrPullRoleDefinitionId = subscriptionResourceId(
   '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 )
 
+var acrPushRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '8311e382-0749-4cb8-b61a-304f252e45ec'
+)
+
 var ipRules = [for ip in networkRuleIpRules: {
   action: 'Allow'
   value: string(ip)
@@ -100,6 +108,11 @@ resource privateEndpointSubnet 'Microsoft.Network/virtualNetworks/subnets@2024-0
 resource aks 'Microsoft.ContainerService/managedClusters@2024-05-01' existing = {
   scope: resourceGroup(aksResourceGroupName)
   name: aksName
+}
+
+resource acrAdminManagedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' existing = {
+  scope: resourceGroup(managedIdentityResourceGroupName)
+  name: 'mi-${environmentName}-${systemName}-acr-admin'
 }
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
@@ -171,6 +184,16 @@ resource acrPullForAksKubelet 'Microsoft.Authorization/roleAssignments@2022-04-0
   properties: {
     roleDefinitionId: acrPullRoleDefinitionId
     principalId: aks.properties.identityProfile.kubeletidentity.objectId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource acrPushForAcrAdminManagedIdentity 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(containerRegistry.id, acrAdminManagedIdentity.id, 'AcrPush')
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: acrPushRoleDefinitionId
+    principalId: acrAdminManagedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
