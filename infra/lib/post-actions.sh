@@ -111,6 +111,7 @@ EOF_INNER
   else
     if [[ -n "$what_if" ]]; then
       echo "==> Skip Generate AGIC/KEDA init scripts (--what-if)"
+      echo "==> Skip Generate Docker init script (--what-if)"
       echo "==> Skip Generate frontend Helm values file (--what-if)"
       echo "==> Skip Generate backend Helm values file (--what-if)"
       echo "==> Skip Generate ip rate limit ops env (--what-if)"
@@ -374,6 +375,83 @@ EOF_INNER
         "$ip_rate_limit_env_sync_script"
       else
         echo "==> Skip Generate ip rate limit ops env (resourceToggles.redis=false)"
+      fi
+
+      acr_name_for_init="$(meta_get "$acr_meta_file" "acrName")"
+      if [[ -n "$acr_name_for_init" && "$(meta_bool "$acr_meta_file" "deploy" "false")" == "true" ]]; then
+        system_image_name_for_init="$(printf '%s' "$system_name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9-]+/-/g; s/-+/-/g; s/^-+//; s/-+$//')"
+        if [[ -z "$system_image_name_for_init" ]]; then
+          system_image_name_for_init="app"
+        fi
+        docker_init_script="$docker_init_dir/deploy.sh"
+        mkdir -p "$docker_init_dir"
+        cat >"$docker_init_script" <<EOF_INNER
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF_USAGE'
+Usage:
+  IMAGE_TAG=<git-sha> \\
+  VITE_BACKEND_BASE_URL=https://api.example.com \\
+  VITE_PRODUCT_NAME=<systemName> \\
+  VITE_ENABLE_EMAIL_AUTH=true \\
+  ./scripts/init/docker/deploy.sh
+EOF_USAGE
+}
+
+print_and_run() {
+  echo "\$ \$*"
+  "\$@"
+  echo
+}
+
+require_env() {
+  local name="\$1"
+  if [[ -z "\${!name:-}" ]]; then
+    echo "Required environment variable is not set: \$name" >&2
+    exit 1
+  fi
+}
+
+main() {
+  if [[ "\${1:-}" == "--help" || "\${1:-}" == "-h" ]]; then
+    usage
+    exit 0
+  fi
+
+  require_env IMAGE_TAG
+  require_env VITE_BACKEND_BASE_URL
+  require_env VITE_PRODUCT_NAME
+  require_env VITE_ENABLE_EMAIL_AUTH
+
+  cd "$repo_root"
+
+  export DOCKER_API_IMAGE="${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-api:\${IMAGE_TAG}"
+  export DOCKER_WORKER_IMAGE="${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-worker:\${IMAGE_TAG}"
+  export DOCKER_SCHEDULERS_IMAGE="${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-schedulers:\${IMAGE_TAG}"
+  export DOCKER_WEB_IMAGE="${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-web:\${IMAGE_TAG}"
+
+  print_and_run az acr login --name "${acr_name_for_init}"
+  print_and_run make docker-build
+  print_and_run docker image ls "${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-api"
+  print_and_run docker image ls "${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-worker"
+  print_and_run docker image ls "${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-schedulers"
+  print_and_run docker image ls "${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-web"
+  print_and_run make docker-push
+  print_and_run az acr repository list --name "${acr_name_for_init}" -o table
+  print_and_run az acr repository show-tags --name "${acr_name_for_init}" --repository "${system_image_name_for_init}-api" -o table
+  print_and_run az acr repository show-tags --name "${acr_name_for_init}" --repository "${system_image_name_for_init}-worker" -o table
+  print_and_run az acr repository show-tags --name "${acr_name_for_init}" --repository "${system_image_name_for_init}-schedulers" -o table
+  print_and_run az acr repository show-tags --name "${acr_name_for_init}" --repository "${system_image_name_for_init}-web" -o table
+}
+
+main "\$@"
+EOF_INNER
+        chmod +x "$docker_init_script"
+        echo "==> Generate init script: $docker_init_script"
+      else
+        echo "==> Skip Generate init script: $docker_init_dir/deploy.sh (required ACR resources not found)"
       fi
 
       cat <<'EOF_INNER'

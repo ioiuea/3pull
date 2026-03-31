@@ -142,6 +142,7 @@ cosmos_meta_file="$params_dir/cosmos-database-meta.json"
 init_scripts_root="$repo_root/scripts/init"
 agic_controller_init_dir="$init_scripts_root/agicController"
 keda_controller_init_dir="$init_scripts_root/kedaController"
+docker_init_dir="$init_scripts_root/docker"
 sql_init_dir="$init_scripts_root/sql"
 sql_init_param_conf_file="$sql_init_dir/param.conf"
 

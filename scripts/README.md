@@ -21,5 +21,6 @@
 2. メンテVMに必要なツールインストール
 3. agicコントローラの導入
 4. kedaコントローラの導入
-5. SQL Database のデータベース初期設定（スキーマ、ロールの作成）
-6. アプリ部分のhelm展開（`k8s` フォルダの Helm）
+5. Docker image の build / ACR push
+6. SQL Database のデータベース初期設定（スキーマ、ロールの作成）
+7. アプリ部分のhelm展開（`k8s` フォルダの Helm）
