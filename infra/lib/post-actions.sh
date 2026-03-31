@@ -406,6 +406,12 @@ print_and_run() {
   echo
 }
 
+resolve_repo_root() {
+  local script_dir
+  script_dir="$(cd -- "\$(dirname -- "\${BASH_SOURCE[0]}")" && pwd)"
+  cd -- "\$script_dir/../.." && pwd
+}
+
 require_env() {
   local name="\$1"
   if [[ -z "\${!name:-}" ]]; then
@@ -425,7 +431,7 @@ main() {
   require_env VITE_PRODUCT_NAME
   require_env VITE_ENABLE_EMAIL_AUTH
 
-  cd "$repo_root"
+  cd "\$(resolve_repo_root)"
 
   export DOCKER_API_IMAGE="${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-api:\${IMAGE_TAG}"
   export DOCKER_WORKER_IMAGE="${acr_name_for_init}.azurecr.io/${system_image_name_for_init}-worker:\${IMAGE_TAG}"
