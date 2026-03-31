@@ -44,6 +44,8 @@
 Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL の初期化を行う一連の流れです。  
 詳細なパラメータ説明や構成差分は [infra/README.md](/Users/hiroki.ueda/Dev/3pull/infra/README.md) と [docs/](/Users/hiroki.ueda/Dev/3pull/docs) を参照してください。
 
+### セットアップ準備
+
 1. リポジトリをクローンする
    踏み台サーバなど、Azure 環境へ到達できる作業端末でリポジトリを取得します。
 
@@ -59,6 +61,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    ```bash
    vi 3pull/infra/common.parameter.json
    ```
+
+### IaCによるAzure作成
 
 3. IaC を 1 回目実行する
    まずは基盤リソース群を作成します。パスワードはサンプル値のまま使わず、必ず置き換えてください。
@@ -77,6 +81,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    後続の AKS デプロイでは外部通信が必要になるため、先に経路を通しておきます。  
    基本構成でハブ&スポークでなければこの手順は不要です。
 
+### IaCによるその他リソース作成
+
 5. IaC を 2 回目実行する
    ピアリング後に、同じパラメータと同じログイン情報でもう一度 [`infra/main.sh`](/Users/hiroki.ueda/Dev/3pull/infra/main.sh) を実行します。  
    1 回目と同じパスワードを使って問題ありません。
@@ -93,6 +99,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 6. 踏み台サーバからメンテナンス VM へ到達できる状態にする
    基本構成では、踏み台サーバを `AzureBastionSubnet` に作成してメンテナンス VM へ接続します。  
    `sharedBastionIp` を使って既存の踏み台を利用する場合は、その踏み台 VM が存在する VNET と今回の VNET の疎通を確保してください。（VNETピアリング実施）
+
+### メンテナンスVMの初期セットアップ
 
 7. 生成済みファイルをメンテナンス VM へコピーする
    踏み台サーバから、リポジトリ全体をメンテナンス VM へ送ります。  
@@ -116,6 +124,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    ```bash
    /home/maintadmin/3pull/scripts/init/maintvm/setup.sh
    ```
+
+### AKSの初期セットアップ
 
 10. AKS 管理用マネージド ID でログインする
    `mi-<environmentName>-<systemName>-aks-admin` の client ID を Azure Portal で確認して置き換えます。
@@ -165,6 +175,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    kubectl logs -n keda deploy/keda-operator --tail=100
    ```
 
+### SQL Databaseの初期セットアップ
+
 13. SQL 用マネージド ID でログインする
    `mi-<environmentName>-<systemName>-migration` の client ID を Azure Portal で確認して置き換えます。  
    このログインでは `--allow-no-subscriptions` が必要です。
@@ -184,6 +196,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    ```bash
    /home/maintadmin/3pull/scripts/init/sql/deploy.sh
    ```
+
+### Databaseの初期マイグレーション
 
 16. backend の依存関係をインストールする
    Alembic migration 実行前に Python 依存関係を揃えます。`pyodbc` が import できることまで確認します。
@@ -216,6 +230,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 19. SQL Server の Entra 管理者設定を元に戻す
    初期構築で一時的に migration MI へ切り替えていた場合は、[`infra/common.parameter.json`](/Users/hiroki.ueda/Dev/3pull/infra/common.parameter.json) で管理している本来の Entra 管理者へ戻します。
+
+### Dockerイメージの準備
 
 20. コンテナイメージ用のタグを決める
    Docker image の build / push と Helm deploy で同じ tag を使います。  
@@ -265,6 +281,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    make docker-push
    ```
 
+### KeyVaultへのシークレット登録
+
 25. Key Vault へシークレット値を登録する
    backend chart は Key Vault を前提に起動するため、Helm deploy 前に登録します。  
    Key Vault 名は `kv-<environmentName>-<systemName>` を置き換えてください。
@@ -278,6 +296,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    az keyvault secret set --vault-name "$KEY_VAULT_NAME" --name entra-client-secret --value '<EntraClientSecret>'
    az keyvault secret set --vault-name "$KEY_VAULT_NAME" --name entra-token-encryption-key --value '<EntraTokenEncryptionKey>'
    ```
+
+### アプリのデプロイ
 
 26. 生成済み Helm values を確認する
    `infra/main.sh` の post 処理で生成された `k8s/charts/*/values.yaml` を確認し、Ingress の host 名、ACR repository、Key Vault 名などが想定どおりになっているかを見ます。
@@ -366,6 +386,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    kubectl get ingress -n 3pull
    kubectl logs -n 3pull deploy/r-<systemName>-web --tail=100
    ```
+
+### 公開ドメインの設定
 
 31. 公開ドメイン用の証明書を App Gateway へ登録する
    公開 TLS 終端は Application Gateway に寄せる方針です。  
