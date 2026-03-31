@@ -1269,6 +1269,7 @@ RESOURCE_CONFIG_FILE="$application_gateway_rbac_config_file" \
 MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
 APPLICATION_GATEWAY_META_FILE="$application_gateway_meta_file" \
 APPLICATION_GATEWAY_LOW_LATENCY_META_FILE="$application_gateway_low_latency_meta_file" \
+SUBNETS_CONFIG_FILE="$subnets_config_file" \
 PARAMS_DIR="$params_dir" \
 OUT_META_FILE="$application_gateway_rbac_meta_file" \
 TIMESTAMP="$timestamp" \
