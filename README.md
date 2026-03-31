@@ -251,7 +251,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 23. Docker image を build する
    `docker buildx` 前提で image を build します。  
-   frontend は build 時に API の公開 URL と製品名を埋め込むため、`VITE_BACKEND_BASE_URL` と `VITE_PRODUCT_NAME` を指定します。
+   frontend は build 時に API の公開 URL、製品名、メール認証有効化フラグを埋め込むため、`VITE_BACKEND_BASE_URL`、`VITE_PRODUCT_NAME`、`VITE_ENABLE_EMAIL_AUTH` を指定します。
 
    ```bash
    cd /home/maintadmin/3pull
@@ -261,7 +261,14 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    export DOCKER_WEB_IMAGE="cr<environmentName><systemName>.azurecr.io/<systemName>-web:${IMAGE_TAG}"
    export VITE_BACKEND_BASE_URL="https://api.example.com"
    export VITE_PRODUCT_NAME="<systemName>"
+   export VITE_ENABLE_EMAIL_AUTH="true"
    make docker-build
+   ```
+
+   確認コマンド:
+
+   ```bash
+   docker image ls | grep "cr<environmentName><systemName>.azurecr.io/<systemName>-"
    ```
 
 24. Docker image を ACR へ push する
@@ -271,11 +278,49 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    make docker-push
    ```
 
+   確認コマンド:
+
+   ```bash
+   az acr repository list --name cr<environmentName><systemName> -o table
+   az acr repository show-tags --name cr<environmentName><systemName> --repository <systemName>-api -o table
+   az acr repository show-tags --name cr<environmentName><systemName> --repository <systemName>-worker -o table
+   az acr repository show-tags --name cr<environmentName><systemName> --repository <systemName>-schedulers -o table
+   az acr repository show-tags --name cr<environmentName><systemName> --repository <systemName>-web -o table
+   ```
+
 ### KeyVaultへのシークレット登録
 
 25. Key Vault へシークレット値を登録する
    backend chart は Key Vault を前提に起動するため、Helm deploy 前に登録します。  
    Key Vault 名は `kv-<environmentName>-<systemName>` を置き換えてください。
+
+   事前準備:
+
+   - `entra-client-secret` と `entra-token-encryption-key` を登録する前に、Microsoft Entra ID 側で OIDC 用のアプリ登録を作成しておきます。
+   - 取得しておく値は、少なくとも `Application (client) ID`、`Directory (tenant) ID`、クライアントシークレット、リダイレクト URI です。
+   - OIDC の参考: https://learn.microsoft.com/ja-jp/entra/identity-platform/v2-protocols-oidc
+
+   各 secret の内容:
+
+   - `database-url`
+     - Azure SQL Database 接続先です。
+     - 形式:
+       `mssql+pyodbc://@<sql-server>.database.windows.net/<database-name>?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no`
+   - `applicationinsights-connection-string`
+     - Application Insights の接続文字列です。
+     - Azure Portal の対象 Application Insights リソースで、`概要` または `プロパティ` から `接続文字列` を取得します。
+   - `session-secret-key`
+     - SessionMiddleware の署名鍵です。十分長いランダム値を使います。
+     - 例:
+       `openssl rand -hex 32`
+   - `entra-client-secret`
+     - Entra ID の OIDC アプリ登録で作成したクライアントシークレット値です。
+     - Azure Portal の `アプリの登録` から対象アプリを開き、`証明書とシークレット` で新規作成した値を登録します。
+   - `entra-token-encryption-key`
+     - Entra の access token / refresh token を DB 保存するときの暗号化鍵です。
+     - 既存の暗号化済みトークンを復号できなくなるため、運用開始後の変更は慎重に扱います。
+     - 例:
+       `openssl rand -hex 32`
 
    ```bash
    export KEY_VAULT_NAME="kv-<environmentName>-<systemName>"
