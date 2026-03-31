@@ -372,6 +372,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 28. backend chart を deploy する
    backend 側の Deployment / KEDA / Ingress を適用します。
+   事前に `infra/main.sh` で Application Insights RBAC まで適用済みであることを前提とします。
 
    ```bash
    helm upgrade --install 3pull-backend ./k8s/charts/backend \

@@ -35,6 +35,9 @@ log_meta_file="$params_dir/log-analytics-meta.json"
 appi_config_file="$infra_root/config/application-insights.json"
 appi_script="$infra_root/scripts/generate-application-insights-params.py"
 appi_meta_file="$params_dir/application-insights-meta.json"
+appi_rbac_config_file="$infra_root/config/application-insights-rbac.json"
+appi_rbac_script="$infra_root/scripts/generate-application-insights-rbac-params.py"
+appi_rbac_meta_file="$params_dir/application-insights-rbac-meta.json"
 
 # ネットワーク基盤（Virtual Network）
 vnet_config_file="$infra_root/config/virtual-network.json"
@@ -805,6 +808,16 @@ if [[ ! -f "$appi_config_file" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$appi_rbac_config_file" ]]; then
+  echo "application insights rbac config file が見つかりません: $appi_rbac_config_file" >&2
+  exit 1
+fi
+
+if [[ ! -f "$appi_rbac_script" ]]; then
+  echo "application insights rbac script が見つかりません: $appi_rbac_script" >&2
+  exit 1
+fi
+
 if [[ ! -f "$vnet_config_file" ]]; then
   echo "virtual network config file が見つかりません: $vnet_config_file" >&2
   exit 1
@@ -1025,7 +1038,7 @@ param_generation_manifest=(
   "$application_gateway_low_latency_script|$application_gateway_low_latency_meta_file|RESOURCE_CONFIG_FILE=$application_gateway_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
   "$cosmos_script|$cosmos_meta_file|RESOURCE_CONFIG_FILE=$cosmos_config_file"
   "$aks_script|$aks_meta_file|RESOURCE_CONFIG_FILE=$aks_runtime_config_file;SUBNETS_CONFIG_FILE=$subnets_config_file;APPLICATION_GATEWAY_META_FILE=$application_gateway_meta_file"
-  "$application_gateway_rbac_script|$application_gateway_rbac_meta_file|RESOURCE_CONFIG_FILE=$application_gateway_rbac_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file;APPLICATION_GATEWAY_META_FILE=$application_gateway_meta_file;APPLICATION_GATEWAY_LOW_LATENCY_META_FILE=$application_gateway_low_latency_meta_file"
+  "$application_gateway_rbac_script|$application_gateway_rbac_meta_file|RESOURCE_CONFIG_FILE=$application_gateway_rbac_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file;APPLICATION_GATEWAY_META_FILE=$application_gateway_meta_file;APPLICATION_GATEWAY_LOW_LATENCY_META_FILE=$application_gateway_low_latency_meta_file;SUBNETS_CONFIG_FILE=$subnets_config_file"
   "$acr_script|$acr_meta_file|RESOURCE_CONFIG_FILE=$acr_config_file;AKS_META_FILE=$aks_meta_file"
   "$key_vault_script|$key_vault_meta_file|RESOURCE_CONFIG_FILE=$key_vault_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file"
   "$service_bus_script|$service_bus_meta_file|RESOURCE_CONFIG_FILE=$service_bus_config_file;MANAGED_IDS_META_FILE=$managed_ids_meta_file"
@@ -1202,6 +1215,30 @@ deploy_group_if_enabled \
   "$managed_ids_resource_group_name" \
   "$managed_ids_params_file" \
   "Skip Managed IDs (resourceToggles.managedIds=false)"
+
+# -----------------------------------------------------------------------------
+# Application Insights RBAC
+# -----------------------------------------------------------------------------
+COMMON_FILE="$common_file" \
+RESOURCE_CONFIG_FILE="$appi_rbac_config_file" \
+MANAGED_IDS_META_FILE="$managed_ids_meta_file" \
+APPI_META_FILE="$appi_meta_file" \
+PARAMS_DIR="$params_dir" \
+OUT_META_FILE="$appi_rbac_meta_file" \
+"$appi_rbac_script"
+
+appi_rbac_deploy="$(meta_bool "$appi_rbac_meta_file" "deploy")"
+
+appi_rbac_params_file="$(meta_get "$appi_rbac_meta_file" "paramsFile")"
+
+deploy_group_if_enabled \
+  "$appi_rbac_deploy" \
+  "Deploy Application Insights RBAC" \
+  "application-insights-rbac" \
+  "main-monitor-application-insights-rbac-${timestamp}" \
+  "$resource_group_name" \
+  "$appi_rbac_params_file" \
+  "Skip Application Insights RBAC (resourceToggles.applicationInsights=false or required managed identities not found)"
 
 # -----------------------------------------------------------------------------
 # Application Gateway

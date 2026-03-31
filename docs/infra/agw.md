@@ -47,15 +47,20 @@ AKS addon AGIC は使わず、`infra/main.sh` で Helm リリースを導入し�
 | `agic-standard` | `azure-application-gateway` | 通常系 AppGW | `agic-standard-sa-ingress-azure` |
 | `agic-lowlatency` | `azure-application-gateway-low-latency` | 低遅延系 AppGW | `agic-lowlatency-sa-ingress-azure` |
 
-## RBAC（App Gateway 更新権限）
+## RBAC（App Gateway / Subnet 更新権限）
 
-`main.application-gateway-rbac.bicep` で AGIC 用 Managed Identity に `AppGateway Contributor` を付与します。
+`main.application-gateway-rbac.bicep` で AGIC 用 Managed Identity に App Gateway 更新権限と、Application Gateway 用サブネットの join 権限を付与します。
 Managed Identity 自体は `main.managed-ids.bicep` で先に作成されます。
 
 | Managed Identity | 付与対象 |
 | --- | --- |
-| `mi-[env]-[system]-agic-standard` | 通常系 App Gateway |
-| `mi-[env]-[system]-agic-lowlatency` | 低遅延系 App Gateway（オプション有効時） |
+| `mi-[env]-[system]-agic-standard` | 通常系 App Gateway, `ApplicationGatewaySubnet` |
+| `mi-[env]-[system]-agic-lowlatency` | 低遅延系 App Gateway, `ApplicationGatewayLowLatencySubnet`（オプション有効時） |
+
+付与ロール:
+
+- App Gateway スコープ: `Contributor`
+- Subnet スコープ: `Network Contributor`
 
 ## 低遅延系の意図
 

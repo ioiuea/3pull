@@ -41,13 +41,13 @@ AKS 上の workload とコントローラ（AGIC/KEDA）、および maint-vm �
 | acr-admin | - | - | - | - | - | - | AcrPush |
 | kv-admin | Secrets Officer | - | - | - | - | - | - |
 | keda-operator | - | Data Receiver | - | - | - | - | - |
-| agic-standard | - | - | - | - | AppGateway Contributor（通常系） | - | - |
-| agic-lowlatency | - | - | - | - | AppGateway Contributor（低遅延系） | - | - |
+| agic-standard | - | - | - | - | Contributor（通常系 AppGW）+ Network Contributor（ApplicationGatewaySubnet） | - | - |
+| agic-lowlatency | - | - | - | - | Contributor（低遅延系 AppGW）+ Network Contributor（ApplicationGatewayLowLatencySubnet） | - | - |
 
 補足:
 
 - keda-operator MI は Service Bus の監視用途に限定し、Key Vault/Storage 権限は付与しません。
-- AGIC MI は App Gateway 更新専用です。
+- AGIC MI は App Gateway 更新に加えて、対応する Application Gateway サブネットへの join/action を行うため subnet スコープの `Network Contributor` を持ちます。
 - migration MI は maint-vm 上で Azure SQL bootstrap / Alembic 実行に利用します。
 - redis-ops MI は maint-vm 上で Azure Managed Redis の block key 確認・解除に利用します。
 - aks-operator MI は maint-vm 上で日常運用の `az aks get-credentials`、`kubectl`、`helm` を実行する principal です。

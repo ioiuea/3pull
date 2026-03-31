@@ -449,6 +449,7 @@ Kubernetes Service（ClusterIP）用の IP 範囲（CIDR）です。
   - backend は通常系 / 低遅延系の 2 系統
   - frontend は通常系のみ
 - backend chart は KEDA 用の `TriggerAuthentication` / `ScaledObject` を持ち、values 生成時に `keda.workloadIdentity.clientId` を自動反映します
+- backend workloads が Application Insights へ Entra 認証で telemetry を送れるよう、`main.application-insights-rbac.bicep` で API / worker / schedulers MI に `Monitoring Metrics Publisher` を付与します
 - AGIC 用 namespace はアプリ namespace と分離可能で、`ingress` 専用 namespace を使う前提で bootstrap できます
 - 公開方針は以下を前提にします
   - 通常系 / 低遅延系はドメインで分離する

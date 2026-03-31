@@ -21,6 +21,16 @@
 - メトリック: `AllMetrics`（`timeGrain: PT1M`）
 - 送信先: Log Analytics（`log-[common.environmentName]-[common.systemName]`）
 
+## RBAC
+
+- API / worker / schedulers の各 Managed Identity に対して、Application Insights スコープで `Monitoring Metrics Publisher` を付与します。
+- 対象 Managed Identity:
+  - `mi-[common.environmentName]-[common.systemName]-api`
+  - `mi-[common.environmentName]-[common.systemName]-worker`
+  - `mi-[common.environmentName]-[common.systemName]-schedulers`
+- ロール付与は `main.application-insights-rbac.bicep` で行います。
+- `main.sh` では Application Insights 本体と Managed Identity 作成後に RBAC を適用します。
+
 ## 削除ロック
 
 - Application Insights 本体に削除ロックを適用します。
@@ -48,3 +58,4 @@
 - `resourceToggles.applicationInsights=true` の場合のみデプロイします。
 - 設定値（保持日数 / IngestionMode など）は本設計書の固定値を使用します。
 - 生成パラメータは `infra/params/application-insights.bicepparam` に出力されます。
+- RBAC 用の生成パラメータは `infra/params/application-insights-rbac.bicepparam` に出力されます。

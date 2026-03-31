@@ -41,6 +41,7 @@ config_path = Path(os.environ["RESOURCE_CONFIG_FILE"])
 managed_ids_meta_path = Path(os.environ["MANAGED_IDS_META_FILE"])
 application_gateway_meta_path = Path(os.environ["APPLICATION_GATEWAY_META_FILE"])
 application_gateway_low_latency_meta_path = Path(os.environ["APPLICATION_GATEWAY_LOW_LATENCY_META_FILE"])
+subnets_config_path = Path(os.environ["SUBNETS_CONFIG_FILE"])
 params_dir = Path(os.environ["PARAMS_DIR"])
 out_meta_path = Path(os.environ["OUT_META_FILE"])
 
@@ -49,6 +50,7 @@ config = json.loads(config_path.read_text(encoding="utf-8"))
 managed_ids_meta = json.loads(managed_ids_meta_path.read_text(encoding="utf-8"))
 application_gateway_meta = json.loads(application_gateway_meta_path.read_text(encoding="utf-8"))
 application_gateway_low_latency_meta = json.loads(application_gateway_low_latency_meta_path.read_text(encoding="utf-8"))
+subnets_config = json.loads(subnets_config_path.read_text(encoding="utf-8"))
 
 common_values = common.get("common", {})
 network_values = common.get("network", {})
@@ -62,6 +64,7 @@ if not environment_name or not system_name:
     )
 
 enable_low_latency_subnet = bool(network_values.get("enableLowLatencyApplicationGatewaySubnet", False))
+virtual_network_name = f"vnet-{environment_name}-{system_name}"
 
 application_gateway_resource_group_name = application_gateway_meta.get(
     "resourceGroupName", f"rg-{environment_name}-{system_name}-nw"
@@ -81,6 +84,27 @@ agic_standard_managed_identity_name = f"mi-{environment_name}-{system_name}-agic
 agic_low_latency_managed_identity_name = f"mi-{environment_name}-{system_name}-agic-lowlatency"
 app_gateway_contributor_role_definition_id = config.get(
     "appGatewayContributorRoleDefinitionId", "b24988ac-6180-42a0-ab88-20f7382dd24c"
+)
+network_contributor_role_definition_id = config.get(
+    "networkContributorRoleDefinitionId", "4d97b98b-1d4f-4787-a291-c67834d212e7"
+)
+
+subnet_definitions = subnets_config.get("subnetDefinitions", [])
+standard_application_gateway_subnet_name = next(
+    (
+        str(subnet.get("name", "")).strip()
+        for subnet in subnet_definitions
+        if subnet.get("alias") == "agic"
+    ),
+    "ApplicationGatewaySubnet",
+)
+low_latency_application_gateway_subnet_name = next(
+    (
+        str(subnet.get("name", "")).strip()
+        for subnet in subnet_definitions
+        if subnet.get("alias") == "agicll"
+    ),
+    "ApplicationGatewayLowLatencySubnet",
 )
 
 has_standard_agic_identity = identity_exists(
@@ -104,8 +128,12 @@ lines = [
     f"param agicLowLatencyManagedIdentityName = {quote(agic_low_latency_managed_identity_name)}",
     f"param standardApplicationGatewayName = {quote(standard_application_gateway_name)}",
     f"param lowLatencyApplicationGatewayName = {quote(low_latency_application_gateway_name)}",
+    f"param virtualNetworkName = {quote(virtual_network_name)}",
+    f"param standardApplicationGatewaySubnetName = {quote(standard_application_gateway_subnet_name)}",
+    f"param lowLatencyApplicationGatewaySubnetName = {quote(low_latency_application_gateway_subnet_name)}",
     f"param enableLowLatencyApplicationGatewaySubnet = {'true' if enable_low_latency_subnet else 'false'}",
     f"param appGatewayContributorRoleDefinitionId = {quote(app_gateway_contributor_role_definition_id)}",
+    f"param networkContributorRoleDefinitionId = {quote(network_contributor_role_definition_id)}",
     "",
 ]
 params_file.write_text("\n".join(lines), encoding="utf-8")
