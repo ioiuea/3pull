@@ -1,4 +1,11 @@
 {{- if and .Values.ingress.enabled .Values.api.enabled .Values.ingress.standard.host }}
+{{- $standardAnnotations := dict }}
+{{- if .Values.ingress.standard.ingressClassName }}
+{{- $_ := set $standardAnnotations "kubernetes.io/ingress.class" .Values.ingress.standard.ingressClassName }}
+{{- end }}
+{{- range $key, $value := .Values.ingress.standard.annotations }}
+{{- $_ := set $standardAnnotations $key $value }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -7,9 +14,9 @@ metadata:
   labels:
     {{- include "backend.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
-  {{- with .Values.ingress.standard.annotations }}
+  {{- if gt (len $standardAnnotations) 0 }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml $standardAnnotations | nindent 4 }}
   {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.standard.ingressClassName }}
@@ -39,6 +46,13 @@ spec:
 ---
 {{- end }}
 {{- if and .Values.ingress.enabled .Values.api.enabled .Values.ingress.lowLatency.enabled .Values.ingress.lowLatency.host }}
+{{- $lowLatencyAnnotations := dict }}
+{{- if .Values.ingress.lowLatency.ingressClassName }}
+{{- $_ := set $lowLatencyAnnotations "kubernetes.io/ingress.class" .Values.ingress.lowLatency.ingressClassName }}
+{{- end }}
+{{- range $key, $value := .Values.ingress.lowLatency.annotations }}
+{{- $_ := set $lowLatencyAnnotations $key $value }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -47,9 +61,9 @@ metadata:
   labels:
     {{- include "backend.labels" . | nindent 4 }}
     app.kubernetes.io/component: api
-  {{- with .Values.ingress.lowLatency.annotations }}
+  {{- if gt (len $lowLatencyAnnotations) 0 }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml $lowLatencyAnnotations | nindent 4 }}
   {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.lowLatency.ingressClassName }}

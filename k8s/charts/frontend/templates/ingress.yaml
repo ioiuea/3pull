@@ -1,4 +1,11 @@
 {{- if and .Values.ingress.enabled .Values.frontend.enabled .Values.ingress.standard.host }}
+{{- $standardAnnotations := dict }}
+{{- if .Values.ingress.standard.ingressClassName }}
+{{- $_ := set $standardAnnotations "kubernetes.io/ingress.class" .Values.ingress.standard.ingressClassName }}
+{{- end }}
+{{- range $key, $value := .Values.ingress.standard.annotations }}
+{{- $_ := set $standardAnnotations $key $value }}
+{{- end }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -7,9 +14,9 @@ metadata:
   labels:
     {{- include "frontend.labels" . | nindent 4 }}
     app.kubernetes.io/component: web
-  {{- with .Values.ingress.standard.annotations }}
+  {{- if gt (len $standardAnnotations) 0 }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- toYaml $standardAnnotations | nindent 4 }}
   {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.standard.ingressClassName }}
