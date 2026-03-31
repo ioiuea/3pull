@@ -341,12 +341,11 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    az account show
    ```
 
-26. 生成済み Helm values を確認する
-   `infra/main.sh` の post 処理で生成された `k8s/charts/*/values.yaml` を確認し、Ingress の host 名、ACR repository、Key Vault 名などが想定どおりになっているかを見ます。
+26. 生成済み backend Helm values を確認する
+   `infra/main.sh` の post 処理で生成された `k8s/charts/backend/values.yaml` を確認し、Ingress の host 名、ACR repository、Key Vault 名などが想定どおりになっているかを見ます。
 
    ```bash
    vi /home/maintadmin/3pull/k8s/charts/backend/values.yaml
-   vi /home/maintadmin/3pull/k8s/charts/frontend/values.yaml
    ```
 
 27. backend chart を render / dry-run で確認する
@@ -396,7 +395,14 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 ### アプリ（frontend）のデプロイ
 
-29. frontend chart を render / dry-run で確認する
+29. 生成済み frontend Helm values を確認する
+   `infra/main.sh` の post 処理で生成された `k8s/charts/frontend/values.yaml` を確認し、Ingress の host 名や ACR repository などが想定どおりになっているかを見ます。
+
+   ```bash
+   vi /home/maintadmin/3pull/k8s/charts/frontend/values.yaml
+   ```
+
+30. frontend chart を render / dry-run で確認する
    backend の次に frontend を確認します。
 
    ```bash
@@ -412,7 +418,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
      --dry-run
    ```
 
-30. frontend chart を deploy する
+31. frontend chart を deploy する
    frontend の Deployment / Ingress を適用します。
 
    ```bash
@@ -440,20 +446,20 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 ### 公開ドメインの設定
 
-31. 公開ドメイン用の証明書を App Gateway へ登録する
+32. 公開ドメイン用の証明書を App Gateway へ登録する
    公開 TLS 終端は Application Gateway に寄せる方針です。  
    初回手順では、証明書の登録は手動で行います。  
    対象の証明書は、frontend / backend で使用する公開ドメインに対応したものを用意してください。
 
-32. Ingress の host 名と証明書設定を最終確認する
+33. Ingress の host 名と証明書設定を最終確認する
    `k8s/charts/backend/values.yaml` と `k8s/charts/frontend/values.yaml` の host 名が、実際に公開するドメインと一致していることを確認します。  
    現状の chart では証明書名の annotation は未定義のため、App Gateway 側の listener / rule 構成と合わせて運用してください。
 
-33. 公開 DNS を切り替える
+34. 公開 DNS を切り替える
    App Gateway の Public IP を向くように、公開 DNS レコードを設定します。  
    frontend / backend の host 名に対して、それぞれ想定する Public IP へ名前解決されるようにします。
 
-34. 疎通確認を行う
+35. 疎通確認を行う
    公開 URL と Pod 状態を確認し、アプリが正常に応答するかを見ます。
 
    ```bash
@@ -463,7 +469,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    curl -I https://api.example.com/backend/health
    ```
 
-35. 今後の CI/CD 方針
+36. 今後の CI/CD 方針
    現時点の正式フローは、メンテナンス VM で build / push / deploy を実行する暫定運用です。  
    将来的には、Docker image の build / push を GitHub Actions、AKS への deploy をメンテナンス VM または self-hosted runner 側へ寄せる構成を想定します。
 
