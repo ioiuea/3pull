@@ -115,65 +115,9 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    /home/maintadmin/3pull/scripts/init/maintvm/setup.sh
    ```
 
-### AKSの初期セットアップ
-
-10. AKS 管理用マネージド ID でログインする
-   `mi-<environmentName>-<systemName>-aks-admin` の client ID を Azure Portal で確認して置き換えます。
-
-   ```bash
-   az login --identity --client-id "00000000-0000-0000-0000-000000000000"
-   ```
-
-11. AGIC コントローラをインストールする
-   AKS addon は使わず、生成された Helm スクリプトで AGIC を導入します。
-
-   ```bash
-   /home/maintadmin/3pull/scripts/init/agicController/deploy.sh
-   ```
-
-   よく使う確認 / 調査コマンド:
-
-   ```bash
-   helm list -n ingress
-   kubectl logs -n ingress deploy/agic-standard-ingress-azure
-   kubectl logs -n ingress deploy/agic-lowlatency-ingress-azure
-   kubectl get pods -n ingress -o wide
-   kubectl get deployment -n ingress
-   ```
-
-   アンインストールコマンド:
-
-   ```bash
-   helm uninstall agic-standard -n ingress --no-hooks
-   helm uninstall agic-lowlatency -n ingress --no-hooks
-   ```
-
-12. KEDA コントローラをインストールする
-   KEDA も AKS addon は使わず、生成された Helm スクリプトで導入します。
-
-   ```bash
-   /home/maintadmin/3pull/scripts/init/kedaController/deploy.sh
-   ```
-
-   よく使う確認 / 調査コマンド:
-
-   ```bash
-   helm list -n keda
-   kubectl get pods -n keda -o wide
-   kubectl get deployment -n keda
-   kubectl get secret -n keda kedaorg-certs
-   kubectl logs -n keda deploy/keda-operator --tail=100
-   ```
-
-   作業後は、別の Managed Identity へ切り替える前にログアウトします。
-
-   ```bash
-   az logout
-   ```
-
 ### SQL Databaseの初期セットアップ
 
-13. SQL 用マネージド ID でログインする
+10. SQL 用マネージド ID でログインする
    `mi-<environmentName>-<systemName>-migration` の client ID を Azure Portal で確認して置き換えます。  
    このログインでは `--allow-no-subscriptions` が必要です。
 
@@ -181,11 +125,11 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    az login --identity --client-id "00000000-0000-0000-0000-000000000000" --allow-no-subscriptions
    ```
 
-14. SQL Server の Entra 管理者を一時的に migration MI に変更する
+11. SQL Server の Entra 管理者を一時的に migration MI に変更する
    SQL Server へ Entra 認証で接続し、初期 schema と principal を作成するために必要です。  
    対象は `mi-<environmentName>-<systemName>-migration` です。
 
-15. SQL スキーマと principal を作成する
+12. SQL スキーマと principal を作成する
    生成済みの [`scripts/init/sql/deploy.sh`](/Users/hiroki.ueda/Dev/3pull/scripts/init/sql/deploy.sh) を実行します。  
    実行後は schema / principal / role 付与状況の確認結果も標準出力に表示されます。
 
@@ -201,7 +145,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 ### Databaseの初期マイグレーション
 
-16. backend の依存関係をインストールする
+13. backend の依存関係をインストールする
    Alembic migration 実行前に Python 依存関係を揃えます。`pyodbc` が import できることまで確認します。
 
    ```bash
@@ -210,7 +154,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    uv run python -c "import pyodbc; print(pyodbc.version)"
    ```
 
-17. 環境変数を設定する
+14. 環境変数を設定する
    `.env.example` を複製して `.env` を作成し、Azure SQL Database の接続先に合わせて更新します。
 
    ```bash
@@ -222,7 +166,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    DATABASE_URL=mssql+pyodbc://@your-sql-server.database.windows.net/your-database-name?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no
    ```
 
-18. マイグレーションを実行する
+15. マイグレーションを実行する
    バックエンドの初期テーブルを作成します。
 
    ```bash
@@ -230,12 +174,12 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    make alembic-upgrade
    ```
 
-19. SQL Server の Entra 管理者設定を元に戻す
+16. SQL Server の Entra 管理者設定を元に戻す
    初期構築で一時的に migration MI へ切り替えていた場合は、[`infra/common.parameter.json`](/Users/hiroki.ueda/Dev/3pull/infra/common.parameter.json) で管理している本来の Entra 管理者へ戻します。
 
 ### Dockerイメージの準備
 
-20. コンテナイメージ用のタグを決める
+17. コンテナイメージ用のタグを決める
    Docker image の build / push と Helm deploy で同じ tag を使います。  
    運用方針としては Git commit SHA を tag に使う前提にします。
 
@@ -245,7 +189,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    echo "$IMAGE_TAG"
    ```
 
-21. ACR 用マネージド ID でログインする
+18. ACR 用マネージド ID でログインする
    `mi-<environmentName>-<systemName>-acr-admin` の client ID を Azure Portal で確認して置き換えます。  
    Docker image の build / push と `az acr login` は、この principal で実行します。
 
@@ -253,7 +197,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    az login --identity --client-id "00000000-0000-0000-0000-000000000000"
    ```
 
-22. Docker image の build / push スクリプトを実行する
+19. Docker image の build / push スクリプトを実行する
    `infra/main.sh` の post 処理で生成された [`scripts/init/docker/deploy.sh`](/Users/hiroki.ueda/Dev/3pull/scripts/init/docker/deploy.sh) を使います。  
    実行時に必要なのは `IMAGE_TAG` と frontend build 用の 3 つの環境変数だけです。  
    ACR ログイン、`make docker-build`、`make docker-push`、push 後の確認コマンドはスクリプト内で実行されます。
@@ -274,7 +218,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 ### KeyVaultへのシークレット登録
 
-23. Key Vault 用マネージド ID でログインする
+20. Key Vault 用マネージド ID でログインする
    `mi-<environmentName>-<systemName>-kv-admin` の client ID を Azure Portal で確認して置き換えます。  
    Key Vault への secret 登録・更新は、この principal で実行します。
 
@@ -282,7 +226,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    az login --identity --client-id "00000000-0000-0000-0000-000000000000"
    ```
 
-24. Key Vault へシークレット値を登録する
+21. Key Vault へシークレット値を登録する
    backend chart は Key Vault を前提に起動するため、Helm deploy 前に登録します。  
    Key Vault 名は `kv-<environmentName>-<systemName>` を置き換えてください。
 
@@ -330,7 +274,63 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    az logout
    ```
 
-### アプリのデプロイ
+### AKSの初期セットアップ
+
+22. AKS 管理用マネージド ID でログインする
+   `mi-<environmentName>-<systemName>-aks-admin` の client ID を Azure Portal で確認して置き換えます。
+
+   ```bash
+   az login --identity --client-id "00000000-0000-0000-0000-000000000000"
+   ```
+
+23. AGIC コントローラをインストールする
+   AKS addon は使わず、生成された Helm スクリプトで AGIC を導入します。
+
+   ```bash
+   /home/maintadmin/3pull/scripts/init/agicController/deploy.sh
+   ```
+
+   よく使う確認 / 調査コマンド:
+
+   ```bash
+   helm list -n ingress
+   kubectl logs -n ingress deploy/agic-standard-ingress-azure
+   kubectl logs -n ingress deploy/agic-lowlatency-ingress-azure
+   kubectl get pods -n ingress -o wide
+   kubectl get deployment -n ingress
+   ```
+
+   アンインストールコマンド:
+
+   ```bash
+   helm uninstall agic-standard -n ingress --no-hooks
+   helm uninstall agic-lowlatency -n ingress --no-hooks
+   ```
+
+24. KEDA コントローラをインストールする
+   KEDA も AKS addon は使わず、生成された Helm スクリプトで導入します。
+
+   ```bash
+   /home/maintadmin/3pull/scripts/init/kedaController/deploy.sh
+   ```
+
+   よく使う確認 / 調査コマンド:
+
+   ```bash
+   helm list -n keda
+   kubectl get pods -n keda -o wide
+   kubectl get deployment -n keda
+   kubectl get secret -n keda kedaorg-certs
+   kubectl logs -n keda deploy/keda-operator --tail=100
+   ```
+
+   作業後は、別の Managed Identity へ切り替える前にログアウトします。
+
+   ```bash
+   az logout
+   ```
+
+### アプリ（backend）のデプロイ
 
 25. AKS 管理用マネージド ID でログインする
    `kubectl` / `helm` で AKS を操作する前に、AKS 管理用の Managed Identity で `az login` します。  
@@ -393,6 +393,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    kubectl get ingress -n application
    kubectl logs -n application deploy/r-<systemName>-api --tail=100
    ```
+
+### アプリ（frontend）のデプロイ
 
 29. frontend chart を render / dry-run で確認する
    backend の次に frontend を確認します。
