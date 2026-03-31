@@ -378,8 +378,6 @@ standard_api_host = f"api-{environment_name}-{system_name}.example.com"
 low_latency_api_host = f"ll-api-{environment_name}-{system_name}.example.com"
 enable_low_latency_subnet = bool(network_values.get("enableLowLatencyApplicationGatewaySubnet", False))
 trusted_proxy_cidrs = resolve_trusted_proxy_cidrs(common=common, subnets_config=subnets_config)
-trusted_proxy_headers = bool(common.get("resourceToggles", {}).get("applicationGateway", True))
-
 replacements = {
     "systemName": yaml_quote(system_name),
     "ingress.standard.host": yaml_quote(standard_api_host),
@@ -391,6 +389,7 @@ replacements = {
     "workers.*.image.tag": yaml_quote("__IMAGE_TAG__"),
     "schedulers.image.repository": yaml_quote(f"{image_prefix}/{system_image_name}-schedulers"),
     "schedulers.image.tag": yaml_quote("__IMAGE_TAG__"),
+    "keda.triggerAuthenticationName": yaml_quote(f"r-{system_image_name}-worker-trigger-auth"),
     "keda.workloadIdentity.clientId": yaml_quote(keda_operator_client_id),
     "keyVault.vaultName": yaml_quote(f"kv-{environment_name}-{system_name}"),
     "keyVault.tenantId": yaml_quote(tenant_id),
@@ -407,7 +406,7 @@ replacements = {
     "config.env.REDIS_HOST": yaml_quote(redis_host),
     "config.env.REDIS_PORT": yaml_quote(str(redis_port)),
     "config.env.REDIS_SSL": yaml_quote("true"),
-    "config.env.TRUST_PROXY_HEADERS": yaml_quote("true" if trusted_proxy_headers else "false"),
+    "config.env.TRUST_PROXY_HEADERS": yaml_quote("true"),
     "config.env.TRUSTED_PROXY_CIDRS": yaml_quote(",".join(trusted_proxy_cidrs)),
     "config.env.ENTRA_TENANT_ID": yaml_quote("00000000-0000-0000-0000-000000000000"),
     "config.env.ENTRA_CLIENT_ID": yaml_quote("00000000-0000-0000-0000-000000000000"),

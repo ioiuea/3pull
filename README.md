@@ -165,6 +165,12 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    kubectl logs -n keda deploy/keda-operator --tail=100
    ```
 
+   作業後は、別の Managed Identity へ切り替える前にログアウトします。
+
+   ```bash
+   az logout
+   ```
+
 ### SQL Databaseの初期セットアップ
 
 13. SQL 用マネージド ID でログインする
@@ -185,6 +191,12 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
    ```bash
    /home/maintadmin/3pull/scripts/init/sql/deploy.sh
+   ```
+
+   作業後は、別の Managed Identity へ切り替える前にログアウトします。
+
+   ```bash
+   az logout
    ```
 
 ### Databaseの初期マイグレーション
@@ -254,6 +266,12 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    ./scripts/init/docker/deploy.sh
    ```
 
+   作業後は、別の Managed Identity へ切り替える前にログアウトします。
+
+   ```bash
+   az logout
+   ```
+
 ### KeyVaultへのシークレット登録
 
 23. Key Vault 用マネージド ID でログインする
@@ -306,9 +324,24 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    az keyvault secret set --vault-name "$KEY_VAULT_NAME" --name entra-token-encryption-key --value '<EntraTokenEncryptionKey>'
    ```
 
+   作業後は、別の Managed Identity へ切り替える前にログアウトします。
+
+   ```bash
+   az logout
+   ```
+
 ### アプリのデプロイ
 
-25. 生成済み Helm values を確認する
+25. AKS 管理用マネージド ID でログインする
+   `kubectl` / `helm` で AKS を操作する前に、AKS 管理用の Managed Identity で `az login` します。  
+   `mi-<environmentName>-<systemName>-aks-admin` の client ID を Azure Portal で確認し、置き換えてください。
+
+   ```bash
+   az login --identity --client-id "00000000-0000-0000-0000-000000000000"
+   az account show
+   ```
+
+26. 生成済み Helm values を確認する
    `infra/main.sh` の post 処理で生成された `k8s/charts/*/values.yaml` を確認し、Ingress の host 名、ACR repository、Key Vault 名などが想定どおりになっているかを見ます。
 
    ```bash
@@ -316,18 +349,18 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    vi /home/maintadmin/3pull/k8s/charts/frontend/values.yaml
    ```
 
-26. backend chart を render / dry-run で確認する
+27. backend chart を render / dry-run で確認する
    先に backend を確認します。  
    初回 deploy の切り分けをしやすくするため、backend を先に deploy する方針です。
 
    ```bash
    cd /home/maintadmin/3pull
    helm template 3pull-backend ./k8s/charts/backend \
-     -n 3pull \
+     -n application \
      -f ./k8s/charts/backend/values.yaml
 
    helm upgrade --install 3pull-backend ./k8s/charts/backend \
-     -n 3pull \
+     -n application \
      --create-namespace \
      -f ./k8s/charts/backend/values.yaml \
      --set api.image.tag="$IMAGE_TAG" \
@@ -337,12 +370,12 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
      --dry-run
    ```
 
-27. backend chart を deploy する
+28. backend chart を deploy する
    backend 側の Deployment / KEDA / Ingress を適用します。
 
    ```bash
    helm upgrade --install 3pull-backend ./k8s/charts/backend \
-     -n 3pull \
+     -n application \
      --create-namespace \
      -f ./k8s/charts/backend/values.yaml \
      --set api.image.tag="$IMAGE_TAG" \
@@ -354,34 +387,34 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    確認コマンド:
 
    ```bash
-   helm list -n 3pull
-   kubectl get pods -n 3pull -o wide
-   kubectl get ingress -n 3pull
-   kubectl logs -n 3pull deploy/r-<systemName>-api --tail=100
+   helm list -n application
+   kubectl get pods -n application -o wide
+   kubectl get ingress -n application
+   kubectl logs -n application deploy/r-<systemName>-api --tail=100
    ```
 
-28. frontend chart を render / dry-run で確認する
+29. frontend chart を render / dry-run で確認する
    backend の次に frontend を確認します。
 
    ```bash
    helm template 3pull-frontend ./k8s/charts/frontend \
-     -n 3pull \
+     -n application \
      -f ./k8s/charts/frontend/values.yaml
 
    helm upgrade --install 3pull-frontend ./k8s/charts/frontend \
-     -n 3pull \
+     -n application \
      --create-namespace \
      -f ./k8s/charts/frontend/values.yaml \
      --set frontend.image.tag="$IMAGE_TAG" \
      --dry-run
    ```
 
-29. frontend chart を deploy する
+30. frontend chart を deploy する
    frontend の Deployment / Ingress を適用します。
 
    ```bash
    helm upgrade --install 3pull-frontend ./k8s/charts/frontend \
-     -n 3pull \
+     -n application \
      --create-namespace \
      -f ./k8s/charts/frontend/values.yaml \
      --set frontend.image.tag="$IMAGE_TAG"
@@ -390,38 +423,44 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    確認コマンド:
 
    ```bash
-   helm list -n 3pull
-   kubectl get pods -n 3pull -o wide
-   kubectl get ingress -n 3pull
-   kubectl logs -n 3pull deploy/r-<systemName>-web --tail=100
+   helm list -n application
+   kubectl get pods -n application -o wide
+   kubectl get ingress -n application
+   kubectl logs -n application deploy/r-<systemName>-web --tail=100
+   ```
+
+   作業後は、別の Managed Identity へ切り替える前にログアウトします。
+
+   ```bash
+   az logout
    ```
 
 ### 公開ドメインの設定
 
-30. 公開ドメイン用の証明書を App Gateway へ登録する
+31. 公開ドメイン用の証明書を App Gateway へ登録する
    公開 TLS 終端は Application Gateway に寄せる方針です。  
    初回手順では、証明書の登録は手動で行います。  
    対象の証明書は、frontend / backend で使用する公開ドメインに対応したものを用意してください。
 
-31. Ingress の host 名と証明書設定を最終確認する
+32. Ingress の host 名と証明書設定を最終確認する
    `k8s/charts/backend/values.yaml` と `k8s/charts/frontend/values.yaml` の host 名が、実際に公開するドメインと一致していることを確認します。  
    現状の chart では証明書名の annotation は未定義のため、App Gateway 側の listener / rule 構成と合わせて運用してください。
 
-32. 公開 DNS を切り替える
+33. 公開 DNS を切り替える
    App Gateway の Public IP を向くように、公開 DNS レコードを設定します。  
    frontend / backend の host 名に対して、それぞれ想定する Public IP へ名前解決されるようにします。
 
-33. 疎通確認を行う
+34. 疎通確認を行う
    公開 URL と Pod 状態を確認し、アプリが正常に応答するかを見ます。
 
    ```bash
-   kubectl get pods -n 3pull
-   kubectl get ingress -n 3pull
+   kubectl get pods -n application
+   kubectl get ingress -n application
    curl -I https://app.example.com
    curl -I https://api.example.com/backend/health
    ```
 
-34. 今後の CI/CD 方針
+35. 今後の CI/CD 方針
    現時点の正式フローは、メンテナンス VM で build / push / deploy を実行する暫定運用です。  
    将来的には、Docker image の build / push を GitHub Actions、AKS への deploy をメンテナンス VM または self-hosted runner 側へ寄せる構成を想定します。
 
