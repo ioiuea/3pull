@@ -300,12 +300,70 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    kubectl get deployment -n ingress
    ```
 
+   調査の見方:
+
+   - `helm list -n ingress`
+     - AGIC の Helm release (`agic-standard`, `agic-lowlatency`) が deploy 済みかを確認します。
+   - `kubectl logs -n ingress deploy/agic-standard-ingress-azure`
+     - standard 側 AGIC が App Gateway 更新時に失敗していないか、`Applied generated Application Gateway configuration` や権限エラーの有無を確認します。
+   - `kubectl logs -n ingress deploy/agic-lowlatency-ingress-azure`
+     - low latency 側 AGIC について同様に確認します。
+   - `kubectl get pods -n ingress -o wide`
+     - AGIC Pod が `Running` か、どの node に載っているかを確認します。
+   - `kubectl get deployment -n ingress`
+     - Deployment の desired/ready 数が一致しているかを確認します。
+
+   Ingress / AGIC の詳細調査コマンド:
+
+   ```bash
+   kubectl get pods -n ingress
+   kubectl logs -n ingress deploy/agic-standard-ingress-azure --tail=200
+   kubectl logs -n ingress deploy/agic-lowlatency-ingress-azure --tail=200
+   kubectl describe pod -n ingress <agic-standard-pod-name>
+   kubectl describe pod -n ingress <agic-lowlatency-pod-name>
+   helm get values agic-standard -n ingress
+   helm get values agic-lowlatency -n ingress
+   kubectl get ingressclass
+   kubectl describe ingressclass azure-application-gateway
+   kubectl describe ingressclass azure-application-gateway-low-latency
+   kubectl get deploy -n ingress agic-standard-ingress-azure -o yaml
+   kubectl get deploy -n ingress agic-lowlatency-ingress-azure -o yaml
+   ```
+
+   詳細調査の見方:
+
+   - `kubectl get pods -n ingress`
+     - AGIC Pod の簡易状態確認です。`describe pod` 前の入口として使います。
+   - `kubectl logs ... --tail=200`
+     - 直近の App Gateway 反映ログだけを短く確認したいときに使います。
+   - `kubectl describe pod -n ingress <pod-name>`
+     - イメージ pull 失敗、Workload Identity、readiness/liveness、Event を含めて Pod 単位で状態を見ます。
+   - `helm get values agic-standard -n ingress`
+     - standard 側 AGIC の `applicationGatewayID`、`ingressClass`、ServiceAccount 名など、実際の Helm 入力値を確認します。
+   - `helm get values agic-lowlatency -n ingress`
+     - low latency 側 AGIC の Helm 入力値を確認します。
+   - `kubectl get ingressclass`
+     - クラスタに `azure-application-gateway` 系の IngressClass が作成されているかを確認します。
+   - `kubectl describe ingressclass azure-application-gateway`
+     - standard 側 IngressClass の `controller` と release の紐付きを確認します。
+   - `kubectl describe ingressclass azure-application-gateway-low-latency`
+     - low latency 側 IngressClass を同様に確認します。
+   - `kubectl get deploy -n ingress ... -o yaml`
+     - AGIC Deployment の env / ServiceAccount / ConfigMap 参照など、実効設定を YAML で確認します。
+
    アンインストールコマンド:
 
    ```bash
    helm uninstall agic-standard -n ingress --no-hooks
    helm uninstall agic-lowlatency -n ingress --no-hooks
    ```
+
+   アンインストールの見方:
+
+   - `helm uninstall agic-standard -n ingress --no-hooks`
+     - standard 側 AGIC release を削除して再インストールしたいときに使います。
+   - `helm uninstall agic-lowlatency -n ingress --no-hooks`
+     - low latency 側 AGIC release を削除して再インストールしたいときに使います。
 
 24. KEDA コントローラをインストールする
    KEDA も AKS addon は使わず、生成された Helm スクリプトで導入します。
@@ -323,6 +381,47 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    kubectl get secret -n keda kedaorg-certs
    kubectl logs -n keda deploy/keda-operator --tail=100
    ```
+
+   調査の見方:
+
+   - `helm list -n keda`
+     - KEDA の Helm release が deploy 済みかを確認します。
+   - `kubectl get pods -n keda -o wide`
+     - KEDA Pod が `Running` か、どの node に載っているかを確認します。
+   - `kubectl get deployment -n keda`
+     - Deployment の desired/ready 数が一致しているかを確認します。
+   - `kubectl get secret -n keda kedaorg-certs`
+     - KEDA の証明書 Secret が作成されているかを確認します。
+   - `kubectl logs -n keda deploy/keda-operator --tail=100`
+     - KEDA operator の直近ログを見て、Azure 認証や ScaledObject 連携の失敗を確認します。
+
+   詳細調査コマンド:
+
+   ```bash
+   kubectl describe pod -n keda <keda-operator-pod-name>
+   kubectl get scaledobject -n application
+   kubectl get triggerauthentication -n application
+   ```
+
+   詳細調査の見方:
+
+   - `kubectl describe pod -n keda <keda-operator-pod-name>`
+     - KEDA operator Pod の Event、Workload Identity、イメージ pull 失敗などを確認します。
+   - `kubectl get scaledobject -n application`
+     - アプリ namespace 側で KEDA の ScaledObject が作成され、`READY` になっているかを確認します。
+   - `kubectl get triggerauthentication -n application`
+     - Azure Service Bus 連携用の `TriggerAuthentication` が作成されているかを確認します。
+
+   アンインストールコマンド:
+
+   ```bash
+   helm uninstall keda -n keda
+   ```
+
+   アンインストールの見方:
+
+   - `helm uninstall keda -n keda`
+     - KEDA release を削除して再インストールしたいときに使います。
 
    作業後は、別の Managed Identity へ切り替える前にログアウトします。
 
@@ -393,6 +492,40 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    kubectl logs -n application deploy/r-<systemName>-api --tail=100
    ```
 
+   調査の見方:
+
+   - `helm list -n application`
+     - backend / frontend release が deploy 済みかを確認します。
+   - `kubectl get pods -n application -o wide`
+     - backend API Pod や worker/schedulers の状態、Pod IP、配置 node を確認します。
+   - `kubectl get ingress -n application`
+     - backend 用 Ingress が作成されているかを確認します。`ADDRESS` が空でも、AGIC が App Gateway へ反映済みなら問題ないことがあります。
+   - `kubectl logs -n application deploy/r-<systemName>-api --tail=100`
+     - backend API の起動ログ、health check 応答、Application Insights 送信失敗などを確認します。
+
+   Ingress / manifest の詳細調査コマンド:
+
+   ```bash
+   kubectl describe ingress -n application r-<systemName>-api-standard
+   kubectl describe ingress -n application r-<systemName>-api-low-latency
+   kubectl get ingress -n application -o yaml
+   ```
+
+   詳細調査の見方:
+
+   - `kubectl describe ingress -n application r-<systemName>-api-standard`
+     - standard 側 Ingress の host / path / backend Service と Event を確認します。
+   - `kubectl describe ingress -n application r-<systemName>-api-low-latency`
+     - low latency 側 Ingress を同様に確認します。
+   - `kubectl get ingress -n application -o yaml`
+     - `ingressClassName` や `kubernetes.io/ingress.class` annotation が Helm render 想定どおりに入っているかを YAML で確認します。
+
+   アンインストールコマンド:
+
+   ```bash
+   helm uninstall 3pull-backend -n application
+   ```
+
 ### アプリ（frontend）のデプロイ
 
 29. 生成済み frontend Helm values を確認する
@@ -436,6 +569,12 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    kubectl get pods -n application -o wide
    kubectl get ingress -n application
    kubectl logs -n application deploy/r-<systemName>-web --tail=100
+   ```
+
+   アンインストールコマンド:
+
+   ```bash
+   helm uninstall 3pull-frontend -n application
    ```
 
    作業後は、別の Managed Identity へ切り替える前にログアウトします。

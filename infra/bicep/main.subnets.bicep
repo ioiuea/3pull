@@ -21,6 +21,7 @@ resource subnetCreate 'Microsoft.Network/virtualNetworks/subnets@2024-07-01' = [
       routeTable: null
       defaultOutboundAccess: false
       privateEndpointNetworkPolicies: subnet.?privateEndpointNetworkPolicies
+      delegations: subnet.?delegations
     }
   }
 ]

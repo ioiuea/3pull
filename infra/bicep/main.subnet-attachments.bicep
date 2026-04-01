@@ -29,6 +29,7 @@ resource subnetUpdate 'Microsoft.Network/virtualNetworks/subnets@2024-07-01' = [
             id: resourceId('Microsoft.Network/routeTables', subnet.routeTableName)
           }
       privateEndpointNetworkPolicies: subnet.?privateEndpointNetworkPolicies
+      delegations: subnet.?delegations
     }
   }
 ]

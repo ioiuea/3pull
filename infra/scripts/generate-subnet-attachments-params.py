@@ -171,6 +171,9 @@ for subnet in resolved_subnets:
         "networkSecurityGroupName": network_security_group_name,
         "routeTableName": route_table_name,
     }
+    original_subnet_def = next((s for s in subnet_defs if s["name"] == subnet["name"]), None)
+    if original_subnet_def and original_subnet_def.get("delegations"):
+        subnet_item["delegations"] = original_subnet_def["delegations"]
     if subnet["name"] == "PrivateEndpointSubnet":
         subnet_item["privateEndpointNetworkPolicies"] = "Enabled"
     subnets_for_update.append(subnet_item)

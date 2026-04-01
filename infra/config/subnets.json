@@ -24,12 +24,28 @@
     {
       "name": "ApplicationGatewaySubnet",
       "alias": "agic",
-      "prefixLength": 25
+      "prefixLength": 25,
+      "delegations": [
+        {
+          "name": "appGatewayDelegation",
+          "properties": {
+            "serviceName": "Microsoft.Network/applicationGateways"
+          }
+        }
+      ]
     },
     {
       "name": "ApplicationGatewayLowLatencySubnet",
       "alias": "agicll",
-      "prefixLength": 25
+      "prefixLength": 25,
+      "delegations": [
+        {
+          "name": "appGatewayDelegation",
+          "properties": {
+            "serviceName": "Microsoft.Network/applicationGateways"
+          }
+        }
+      ]
     },
     {
       "name": "AgentNodeSubnet",
