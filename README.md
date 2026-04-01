@@ -179,9 +179,8 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 ### Dockerイメージの準備
 
-17. コンテナイメージ用のタグを決める
-   Docker image の build / push と Helm deploy で同じ tag を使います。  
-   運用方針としては Git commit SHA を tag に使う前提にします。
+17. 今回使うコンテナイメージ用のタグを決める
+   Docker image の build / push に使う tag は Git commit SHA を tag に使う前提にします。
 
    ```bash
    cd /home/maintadmin/3pull
@@ -274,7 +273,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    az logout
    ```
 
-### AKSの初期セットアップ
+### AGICコントローラのデプロイ
 
 22. AKS 管理用マネージド ID でログインする
    `mi-<environmentName>-<systemName>-aks-admin` の client ID を Azure Portal で確認して置き換えます。
@@ -365,7 +364,22 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    - `helm uninstall agic-lowlatency -n ingress --no-hooks`
      - low latency 側 AGIC release を削除して再インストールしたいときに使います。
 
-24. KEDA コントローラをインストールする
+   作業後は、別の Managed Identity へ切り替える前にログアウトします。
+
+   ```bash
+   az logout
+   ```
+
+### KEDAコントローラのデプロイ
+
+24. AKS 管理用マネージド ID でログインする
+   `mi-<environmentName>-<systemName>-aks-admin` の client ID を Azure Portal で確認して置き換えます。
+
+   ```bash
+   az login --identity --client-id "00000000-0000-0000-0000-000000000000"
+   ```
+
+25. KEDA コントローラをインストールする
    KEDA も AKS addon は使わず、生成された Helm スクリプトで導入します。
 
    ```bash
@@ -431,7 +445,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 ### アプリ（backend）のデプロイ
 
-25. AKS 管理用マネージド ID でログインする
+26. AKS 管理用マネージド ID でログインする
    `kubectl` / `helm` で AKS を操作する前に、AKS 管理用の Managed Identity で `az login` します。  
    `mi-<environmentName>-<systemName>-aks-admin` の client ID を Azure Portal で確認し、置き換えてください。
 
@@ -440,19 +454,22 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    az account show
    ```
 
-26. 生成済み backend Helm values を確認する
+27. 生成済み backend Helm values を確認する
    `infra/main.sh` の post 処理で生成された `k8s/charts/backend/values.yaml` を確認し、Ingress の host 名、ACR repository、Key Vault 名などが想定どおりになっているかを見ます。
 
    ```bash
    vi /home/maintadmin/3pull/k8s/charts/backend/values.yaml
    ```
 
-27. backend chart を render / dry-run で確認する
+28. backend chart を render / dry-run で確認する
    先に backend を確認します。  
    初回 deploy の切り分けをしやすくするため、backend を先に deploy する方針です。
 
    ```bash
    cd /home/maintadmin/3pull
+   export IMAGE_TAG="$(git rev-parse --short HEAD)"
+   echo "$IMAGE_TAG"
+
    helm template 3pull-backend ./k8s/charts/backend \
      -n application \
      -f ./k8s/charts/backend/values.yaml
@@ -468,7 +485,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
      --dry-run
    ```
 
-28. backend chart を deploy する
+29. backend chart を deploy する
    backend 側の Deployment / KEDA / Ingress を適用します。
    事前に `infra/main.sh` で Application Insights RBAC まで適用済みであることを前提とします。
 
@@ -528,17 +545,21 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 ### アプリ（frontend）のデプロイ
 
-29. 生成済み frontend Helm values を確認する
+30. 生成済み frontend Helm values を確認する
    `infra/main.sh` の post 処理で生成された `k8s/charts/frontend/values.yaml` を確認し、Ingress の host 名や ACR repository などが想定どおりになっているかを見ます。
 
    ```bash
    vi /home/maintadmin/3pull/k8s/charts/frontend/values.yaml
    ```
 
-30. frontend chart を render / dry-run で確認する
+31. frontend chart を render / dry-run で確認する
    backend の次に frontend を確認します。
 
    ```bash
+   cd /home/maintadmin/3pull
+   export IMAGE_TAG="$(git rev-parse --short HEAD)"
+   echo "$IMAGE_TAG"
+
    helm template 3pull-frontend ./k8s/charts/frontend \
      -n application \
      -f ./k8s/charts/frontend/values.yaml
@@ -551,7 +572,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
      --dry-run
    ```
 
-31. frontend chart を deploy する
+32. frontend chart を deploy する
    frontend の Deployment / Ingress を適用します。
 
    ```bash
@@ -585,20 +606,20 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
 
 ### 公開ドメインの設定
 
-32. 公開ドメイン用の証明書を App Gateway へ登録する
+33. 公開ドメイン用の証明書を App Gateway へ登録する
    公開 TLS 終端は Application Gateway に寄せる方針です。  
    初回手順では、証明書の登録は手動で行います。  
    対象の証明書は、frontend / backend で使用する公開ドメインに対応したものを用意してください。
 
-33. Ingress の host 名と証明書設定を最終確認する
+34. Ingress の host 名と証明書設定を最終確認する
    `k8s/charts/backend/values.yaml` と `k8s/charts/frontend/values.yaml` の host 名が、実際に公開するドメインと一致していることを確認します。  
    現状の chart では証明書名の annotation は未定義のため、App Gateway 側の listener / rule 構成と合わせて運用してください。
 
-34. 公開 DNS を切り替える
+35. 公開 DNS を切り替える
    App Gateway の Public IP を向くように、公開 DNS レコードを設定します。  
    frontend / backend の host 名に対して、それぞれ想定する Public IP へ名前解決されるようにします。
 
-35. 疎通確認を行う
+36. 疎通確認を行う
    公開 URL と Pod 状態を確認し、アプリが正常に応答するかを見ます。
 
    ```bash
@@ -608,7 +629,7 @@ Azure 環境へインフラを構築し、メンテナンス VM から AKS / SQL
    curl -I https://api.example.com/backend/health
    ```
 
-36. 今後の CI/CD 方針
+37. 今後の CI/CD 方針
    現時点の正式フローは、メンテナンス VM で build / push / deploy を実行する暫定運用です。  
    将来的には、Docker image の build / push を GitHub Actions、AKS への deploy をメンテナンス VM または self-hosted runner 側へ寄せる構成を想定します。
 
