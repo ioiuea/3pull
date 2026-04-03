@@ -1,47 +1,37 @@
-# Ingress Fix Plan
+# ApplicationGatewaySubnet /24 化 変更整理
 
-## 背景
+## 目的
 
-現状の AKS は Azure CNI Overlay を採用している。
+このドキュメントは、`ApplicationGatewaySubnet` のサブネットプレフィクスを `/24` へ見直す作業にフォーカスして、影響範囲、想定作業、変更予定ファイルを整理するためのメモです。
 
-- `infra/common.parameter.json`
-  - `aks.podCidr: "10.189.0.0/17"`
-  - `aks.serviceCidr: "10.47.0.0/24"`
-- `infra/lib/post-actions.sh` で生成される `scripts/init/agicController/deploy.sh` は、AGIC Helm chart (`ingress-azure`) を使って App Gateway と AKS Ingress を連携する
-- AGIC は Kubernetes Ingress の backend Service を解決した結果として、App Gateway backend pool に Endpoint IP を登録する
-- Azure CNI Overlay では、その Endpoint IP は Pod IP になる
+既に対応済みの事項や、今回の変更対象ではない調査論点は含めません。
 
-今回確認できた事実:
+## 変更対象
 
-- Service
-  - `r-3pull-test-api -> 10.47.0.72:8000`
-  - `r-3pull-test-web -> 10.47.0.198:3000`
-- Endpoint / Pod
-  - `r-3pull-test-api -> 10.189.4.241:8000`
-  - `r-3pull-test-web -> 10.189.2.190:3000`
-- AGIC は Ingress を App Gateway に反映できている
-  - `Applied generated Application Gateway configuration`
-- しかし App Gateway health probe は Pod IP 宛で timeout している
+今回の主対象は以下です。
 
-参考: Microsoft Learn の AGIC 概要では、AGIC は Azure CNI Overlay をサポートするが、前提条件として以下が必要。
+- `ApplicationGatewaySubnet` を `/24` 化する
 
-- AGIC `v1.9.1+`
-- Application Gateway subnet は `maximum /24 prefix`
-- Application Gateway subnet に `Microsoft.Network/applicationGateways` の delegation
+今回の主対象外:
 
-https://learn.microsoft.com/en-us/azure/application-gateway/ingress-controller-overview
+- AGIC の導入方式変更
+- AGIC バージョン更新
+- Ingress manifest のルーティング仕様変更
+- backend / frontend アプリ実装変更
 
-## 現状のコード上の確認
+## 現状
 
-### 1. App Gateway subnet サイズ
+### サブネット定義
 
-現在の subnet 定義:
+現状の固定定義は以下です。
 
 - `infra/config/subnets.json`
-  - `ApplicationGatewaySubnet`: `/25`
-  - `ApplicationGatewayLowLatencySubnet`: `/25`
+  - `ApplicationGatewaySubnet`: `prefixLength = 24`
+  - `ApplicationGatewayLowLatencySubnet`: `prefixLength = 24`
 
-現在の VNet address space:
+### VNet address space
+
+現状の VNet address space は以下です。
 
 - `infra/common.parameter.json`
   - `10.189.128.0/24`
@@ -49,142 +39,205 @@ https://learn.microsoft.com/en-us/azure/application-gateway/ingress-controller-o
   - `10.189.130.0/24`
   - `10.189.131.0/24`
 
-つまり全体では `/22` 相当、1024 アドレス分。
+### 低遅延用 App Gateway サブネット
 
-現在の subnet 消費量:
+現状の `infra/common.parameter.json` では以下です。
 
-- Bastion `/26` = 64
-- Firewall `/26` = 64
-- Maintenance `/29` = 8
-- PrivateEndpoint `/26` = 64
-- AppGateway `/25` = 128
-- AppGatewayLowLatency `/25` = 128
-- AgentNode `/26` = 64
-- UserNode `/24` = 256
+- `network.enableLowLatencyApplicationGatewaySubnet = false`
 
-合計 776 アドレス相当。
+したがって、現時点で実際に利用される App Gateway 系サブネットは通常系の `ApplicationGatewaySubnet` が中心です。ただし、固定定義やドキュメントには low-latency 用の定義も存在するため、変更方針次第では合わせて見直しが必要です。
 
-Microsoft Learn の `maximum /24 prefix` は、「/24 より大きい subnet を使ってはいけない」という意味であり、`/25` や `/26` は要件を満たす。
+## 変更の前提
 
-つまり:
+このリポジトリでは、サブネット CIDR は固定で直書きされているのではなく、以下の流れで再計算されます。
 
-- `/23` は不可
-- `/24` は可
-- `/25` は可
-- `/26` は可
-
-したがって、現在の `ApplicationGatewaySubnet` `/25`、`ApplicationGatewayLowLatencySubnet` `/25` は、**サイズ要件だけを見る限り問題ない**。
-
-ここで App Gateway 2 subnet を `/24` に広げると:
-
-- 現在 776
-- `/25 -> /24` で standard 側 +128
-- `/25 -> /24` で low latency 側 +128
-- 合計 1032
-
-結論:
-
-- 現在の 4 x `/24` の VNet では、**他 subnet を維持したまま App Gateway 2 subnet を両方 `/24` にするのは収まらない**
-- ただし、これは「将来 `/24` に広げたい場合」の容量試算であって、**現時点の `/25` が要件違反という意味ではない**
-- standard 側だけ `/24` に広げるなら 904 で収まる
-- low latency 側も `/24` に広げるなら、VNet address space を増やすか、他 subnet 設計を見直す必要がある
-
-## 2. Subnet delegation
-
-現状の subnet 作成:
-
+- `infra/config/subnets.json`
+  - 各サブネットの `prefixLength` を定義
+- `infra/common.parameter.json`
+  - `network.vnetAddressPrefixes` を定義
+- `infra/scripts/generate-subnets-params.py`
+  - 上記 2 つをもとに、各サブネットの `addressPrefix` を順番に自動割り当て
 - `infra/bicep/main.subnets.bicep`
+  - 生成された subnet 一覧を受けて Azure に反映
 
-`properties` に `delegations` が無い。
+そのため、`ApplicationGatewaySubnet` の `/24` 化は単純な 1 ファイル変更ではなく、VNet 全体の収まり方を含めて確認が必要です。
 
-つまり、
+## 影響範囲
 
-- `ApplicationGatewaySubnet`
-- `ApplicationGatewayLowLatencySubnet`
+### 1. サブネット割当て順序と CIDR の変化
 
-のどちらにも `Microsoft.Network/applicationGateways` delegation が IaC で付与されていない。
+`infra/scripts/generate-subnets-params.py` は、`prefixLength` 昇順でサブネットを割り当てます。
 
-これは Azure CNI Overlay + AGIC の前提を満たしていない。
+そのため、`ApplicationGatewaySubnet` を `/24` にすると、以下に影響します。
 
-## 3. AGIC バージョン
+- `ApplicationGatewaySubnet` 自身の CIDR
+- それ以降に割り当てられる他サブネットの CIDR
+- `ApplicationGatewayLowLatencySubnet` を有効化した場合の全体収まり
 
-現状の AGIC 導入元:
+特に、既存の `/25` 前提で記載されている経路図、説明、運用メモは更新対象になります。
 
-- `infra/lib/post-actions.sh`
-- 生成物: `scripts/init/agicController/deploy.sh`
+### 2. VNet address space の容量確認
 
-Helm chart:
+現状の VNet は `/24` を 4 本持つ構成です。
 
-- `oci://mcr.microsoft.com/azure-application-gateway/charts/ingress-azure`
+`ApplicationGatewaySubnet` のみを `/24` に広げる場合でも、他サブネットとの配置順や競合状況を再確認する必要があります。
 
-実際の AGIC Pod イメージ:
+確認ポイント:
 
-- `mcr.microsoft.com/azure-application-gateway/kubernetes-ingress:1.9.8`
+- 通常系のみ `/24` にして既存 address space に収まるか
+- 将来的に `ApplicationGatewayLowLatencySubnet` も `/24` にする余地を残すか
+- `UserNodeSubnet` `/24` を維持したまま成立するか
+- 既存環境に対して再デプロイ時の CIDR 変更影響を許容できるか
 
-結論:
+### 3. App Gateway / Route Table / NSG 関連ドキュメント
 
-- 現在の AGIC は `1.9.8`
-- Overlay 対応条件の `v1.9.1+` は満たしている
-- したがって、まず疑うべきは AGIC バージョンではなく subnet 条件
+App Gateway subnet の CIDR はコードだけでなく、複数ドキュメントに埋め込まれています。
 
-## 修正方針
+影響対象:
 
-### 方針 1. App Gateway subnet サイズは現状維持でよい
+- 構成図
+- UDR 説明
+- NSG 説明
+- App Gateway 関連の前提説明
 
-整理:
+### 4. パラメータ生成スクリプトの動作確認
 
-- `maximum /24 prefix` のため、`/25` は許容範囲
-- 現状の `ApplicationGatewaySubnet` `/25`、`ApplicationGatewayLowLatencySubnet` `/25` は、サイズ要件上は問題ない
+以下のスクリプトはサブネット定義を参照して動くため、`/24` 化後の再確認が必要です。
 
-結論:
+- `infra/scripts/generate-subnets-params.py`
+- `infra/scripts/generate-application-gateway-params.py`
+- `infra/scripts/generate-application-gateway-low-latency-params.py`
+- `infra/scripts/generate-subnet-attachments-params.py`
+- `infra/scripts/sync-backend-values.py`
 
-- App Gateway subnet の `/24` 化は **必須ではない**
-- したがって今回の修正対象としての優先度は低い
-- ただし将来 `/24` に拡張したくなった場合は、現行 VNet address space では 2 本とも `/24` にする余裕がない
+これらのスクリプト自体を変更しない場合でも、出力結果が変わる可能性があります。
 
-### 方針 2. Application Gateway subnet に delegation を付ける
+## 想定作業
+
+### 作業 1. `ApplicationGatewaySubnet` の prefixLength を `/24` に変更
 
 対象:
 
-- `ApplicationGatewaySubnet`
-- `ApplicationGatewayLowLatencySubnet`
+- `infra/config/subnets.json`
 
-追加内容:
+想定変更:
 
-- `Microsoft.Network/applicationGateways` delegation
+- `ApplicationGatewaySubnet.prefixLength`
+  - `24` を維持する
 
-実装箇所:
+補足:
 
+- `ApplicationGatewayLowLatencySubnet` を今回どう扱うかは別途判断が必要
+- 今回の主眼が通常系のみなら、low-latency 側は現状維持も選択肢
+
+### 作業 2. 必要なら VNet address space を見直す
+
+対象候補:
+
+- `infra/common.parameter.json`
+
+想定変更:
+
+- `network.vnetAddressPrefixes` の再設計
+
+判断が必要な点:
+
+- 現行の 4 x `/24` で十分か
+- low-latency 用 subnet の将来拡張を見込むか
+- 環境再作成なしで吸収できるか
+
+### 作業 3. 生成結果の再確認
+
+対象:
+
+- `infra/scripts/generate-subnets-params.py` の生成結果
+- `infra/params/*` の生成物
+
+確認内容:
+
+- `ApplicationGatewaySubnet` の CIDR が想定通り `/24` になっていること
+- 他サブネットが意図しない CIDR にずれていないこと
+- `enableLowLatencyApplicationGatewaySubnet=false` の現行条件で破綻しないこと
+
+### 作業 4. 関連ドキュメントの更新
+
+対象:
+
+- `infra/README.md`
+- `docs/infra/network.md`
+- `docs/infra/agw.md`
+
+想定変更:
+
+- `ApplicationGatewaySubnet` のサイズ表記
+- 構成図内の CIDR 表記
+- 必要アドレス空間の説明
+- 低遅延オプション時の容量説明
+
+### 作業 5. 既存環境への適用手順整理
+
+今回の変更は subnet prefix の変更を伴うため、既存 Azure 環境に対しては注意が必要です。
+
+整理対象:
+
+- 既存 subnet のインプレース変更可否
+- 既存 App Gateway が配置済みの場合の再作成要否
+- subnet 再作成時の依存リソース影響
+- 環境再構築が必要かどうか
+
+この観点は実装前に明示しておく必要があります。
+
+## 変更予定ファイル
+
+### 直接変更候補
+
+- `infra/config/subnets.json`
+- `infra/common.parameter.json`
+- `infra/README.md`
+- `docs/infra/network.md`
+- `docs/infra/agw.md`
+- `docs/ingress-fix.md`
+
+### 影響確認対象
+
+- `infra/scripts/generate-subnets-params.py`
+- `infra/scripts/generate-application-gateway-params.py`
+- `infra/scripts/generate-application-gateway-low-latency-params.py`
+- `infra/scripts/generate-subnet-attachments-params.py`
+- `infra/scripts/sync-backend-values.py`
 - `infra/bicep/main.subnets.bicep`
-- 必要に応じて `infra/config/subnets.json` に delegation 情報を持たせる
 
-### 方針 3. AGIC バージョンは現状維持でよい
+## 実装前に決めるべきこと
 
-現状:
+### 1. low-latency 用サブネットも今回合わせて `/24` にするか
 
-- AGIC `1.9.8`
+選択肢:
 
-結論:
+- 通常系 `ApplicationGatewaySubnet` のみ `/24`
+- 通常系 / 低遅延系の両方を `/24`
 
-- Overlay 対応条件は満たしているため、AGIC バージョンを優先的に上げる必要は低い
-- まずは subnet 条件を満たした上で再検証する
+この判断で、必要な VNet address space と関連ドキュメントの更新範囲が変わります。
 
-## 実施順
+### 2. 既存環境へ適用するのか、新規構築前提にするのか
 
-1. `main.subnets.bicep` に delegation を追加する
-2. `infra/main.sh` を再実行して subnet / AppGW / AGIC 関連を再適用する
-3. AGIC 再導入または再同期後、以下を確認する
-   - `kubectl logs -n ingress deploy/agic-standard-ingress-azure`
-   - `kubectl logs -n ingress deploy/agic-lowlatency-ingress-azure`
-   - App Gateway backend health
-   - `kubectl get ingress -n application`
+subnet prefix 変更は既存環境への差分適用が難しい可能性があります。
 
-## 今回の判断
+整理が必要な観点:
 
-今回の情報からは、主因候補は次に絞られる。
+- 既存リソース温存を優先するか
+- 一時的な停止を許容するか
+- 検証環境で先に subnet 再設計を試すか
 
-- Application Gateway subnet delegation が IaC に入っていない
-- その結果、Azure CNI Overlay + AGIC の前提条件を満たせていない可能性
-App Gateway subnet の `/25` 自体は、Microsoft Learn の `maximum /24 prefix` 条件に照らすと問題ない。
+### 3. VNet 全体を拡張するか
 
-AGIC バージョンは現状 `1.9.8` であり、優先度は低い。
+将来的に low-latency 側も `/24` に揃える想定があるなら、今回の時点で `vnetAddressPrefixes` も広げる方が再設計回数は減ります。
+
+## このドキュメントの位置づけ
+
+このドキュメントは、`ApplicationGatewaySubnet` の `/24` 化に向けた変更整理メモです。
+
+実際の実装に着手する際は、以下を別途作る想定です。
+
+- 実装方針確定版
+- 実施手順
+- 変更後の検証項目

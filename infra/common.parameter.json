@@ -38,7 +38,8 @@
       "10.189.128.0/24",
       "10.189.129.0/24",
       "10.189.130.0/24",
-      "10.189.131.0/24"
+      "10.189.131.0/24",
+      "10.189.136.0/24"
     ],
     "vnetDnsServers": [],
     "sharedBastionIp": "",
@@ -50,7 +51,7 @@
     "userPoolMaxCount": 6,
     "userPoolLabel": "user",
     "podCidr": "10.189.0.0/17",
-    "serviceCidr": "10.47.0.0/24"
+    "serviceCidr": "10.47.80.0/24"
   },
   "sqlDatabase": {
     "skuTier": "Basic",

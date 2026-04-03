@@ -3,6 +3,8 @@
 {{- if .Values.ingress.standard.ingressClassName }}
 {{- $_ := set $standardAnnotations "kubernetes.io/ingress.class" .Values.ingress.standard.ingressClassName }}
 {{- end }}
+{{- $_ := set $standardAnnotations "appgw.ingress.kubernetes.io/health-probe-timeout" "30" }}
+{{- $_ := set $standardAnnotations "appgw.ingress.kubernetes.io/health-probe-interval" "30" }}
 {{- range $key, $value := .Values.ingress.standard.annotations }}
 {{- $_ := set $standardAnnotations $key $value }}
 {{- end }}

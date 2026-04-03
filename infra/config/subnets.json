@@ -22,9 +22,14 @@
       "prefixLength": 26
     },
     {
+      "name": "UserNodeSubnet",
+      "alias": "usernode",
+      "prefixLength": 24
+    },
+    {
       "name": "ApplicationGatewaySubnet",
       "alias": "agic",
-      "prefixLength": 25,
+      "prefixLength": 24,
       "delegations": [
         {
           "name": "appGatewayDelegation",
@@ -37,7 +42,7 @@
     {
       "name": "ApplicationGatewayLowLatencySubnet",
       "alias": "agicll",
-      "prefixLength": 25,
+      "prefixLength": 24,
       "delegations": [
         {
           "name": "appGatewayDelegation",
@@ -51,11 +56,6 @@
       "name": "AgentNodeSubnet",
       "alias": "agentnode",
       "prefixLength": 26
-    },
-    {
-      "name": "UserNodeSubnet",
-      "alias": "usernode",
-      "prefixLength": 24
     }
   ]
 }

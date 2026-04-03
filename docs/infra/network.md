@@ -11,12 +11,19 @@
   - DDoS 保護プランは作成せず、VNET への DDoS Protection 適用もしません
 - ※ `network.vnetDnsServers` 未指定（空配列）の場合は Azure 提供 DNS を利用し、指定した場合はその DNS サーバーを利用します。
 - ※ ハブ&スポーク構成で集約 DNS を利用する場合、ハブ側 Firewall のプライベート IP など、到達可能な DNS サーバー IP を指定します。
-- ※最低限、以下のいずれかのアドレスレンジが必要です。
+- ※ 必要なアドレスレンジは `network.sharedBastionIp` と `network.enableLowLatencyApplicationGatewaySubnet` の組み合わせで変わります。
+- ※ `network.sharedBastionIp` 指定あり かつ `network.enableLowLatencyApplicationGatewaySubnet=false` の場合
   - `/24` が 3 つ分
   - 連続するサブネットレンジを確保できる場合は `/23` が 1 つ分 + `/24` が 1 つ分、もしくは `/22` が 1 つ分（`/24` 3 つ分相当）
-- ※ `network.enableLowLatencyApplicationGatewaySubnet=true` の場合は、低遅延用サブネットを追加するため以下が必要です。
+- ※ `network.sharedBastionIp` 未指定 かつ `network.enableLowLatencyApplicationGatewaySubnet=false` の場合
   - `/24` が 4 つ分
   - もしくは `/22` が 1 つ分（`/24` 4 つ分相当）
+- ※ `network.sharedBastionIp` 指定あり かつ `network.enableLowLatencyApplicationGatewaySubnet=true` の場合
+  - `/24` が 4 つ分
+  - もしくは `/22` が 1 つ分（`/24` 4 つ分相当）
+- ※ `network.sharedBastionIp` 未指定 かつ `network.enableLowLatencyApplicationGatewaySubnet=true` の場合
+  - `/24` が 5 つ分
+  - もしくは `/21` が 1 つ分（`/24` 5 つ分相当）
 
 ## 診断設定
 
@@ -39,8 +46,8 @@
 | サブネット名               | プレフィクス | サービスエンドポイント | NSG名                                        | ルートテーブル名                           | 備考                                   |
 | -------------------------- | ------------ | ---------------------- | -------------------------------------------- | ------------------------------------------ | -------------------------------------- |
 | `UserNodeSubnet`           | `/24`        |                        | nsg-[common.environmentName]-[common.systemName]-usernode  | rt-[common.environmentName]-[common.systemName]-outbound-aks | アプリデプロイ領域                     |
-| `ApplicationGatewaySubnet` | `/25`        |                        |                                              | rt-[common.environmentName]-[common.systemName]-firewall | AGIC用サブネット                       |
-| `ApplicationGatewayLowLatencySubnet` | `/25` |                        |                                              |                                            | 低遅延系 App Gateway 用サブネット（`network.enableLowLatencyApplicationGatewaySubnet=true` 時のみ） |
+| `ApplicationGatewaySubnet` | `/24`        |                        |                                              | rt-[common.environmentName]-[common.systemName]-firewall | AGIC用サブネット                       |
+| `ApplicationGatewayLowLatencySubnet` | `/24` |                        |                                              |                                            | 低遅延系 App Gateway 用サブネット（`network.enableLowLatencyApplicationGatewaySubnet=true` 時のみ） |
 | `AgentNodeSubnet`          | `/26`        |                        | nsg-[common.environmentName]-[common.systemName]-agentnode | rt-[common.environmentName]-[common.systemName]-outbound-aks | AKSのエージェントノード用サブネット    |
 | `PrivateEndpointSubnet`    | `/26`        |                        | nsg-[common.environmentName]-[common.systemName]-pep       |                                            | プライベートエンドポイント用サブネット |
 | `AzureFirewallSubnet`      | `/26`        |                        |                                              |                                            | ファイヤーウォール用サブネット         |

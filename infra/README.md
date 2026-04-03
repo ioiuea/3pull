@@ -13,11 +13,11 @@
 
 ```mermaid
 flowchart LR
-  AG["ApplicationGatewaySubnet<br/>10.189.129.0/25"]
+  AG["ApplicationGatewaySubnet<br/>10.189.129.0/24"]
   U["UserNodeSubnet<br/>10.189.128.0/24"]
-  N["AgentNodeSubnet<br/>10.189.130.64/26"]
-  M["MaintenanceSubnet<br/>10.189.130.128/29"]
-  FW["Azure Firewall<br/>10.189.129.196"]
+  N["AgentNodeSubnet<br/>10.189.130.192/26"]
+  M["MaintenanceSubnet<br/>10.189.131.0/29"]
+  FW["Azure Firewall<br/>10.189.130.65"]
   NET["0.0.0.0/0 (Internet)"]
 
   RTFW["rt-dev-3pull-firewall<br/>udr-usernode-inbound<br/>udr-agentnode-inbound"]
@@ -29,10 +29,10 @@ flowchart LR
   N ---|"紐づけ"| RTAKS
   M ---|"紐づけ"| RTM
 
-  RTFW -->|"UserNodeSubnet 宛 / AgentNodeSubnet 宛<br/>next hop: 10.189.129.196"| FW
-  RTAKS -->|"ApplicationGatewaySubnet 宛<br/>next hop: 10.189.129.196"| FW
-  RTAKS -->|"0.0.0.0/0<br/>next hop: 10.189.129.196 または network.egressNextHopIp"| FW
-  RTM -->|"0.0.0.0/0<br/>next hop: 10.189.129.196 または network.egressNextHopIp"| FW
+  RTFW -->|"UserNodeSubnet 宛 / AgentNodeSubnet 宛<br/>next hop: 10.189.130.65"| FW
+  RTAKS -->|"ApplicationGatewaySubnet 宛<br/>next hop: 10.189.130.65"| FW
+  RTAKS -->|"0.0.0.0/0<br/>next hop: 10.189.130.65 または network.egressNextHopIp"| FW
+  RTM -->|"0.0.0.0/0<br/>next hop: 10.189.130.65 または network.egressNextHopIp"| FW
   FW --> NET
 ```
 
@@ -40,12 +40,12 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  AG["ApplicationGatewaySubnet<br/>10.189.129.0/25"]
+  AG["ApplicationGatewaySubnet<br/>10.189.129.0/24"]
   U["UserNodeSubnet<br/>10.189.128.0/24<br/>NSG: usernode"]
-  N["AgentNodeSubnet<br/>10.189.130.64/26<br/>NSG: agentnode"]
-  P["PrivateEndpointSubnet<br/>10.189.130.0/26<br/>NSG: pep"]
-  M["MaintenanceSubnet<br/>10.189.130.128/29<br/>NSG: maint"]
-  B["AzureBastionSubnet<br/>10.189.129.128/26"]
+  N["AgentNodeSubnet<br/>10.189.130.192/26<br/>NSG: agentnode"]
+  P["PrivateEndpointSubnet<br/>10.189.130.128/26<br/>NSG: pep"]
+  M["MaintenanceSubnet<br/>10.189.131.0/29<br/>NSG: maint"]
+  B["AzureBastionSubnet<br/>10.189.130.0/26"]
   ACT["ActionGroup"]
 
   AG -->|"TCP 8080,3000,3080 許可"| U
@@ -72,11 +72,11 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  AG["ApplicationGatewaySubnet<br/>10.189.129.0/25"]
+  AG["ApplicationGatewaySubnet<br/>10.189.129.0/24"]
   U["UserNodeSubnet<br/>10.189.128.0/24"]
-  N["AgentNodeSubnet<br/>10.189.130.0/26"]
-  M["MaintenanceSubnet<br/>10.189.130.64/29"]
-  FW["Azure Firewall (Spoke)<br/>10.189.129.129"]
+  N["AgentNodeSubnet<br/>10.189.130.128/26"]
+  M["MaintenanceSubnet<br/>10.189.130.192/29"]
+  FW["Azure Firewall (Spoke)<br/>10.189.130.1"]
   HUB["Hub Egress Firewall<br/>10.47.80.10"]
 
   RTFW["rt-hubspo-3pull-firewall<br/>udr-usernode-inbound<br/>udr-agentnode-inbound"]
@@ -88,8 +88,8 @@ flowchart LR
   N ---|"紐づけ"| RTAKS
   M ---|"紐づけ"| RTM
 
-  RTFW -->|"UserNodeSubnet / AgentNodeSubnet 宛<br/>next hop: 10.189.129.129"| FW
-  RTAKS -->|"ApplicationGatewaySubnet 宛 (udr-appgw-return)<br/>next hop: 10.189.129.129"| FW
+  RTFW -->|"UserNodeSubnet / AgentNodeSubnet 宛<br/>next hop: 10.189.130.1"| FW
+  RTAKS -->|"ApplicationGatewaySubnet 宛 (udr-appgw-return)<br/>next hop: 10.189.130.1"| FW
   RTAKS -->|"0.0.0.0/0 (udr-internet-outbound)<br/>next hop: 10.47.80.10"| HUB
   RTM -->|"0.0.0.0/0 (udr-internet-outbound)<br/>next hop: 10.47.80.10"| HUB
 ```
@@ -98,11 +98,11 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  AG["ApplicationGatewaySubnet<br/>10.189.129.0/25"]
+  AG["ApplicationGatewaySubnet<br/>10.189.129.0/24"]
   U["UserNodeSubnet<br/>10.189.128.0/24<br/>NSG: nsg-hubspo-3pull-usernode"]
-  N["AgentNodeSubnet<br/>10.189.130.0/26<br/>NSG: nsg-hubspo-3pull-agentnode"]
-  P["PrivateEndpointSubnet<br/>10.189.129.192/26<br/>NSG: nsg-hubspo-3pull-pep"]
-  M["MaintenanceSubnet<br/>10.189.130.64/29<br/>NSG: nsg-hubspo-3pull-maint"]
+  N["AgentNodeSubnet<br/>10.189.130.128/26<br/>NSG: nsg-hubspo-3pull-agentnode"]
+  P["PrivateEndpointSubnet<br/>10.189.130.64/26<br/>NSG: nsg-hubspo-3pull-pep"]
+  M["MaintenanceSubnet<br/>10.189.130.192/29<br/>NSG: nsg-hubspo-3pull-maint"]
   B["Hub Bastion / Jump Source<br/>10.47.80.20"]
   ACT["ActionGroup"]
 
@@ -130,12 +130,12 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  AG["ApplicationGatewaySubnet<br/>10.189.129.0/25"]
-  AGLL["ApplicationGatewayLowLatencySubnet<br/>10.189.129.128/25"]
+  AG["ApplicationGatewaySubnet<br/>10.189.129.0/24"]
+  AGLL["ApplicationGatewayLowLatencySubnet<br/>10.189.130.0/24"]
   U["UserNodeSubnet<br/>10.189.128.0/24"]
-  N["AgentNodeSubnet<br/>10.189.130.192/26"]
-  M["MaintenanceSubnet<br/>10.189.131.0/29"]
-  FW["Azure Firewall<br/>10.189.130.65"]
+  N["AgentNodeSubnet<br/>10.189.131.192/26"]
+  M["MaintenanceSubnet<br/>10.189.132.0/29"]
+  FW["Azure Firewall<br/>10.189.131.65"]
   NET["0.0.0.0/0 (Internet)"]
 
   RTFW["rt-stg-sun3pull-firewall<br/>udr-usernode-inbound<br/>udr-agentnode-inbound"]
@@ -149,10 +149,10 @@ flowchart LR
   N ---|"紐づけ"| RTAKS
   M ---|"紐づけ"| RTM
 
-  RTFW -->|"UserNodeSubnet / AgentNodeSubnet 宛<br/>next hop: 10.189.130.65"| FW
-  RTAKS -->|"ApplicationGatewaySubnet 宛 (udr-appgw-return)<br/>next hop: 10.189.130.65"| FW
-  RTAKS -->|"0.0.0.0/0 (udr-internet-outbound)<br/>next hop: 10.189.130.65"| FW
-  RTM -->|"0.0.0.0/0 (udr-internet-outbound)<br/>next hop: 10.189.130.65"| FW
+  RTFW -->|"UserNodeSubnet / AgentNodeSubnet 宛<br/>next hop: 10.189.131.65"| FW
+  RTAKS -->|"ApplicationGatewaySubnet 宛 (udr-appgw-return)<br/>next hop: 10.189.131.65"| FW
+  RTAKS -->|"0.0.0.0/0 (udr-internet-outbound)<br/>next hop: 10.189.131.65"| FW
+  RTM -->|"0.0.0.0/0 (udr-internet-outbound)<br/>next hop: 10.189.131.65"| FW
   FW --> NET
 ```
 
@@ -160,13 +160,13 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  AG["ApplicationGatewaySubnet<br/>10.189.129.0/25"]
-  AGLL["ApplicationGatewayLowLatencySubnet<br/>10.189.129.128/25"]
+  AG["ApplicationGatewaySubnet<br/>10.189.129.0/24"]
+  AGLL["ApplicationGatewayLowLatencySubnet<br/>10.189.130.0/24"]
   U["UserNodeSubnet<br/>10.189.128.0/24<br/>NSG: nsg-stg-sun3pull-usernode"]
-  N["AgentNodeSubnet<br/>10.189.130.192/26<br/>NSG: nsg-stg-sun3pull-agentnode"]
-  P["PrivateEndpointSubnet<br/>10.189.130.128/26<br/>NSG: nsg-stg-sun3pull-pep"]
-  M["MaintenanceSubnet<br/>10.189.131.0/29<br/>NSG: nsg-stg-sun3pull-maint"]
-  B["AzureBastionSubnet<br/>10.189.130.0/26"]
+  N["AgentNodeSubnet<br/>10.189.131.192/26<br/>NSG: nsg-stg-sun3pull-agentnode"]
+  P["PrivateEndpointSubnet<br/>10.189.131.128/26<br/>NSG: nsg-stg-sun3pull-pep"]
+  M["MaintenanceSubnet<br/>10.189.132.0/29<br/>NSG: nsg-stg-sun3pull-maint"]
+  B["AzureBastionSubnet<br/>10.189.131.0/26"]
   ACT["ActionGroup"]
 
   AG -->|"TCP 8080,3000,3080 許可"| U
@@ -296,7 +296,7 @@ Private DNS ゾーンをハブ側（共通基盤側）に集約して一元管�
 ### network.enableLowLatencyApplicationGatewaySubnet
 
 低遅延系エンドポイント用に、通常系とは別の `ApplicationGatewayLowLatencySubnet` を作成するかどうかを指定します。  
-このサブネットは通常の `ApplicationGatewaySubnet` と同じサイズ（`/25`）で作成されます。
+通常系 `ApplicationGatewaySubnet` / 低遅延系 `ApplicationGatewayLowLatencySubnet` はともに `/24` で作成されます。
 
 - `false`（デフォルト）: 低遅延用サブネットを作成しない
 - `true`: `ApplicationGatewayLowLatencySubnet` を作成し、低遅延用 AppGW 構成を有効化
@@ -325,15 +325,20 @@ DDoS Protection の有効/無効を指定します。
 
 ### network.vnetAddressPrefixes
 
-VNET のアドレス空間です。サブネットを動的計算するため、以下の最低限レンジが必要です。
+VNET のアドレス空間です。サブネットを動的計算するため、必要な最小レンジは `network.sharedBastionIp` と `network.enableLowLatencyApplicationGatewaySubnet` の組み合わせで変わります。
 
-- `/24` が 3 つ分
-- 連続するレンジを確保できる場合は、`/23` が 1 つ分 + `/24` が 1 つ分、または `/22` が 1 つ分（`/24` 3 つ分相当）
-
-`network.enableLowLatencyApplicationGatewaySubnet=true` の場合は、`ApplicationGatewayLowLatencySubnet`（`/25`）を追加で確保するため、以下が必要です。
-
-- `/24` が 4 つ分
-- または `/22` が 1 つ分（`/24` 4 つ分相当）
+- `network.sharedBastionIp` 指定あり かつ `network.enableLowLatencyApplicationGatewaySubnet=false`
+  - `/24` が 3 つ分
+  - 連続するレンジを確保できる場合は、`/23` が 1 つ分 + `/24` が 1 つ分、または `/22` が 1 つ分（`/24` 3 つ分相当）
+- `network.sharedBastionIp` 未指定 かつ `network.enableLowLatencyApplicationGatewaySubnet=false`
+  - `/24` が 4 つ分
+  - または `/22` が 1 つ分（`/24` 4 つ分相当）
+- `network.sharedBastionIp` 指定あり かつ `network.enableLowLatencyApplicationGatewaySubnet=true`
+  - `/24` が 4 つ分
+  - または `/22` が 1 つ分（`/24` 4 つ分相当）
+- `network.sharedBastionIp` 未指定 かつ `network.enableLowLatencyApplicationGatewaySubnet=true`
+  - `/24` が 5 つ分
+  - または `/21` が 1 つ分（`/24` 5 つ分相当）
 
 ### network.vnetDnsServers
 
